@@ -77,14 +77,14 @@ export const StationGame = () => {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length >= 4 && !bimanualLocked) {
+    if (e.touches.length >= 2 && !bimanualLocked) {
       setBimanualLocked(true);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (e.touches.length < 4 && bimanualLocked) {
+    if (e.touches.length < 2 && bimanualLocked) {
       setBimanualLocked(false);
       const newPeeks = peeks + 1;
       setPeeks(newPeeks);
@@ -171,7 +171,7 @@ export const StationGame = () => {
           ) : (
             <div className="text-center space-y-4 animate-pulse pointer-events-none">
               <div className="w-20 h-20 mx-auto bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center shadow-inner"><span className="text-4xl">👆</span></div>
-              <p className="text-slate-500 dark:text-slate-400 font-medium text-lg px-8">4 Finger gleichzeitig gedrückt halten, um das Wort zu sehen.</p>
+              <p className="text-slate-500 dark:text-slate-400 font-medium text-xl px-8 max-w-md">2 Finger auflegen, um das Wort anzuzeigen. Danach auf deinem Papier aufschreiben!</p>
             </div>
           )}
         </div>

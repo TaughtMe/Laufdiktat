@@ -140,7 +140,7 @@ export const Game = () => {
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
     
-    if (e.touches.length >= 4) {
+    if (e.touches.length >= 2) {
       if (!bimanualLocked) {
         setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
         setBimanualLocked(true);
@@ -152,7 +152,7 @@ export const Game = () => {
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
     
-    if (e.touches.length < 4) {
+    if (e.touches.length < 2) {
       if (bimanualLocked) {
         setBimanualLocked(false);
         setGameState('WRITING');
