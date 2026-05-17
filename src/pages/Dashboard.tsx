@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../utils/supabaseClient';
@@ -18,6 +18,12 @@ interface StudentResult {
 export const Dashboard = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<DashboardStep>('IMPORT');
+  const stepRef = useRef<DashboardStep>('IMPORT');
+
+  useEffect(() => {
+    stepRef.current = currentStep;
+  }, [currentStep]);
+
   const [manualInput, setManualInput] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [results, setResults] = useState<StudentResult[]>([]);
@@ -40,14 +46,31 @@ export const Dashboard = () => {
       alert("Bitte füge zuerst Wörter hinzu!");
       return;
     }
-    const channel = supabase.channel(roomCode);
+    const channel = supabase.channel(`room-${roomCode}`);
     
     channel.on(
       'broadcast',
       { event: 'student-joined' },
       (payload) => {
         if (payload.payload?.name) {
-          setStudentsInLobby((prev) => [...prev, payload.payload.name]);
+          setStudentsInLobby((prev) => {
+            if (!prev.includes(payload.payload.name)) {
+              return [...prev, payload.payload.name];
+            }
+            return prev;
+          });
+          
+          if (stepRef.current === 'LIVE') {
+            channel.send({
+              type: 'broadcast',
+              event: 'session-start',
+              payload: {
+                words,
+                gameMode,
+                battleOptions
+              }
+            });
+          }
         }
       }
     );
@@ -71,7 +94,7 @@ export const Dashboard = () => {
   };
 
   const handleStartSession = () => {
-    const channel = supabase.channel(roomCode);
+    const channel = supabase.channel(`room-${roomCode}`);
     channel.send({
       type: 'broadcast',
       event: 'session-start',
@@ -85,7 +108,7 @@ export const Dashboard = () => {
   };
 
   const handleEndSession = async () => {
-    await supabase.removeChannel(supabase.channel(roomCode));
+    await supabase.removeChannel(supabase.channel(`room-${roomCode}`));
     setCurrentStep('IMPORT');
     setWords([]);
     setResults([]);

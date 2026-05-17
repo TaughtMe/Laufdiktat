@@ -61,7 +61,8 @@ export const Game = () => {
   useEffect(() => {
     if (!roomCode) return;
     
-    const channel = supabase.channel(roomCode);
+    const channelName = `room-${roomCode}`;
+    const channel = supabase.channel(channelName);
     
     channel.on(
       'broadcast',
@@ -72,13 +73,13 @@ export const Game = () => {
         setGameMode(newMode);
         setBattleOptions(newOptions);
       }
-    ).subscribe((status) => {
+    ).subscribe(async (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         setConnectionWarning(true);
       } else if (status === 'SUBSCRIBED') {
         setConnectionWarning(false);
         if (studentName) {
-          channel.send({
+          await channel.send({
             type: 'broadcast',
             event: 'student-joined',
             payload: { name: studentName }
@@ -109,7 +110,7 @@ export const Game = () => {
 
   useEffect(() => {
     if (gameState === 'FINISHED' && roomCode) {
-      const channel = supabase.channel(roomCode);
+      const channel = supabase.channel(`room-${roomCode}`);
       channel.send({
         type: 'broadcast',
         event: 'student-finished',
