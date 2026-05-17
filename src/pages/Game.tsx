@@ -79,6 +79,12 @@ export const Game = () => {
         setBattleOptions(newOptions);
         if (newStationMode !== undefined) setStationMode(newStationMode);
       }
+    ).on(
+      'broadcast',
+      { event: 'session-ended' },
+      () => {
+        navigate('/');
+      }
     ).subscribe(async (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         setConnectionWarning(true);

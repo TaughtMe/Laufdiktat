@@ -28,6 +28,8 @@ export const StationGame = () => {
         setCurrentIndex(d.currentIndex);
         setPeeks(d.peeks);
       }
+    }).on('broadcast', { event: 'session-ended' }, () => {
+      navigate('/');
     });
     channelRef.current.subscribe();
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };

@@ -148,7 +148,9 @@ export const Dashboard = () => {
   };
 
   const handleEndSession = async () => {
-    await supabase.removeChannel(supabase.channel(`room-${roomCode}`));
+    const channel = supabase.channel(`room-${roomCode}`);
+    await channel.send({ type: 'broadcast', event: 'session-ended' });
+    await supabase.removeChannel(channel);
     setCurrentStep('IMPORT');
     setWords([]);
     setResults([]);
