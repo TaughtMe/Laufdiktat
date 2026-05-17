@@ -17,3 +17,8 @@ export interface BattleOptions {
   ink: boolean;
   flicker: boolean;
 }
+
+export interface StationStudentState {
+  currentIndex: number;
+  peeks: number;
+}

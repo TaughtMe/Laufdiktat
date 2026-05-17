@@ -3,6 +3,7 @@ import type { GameState, GameMetrics } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
+import { StationGame } from './StationGame';
 
 interface InkSplat {
   id: number;
@@ -28,6 +29,8 @@ export const Game = () => {
   const setGameMode = useGameStore((state) => state.setGameMode);
   const bimanualLocked = useGameStore((state) => state.bimanualLocked);
   const setBimanualLocked = useGameStore((state) => state.setBimanualLocked);
+  const stationMode = useGameStore((state) => state.stationMode);
+  const setStationMode = useGameStore((state) => state.setStationMode);
   
   const [gameState, setGameState] = useState<GameState>('IDLE');
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -70,10 +73,11 @@ export const Game = () => {
       'broadcast',
       { event: 'session-start' },
       (payload) => {
-        const { words: newWords, gameMode: newMode, battleOptions: newOptions } = payload.payload;
+        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode } = payload.payload;
         setWords(newWords);
         setGameMode(newMode);
         setBattleOptions(newOptions);
+        if (newStationMode !== undefined) setStationMode(newStationMode);
       }
     ).subscribe(async (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -130,28 +134,27 @@ export const Game = () => {
     }
   }, [gameState, roomCode, studentName, efficiencyIndex, metrics.peeks, metrics.attempts]);
 
-  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+  // Station mode: delegate to separate component (AFTER all hooks)
+  if (stationMode) return <StationGame />;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
     
-    const isMultiTouch = 'touches' in e ? e.touches.length >= 4 : e.button === 0;
-    
-    if (isMultiTouch && !bimanualLocked) {
-      setBimanualLocked(true);
-      if (gameState !== 'REVEALED') {
-        setGameState('REVEALED');
+    if (e.touches.length >= 4) {
+      if (!bimanualLocked) {
         setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+        setBimanualLocked(true);
+        setGameState('REVEALED');
       }
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
     
-    const touchesRemaining = 'touches' in e ? e.touches.length : 0;
-    
-    if (touchesRemaining < 4 && bimanualLocked) {
-      setBimanualLocked(false);
-      if (gameState === 'REVEALED') {
+    if (e.touches.length < 4) {
+      if (bimanualLocked) {
+        setBimanualLocked(false);
         setGameState('WRITING');
       }
     }
@@ -228,9 +231,6 @@ export const Game = () => {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
-      // Fallback für Dev/Mouse
-      onMouseDown={handleTouchStart}
-      onMouseUp={handleTouchEnd}
     >
       {connectionWarning && (
         <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-center py-2 text-sm font-medium z-50">

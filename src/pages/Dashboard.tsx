@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { parseCSV } from '../utils/csvParser';
-import type { GameMode } from '../types/game';
+import type { GameMode, StationStudentState } from '../types/game';
 
 type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 
@@ -29,6 +29,14 @@ export const Dashboard = () => {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
   const [connectionWarning, setConnectionWarning] = useState(false);
+
+  // Station mode RAM state
+  const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
+  const stationStatesRef = useRef<Map<number, StationStudentState>>(new Map());
+
+  useEffect(() => {
+    stationStatesRef.current = stationStates;
+  }, [stationStates]);
   
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -36,6 +44,8 @@ export const Dashboard = () => {
   const setGameMode = useGameStore((state) => state.setGameMode);
   const battleOptions = useGameStore((state) => state.battleOptions);
   const setBattleOptions = useGameStore((state) => state.setBattleOptions);
+  const stationMode = useGameStore((state) => state.stationMode);
+  const setStationMode = useGameStore((state) => state.setStationMode);
 
   useEffect(() => {
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
@@ -67,7 +77,8 @@ export const Dashboard = () => {
               payload: {
                 words,
                 gameMode,
-                battleOptions
+                battleOptions,
+                stationMode
               }
             });
           }
@@ -80,6 +91,34 @@ export const Dashboard = () => {
       { event: 'student-finished' },
       (payload) => {
         setResults((prev) => [...prev, payload.payload as StudentResult]);
+      }
+    );
+
+    // Station mode listeners
+    channel.on(
+      'broadcast',
+      { event: 'request-station-state' },
+      (payload) => {
+        const { studentNumber } = payload.payload;
+        const current = stationStatesRef.current.get(studentNumber) || { currentIndex: 0, peeks: 0 };
+        channel.send({
+          type: 'broadcast',
+          event: 'sync-station-state',
+          payload: { studentNumber, ...current }
+        });
+      }
+    );
+
+    channel.on(
+      'broadcast',
+      { event: 'update-station-state' },
+      (payload) => {
+        const { studentNumber, currentIndex, peeks } = payload.payload;
+        setStationStates((prev) => {
+          const next = new Map(prev);
+          next.set(studentNumber, { currentIndex, peeks });
+          return next;
+        });
       }
     );
 
@@ -101,7 +140,8 @@ export const Dashboard = () => {
       payload: {
         words,
         gameMode,
-        battleOptions
+        battleOptions,
+        stationMode
       }
     });
     setCurrentStep('LIVE');
@@ -113,6 +153,7 @@ export const Dashboard = () => {
     setWords([]);
     setResults([]);
     setStudentsInLobby([]);
+    setStationStates(new Map());
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
   };
 
@@ -135,6 +176,13 @@ export const Dashboard = () => {
       setManualInput(text);
     };
     reader.readAsText(file);
+  };
+
+  const getStationStatus = (num: number): 'idle' | 'active' | 'done' => {
+    const s = stationStates.get(num);
+    if (!s) return 'idle';
+    if (s.currentIndex >= words.length - 1 && s.peeks > 0) return 'done';
+    return 'active';
   };
 
   return (
@@ -205,7 +253,7 @@ export const Dashboard = () => {
                   value={manualInput}
                   onChange={handleManualInputChange}
                   className="w-full h-48 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white resize-none"
-                  placeholder="Elefant&#10;Giraffe&#10;Nashorn"
+                  placeholder={"Elefant\nGiraffe\nNashorn"}
                 />
               </div>
               
@@ -228,9 +276,32 @@ export const Dashboard = () => {
           {/* Schritt 2: SETTINGS */}
           {currentStep === 'SETTINGS' && (
             <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">2. Spielmodus & Optionen</h2>
+              <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">2. Spielmodus &amp; Optionen</h2>
               
-              <div className="space-y-4 mb-8">
+              {/* Station Mode Toggle */}
+              <div className="mb-6 p-4 rounded-xl border-2 border-dashed border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📋</span>
+                    <div>
+                      <span className="font-bold text-slate-800 dark:text-slate-100 block">Stations-Modus aktiv</span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">Papier-Diktat — Schüler schreiben auf Papier, iPad zeigt nur Wörter.</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={stationMode}
+                      onChange={(e) => setStationMode(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-14 h-8 bg-slate-300 peer-checked:bg-emerald-500 rounded-full transition-colors duration-200"></div>
+                    <div className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200 peer-checked:translate-x-6"></div>
+                  </div>
+                </label>
+              </div>
+
+              <div className={`space-y-4 mb-8 transition-opacity duration-300 ${stationMode ? 'opacity-40 pointer-events-none' : ''}`}>
                 {(['LAUFDIKTAT', 'UEBUNG', 'BATTLE'] as GameMode[]).map((mode) => (
                   <label key={mode} className="flex items-center space-x-3 cursor-pointer group p-3 border border-transparent hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg transition-colors">
                     <input
@@ -239,6 +310,7 @@ export const Dashboard = () => {
                       value={mode}
                       checked={gameMode === mode}
                       onChange={() => setGameMode(mode)}
+                      disabled={stationMode}
                       className="w-5 h-5 text-indigo-600 border-slate-300 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer"
                     />
                     <span className="text-slate-700 dark:text-slate-300 font-medium group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
@@ -248,24 +320,24 @@ export const Dashboard = () => {
                 ))}
               </div>
 
-              <div className={`p-5 rounded-xl border transition-all duration-300 ${gameMode === 'BATTLE' ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-900/10' : 'border-slate-100 bg-slate-50 opacity-50 grayscale dark:border-slate-800 dark:bg-slate-900'}`}>
+              <div className={`p-5 rounded-xl border transition-all duration-300 ${!stationMode && gameMode === 'BATTLE' ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-900/10' : 'border-slate-100 bg-slate-50 opacity-50 grayscale dark:border-slate-800 dark:bg-slate-900'}`}>
                 <h3 className="font-semibold text-amber-800 dark:text-amber-500 mb-4">Battle-Optionen</h3>
                 <div className="space-y-4">
-                  <label className={`flex items-center space-x-3 ${gameMode === 'BATTLE' ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                  <label className={`flex items-center space-x-3 ${!stationMode && gameMode === 'BATTLE' ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                     <input
                       type="checkbox"
                       checked={battleOptions.ink}
-                      disabled={gameMode !== 'BATTLE'}
+                      disabled={stationMode || gameMode !== 'BATTLE'}
                       onChange={(e) => setBattleOptions({ ink: e.target.checked })}
                       className="w-5 h-5 rounded text-amber-600 border-slate-300 focus:ring-amber-500 dark:border-slate-600 disabled:opacity-50"
                     />
                     <span className="text-slate-700 dark:text-slate-300">Tintenfleck-Angriff (Sichtverschleierung)</span>
                   </label>
-                  <label className={`flex items-center space-x-3 ${gameMode === 'BATTLE' ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                  <label className={`flex items-center space-x-3 ${!stationMode && gameMode === 'BATTLE' ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                     <input
                       type="checkbox"
                       checked={battleOptions.flicker}
-                      disabled={gameMode !== 'BATTLE'}
+                      disabled={stationMode || gameMode !== 'BATTLE'}
                       onChange={(e) => setBattleOptions({ flicker: e.target.checked })}
                       className="w-5 h-5 rounded text-amber-600 border-slate-300 focus:ring-amber-500 dark:border-slate-600 disabled:opacity-50"
                     />
@@ -295,7 +367,10 @@ export const Dashboard = () => {
           {currentStep === 'LOBBY' && (
             <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 text-center flex flex-col items-center">
               <h2 className="text-2xl font-bold mb-2 text-slate-800 dark:text-slate-100">3. Lobby (Warten auf Schüler)</h2>
-              <p className="text-slate-500 dark:text-slate-400 mb-8">Lass deine Schüler diesen QR-Code scannen oder den Code eingeben.</p>
+              <p className="text-slate-500 dark:text-slate-400 mb-2">Lass deine Schüler diesen QR-Code scannen oder den Code eingeben.</p>
+              {stationMode && (
+                <span className="inline-block bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-sm font-bold px-3 py-1 rounded-full mb-4">📋 Stations-Modus</span>
+              )}
               
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-6">
                 <QRCodeSVG 
@@ -343,7 +418,7 @@ export const Dashboard = () => {
                   onClick={handleStartSession}
                   className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xl py-4 rounded-xl shadow-lg shadow-green-500/20 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  <span>Diktat jetzt starten</span>
+                  <span>{stationMode ? 'Stationen starten' : 'Diktat jetzt starten'}</span>
                   <span className="text-2xl">🚀</span>
                 </button>
               </div>
@@ -360,7 +435,7 @@ export const Dashboard = () => {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
                     </span>
-                    Live-Ergebnisse
+                    {stationMode ? 'Stations-Monitor' : 'Live-Ergebnisse'}
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400 mt-1">Raum-Code: <span className="font-mono font-bold text-indigo-500">{roomCode}</span></p>
                 </div>
@@ -373,43 +448,80 @@ export const Dashboard = () => {
                 </button>
               </div>
 
-              <div className="space-y-4">
-                {results.length === 0 ? (
-                  <div className="text-center py-12 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <span className="text-4xl block mb-4">🏃‍♂️</span>
-                    <p className="text-slate-500 dark:text-slate-400 font-medium">Die Schüler bearbeiten das Diktat...</p>
-                  </div>
-                ) : (
-                  <ul className="space-y-3">
-                    {results.map((result, index) => (
-                      <li key={index} className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-in fade-in slide-in-from-left-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 rounded-full flex items-center justify-center font-bold">
-                            #{index + 1}
-                          </div>
-                          <span className="font-bold text-lg text-slate-800 dark:text-slate-200">
-                            {result.name || `Teilnehmer ${index + 1}`}
-                          </span>
+              {/* Station Mode Live Grid */}
+              {stationMode ? (
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+                  {Array.from({ length: 24 }, (_, i) => i + 1).map((num) => {
+                    const status = getStationStatus(num);
+                    const state = stationStates.get(num);
+                    return (
+                      <div
+                        key={num}
+                        className={`relative p-3 rounded-xl border-2 text-center transition-all duration-300 ${
+                          status === 'done'
+                            ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-700'
+                            : status === 'active'
+                            ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 dark:border-indigo-700 station-pulse'
+                            : 'border-slate-200 bg-slate-50 dark:bg-slate-900 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className={`text-2xl font-black ${
+                          status === 'done' ? 'text-emerald-600 dark:text-emerald-400'
+                            : status === 'active' ? 'text-indigo-600 dark:text-indigo-400'
+                            : 'text-slate-300 dark:text-slate-700'
+                        }`}>
+                          {num}
                         </div>
-                        <div className="flex items-center gap-6 text-sm">
-                          <div className="text-center">
-                            <span className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Peeks</span>
-                            <span className="font-medium text-slate-700 dark:text-slate-300">{result.peeks}</span>
+                        {state && (
+                          <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400 leading-tight">
+                            <div>Wort {state.currentIndex + 1}/{words.length}</div>
+                            <div>👁 {state.peeks}</div>
                           </div>
-                          <div className="text-center">
-                            <span className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Fehler</span>
-                            <span className="font-medium text-slate-700 dark:text-slate-300">{Math.max(0, result.attempts - words.length)}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Classic Digital Mode Results */
+                <div className="space-y-4">
+                  {results.length === 0 ? (
+                    <div className="text-center py-12 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <span className="text-4xl block mb-4">🏃‍♂️</span>
+                      <p className="text-slate-500 dark:text-slate-400 font-medium">Die Schüler bearbeiten das Diktat...</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {results.map((result, index) => (
+                        <li key={index} className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-in fade-in slide-in-from-left-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 rounded-full flex items-center justify-center font-bold">
+                              #{index + 1}
+                            </div>
+                            <span className="font-bold text-lg text-slate-800 dark:text-slate-200">
+                              {result.name || `Teilnehmer ${index + 1}`}
+                            </span>
                           </div>
-                          <div className="text-right pl-4 border-l border-slate-200 dark:border-slate-700">
-                            <span className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Score (EI)</span>
-                            <span className="font-black text-xl text-indigo-600 dark:text-indigo-400">{result.score.toFixed(2)}</span>
+                          <div className="flex items-center gap-6 text-sm">
+                            <div className="text-center">
+                              <span className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Peeks</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">{result.peeks}</span>
+                            </div>
+                            <div className="text-center">
+                              <span className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Fehler</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">{Math.max(0, result.attempts - words.length)}</span>
+                            </div>
+                            <div className="text-right pl-4 border-l border-slate-200 dark:border-slate-700">
+                              <span className="block text-slate-400 text-xs uppercase font-bold tracking-wider">Score (EI)</span>
+                              <span className="font-black text-xl text-indigo-600 dark:text-indigo-400">{result.score.toFixed(2)}</span>
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </section>
           )}
 

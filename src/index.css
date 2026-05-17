@@ -149,3 +149,14 @@
   72% { opacity: 1; transform: translateY(-30px) scale(1.5); }
   80%, 100% { opacity: 0; transform: translateY(-50px) scale(0); }
 }
+
+/* Station Mode pulse animation */
+.station-pulse {
+  animation: stationPulse 2s ease-in-out infinite;
+}
+
+@keyframes stationPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+}
+
