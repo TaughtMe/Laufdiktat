@@ -18,6 +18,7 @@ export const Game = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const roomCode = location.state?.roomCode as string | undefined;
+  const studentName = location.state?.studentName as string | undefined;
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -36,9 +37,26 @@ export const Game = () => {
 
   // Lokale Interferenz-States
   const [inkSplats, setInkSplats] = useState<InkSplat[]>([]);
-  const [forceFlicker, setForceFlicker] = useState(false); // Für Dev-Button
+  const [forceFlicker, setForceFlicker] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Derived state that needs to be calculated before effects
+  const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
+  const efficiencyIndex = totalLength / (Math.max(1, metrics.peeks) * Math.max(1, metrics.attempts));
+  const currentWord = words[currentWordIndex] || { targetWord: '' };
+  
+  const generateInkSplat = (): InkSplat => {
+    return {
+      id: Math.random(),
+      top: `${Math.random() * 40 + 30}%`,
+      left: `${Math.random() * 60 + 20}%`,
+      width: `${Math.random() * 80 + 80}px`,
+      height: `${Math.random() * 60 + 60}px`,
+      borderRadius: `${Math.random() * 30 + 40}% ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 30}% / ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 60}% ${Math.random() * 30 + 40}%`,
+      rotation: Math.random() * 360
+    };
+  };
 
   useEffect(() => {
     if (!roomCode) return;
@@ -59,13 +77,102 @@ export const Game = () => {
         setConnectionWarning(true);
       } else if (status === 'SUBSCRIBED') {
         setConnectionWarning(false);
+        if (studentName) {
+          channel.send({
+            type: 'broadcast',
+            event: 'student-joined',
+            payload: { name: studentName }
+          });
+        }
       }
     });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomCode, setWords, setGameMode, setBattleOptions]);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions]);
+
+  useEffect(() => {
+    if (gameState === 'WRITING') {
+      const timer = setTimeout(() => inputRef.current?.focus(), 10);
+      
+      // Ink Logik (30% Wahrscheinlichkeit)
+      if (battleOptions.ink && Math.random() < 0.3 && inkSplats.length === 0) {
+        setInkSplats([generateInkSplat()]);
+      }
+      
+      return () => clearTimeout(timer);
+    } else {
+      setInkSplats([]);
+    }
+  }, [gameState, battleOptions.ink]);
+
+  useEffect(() => {
+    if (gameState === 'FINISHED' && roomCode) {
+      const channel = supabase.channel(roomCode);
+      channel.send({
+        type: 'broadcast',
+        event: 'student-finished',
+        payload: {
+          name: studentName,
+          score: efficiencyIndex,
+          peeks: metrics.peeks,
+          attempts: metrics.attempts
+        }
+      });
+    }
+  }, [gameState, roomCode, studentName, efficiencyIndex, metrics.peeks, metrics.attempts]);
+
+  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if (gameState === 'FINISHED' || words.length === 0) return;
+    
+    const isMultiTouch = 'touches' in e ? e.touches.length >= 2 : e.button === 0;
+    
+    if (isMultiTouch && gameState !== 'REVEALED') {
+      setGameState('REVEALED');
+      setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    if (gameState === 'FINISHED' || words.length === 0) return;
+    
+    const touchesRemaining = 'touches' in e ? e.touches.length : 0;
+    
+    if (touchesRemaining < 2 && gameState === 'REVEALED') {
+      setGameState('WRITING');
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (gameState !== 'WRITING' || words.length === 0) return;
+
+    setMetrics((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
+
+    if (inputValue.trim().toLowerCase() === currentWord.targetWord.toLowerCase()) {
+      if (currentWordIndex + 1 < words.length) {
+        setCurrentWordIndex((prev) => prev + 1);
+        setInputValue('');
+        setGameState('IDLE');
+      } else {
+        setGameState('FINISHED');
+      }
+    } else {
+      setInputValue('');
+      setErrorShake(true);
+      setTimeout(() => setErrorShake(false), 500);
+      
+      if (gameMode === 'UEBUNG') {
+        setShowScaffolding(true);
+        setTimeout(() => setShowScaffolding(false), 1500);
+      }
+      
+      inputRef.current?.focus();
+    }
+  };
+
+  const isFlickerActive = (battleOptions.flicker || forceFlicker) && gameState === 'REVEALED';
 
   // Fallback: Empty State
   if (words.length === 0) {
@@ -101,106 +208,6 @@ export const Game = () => {
       </div>
     );
   }
-
-  const currentWord = words[currentWordIndex];
-
-  const generateInkSplat = (): InkSplat => {
-    return {
-      id: Math.random(),
-      top: `${Math.random() * 40 + 30}%`, // 30% to 70% bounds
-      left: `${Math.random() * 60 + 20}%`, // 20% to 80% bounds
-      width: `${Math.random() * 80 + 80}px`,
-      height: `${Math.random() * 60 + 60}px`,
-      borderRadius: `${Math.random() * 30 + 40}% ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 30}% / ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 60}% ${Math.random() * 30 + 40}%`,
-      rotation: Math.random() * 360
-    };
-  };
-
-  useEffect(() => {
-    if (gameState === 'WRITING') {
-      const timer = setTimeout(() => inputRef.current?.focus(), 10);
-      
-      // Ink Logik (30% Wahrscheinlichkeit)
-      if (battleOptions.ink && Math.random() < 0.3 && inkSplats.length === 0) {
-        setInkSplats([generateInkSplat()]);
-      }
-      
-      return () => clearTimeout(timer);
-    } else {
-      setInkSplats([]); // Tinte beim Peek oder IDLE wieder entfernen
-    }
-  }, [gameState, battleOptions.ink]);
-
-  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
-    if (gameState === 'FINISHED') return;
-    
-    // Für Maus-Dev-Tests akzeptieren wir auch Klicks, im echten Einsatz Touch.
-    const isMultiTouch = 'touches' in e ? e.touches.length >= 2 : e.button === 0;
-    
-    if (isMultiTouch && gameState !== 'REVEALED') {
-      setGameState('REVEALED');
-      setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
-    if (gameState === 'FINISHED') return;
-    
-    const touchesRemaining = 'touches' in e ? e.touches.length : 0;
-    
-    if (touchesRemaining < 2 && gameState === 'REVEALED') {
-      setGameState('WRITING');
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (gameState !== 'WRITING') return;
-
-    setMetrics((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
-
-    if (inputValue.trim().toLowerCase() === currentWord.targetWord.toLowerCase()) {
-      if (currentWordIndex + 1 < words.length) {
-        setCurrentWordIndex((prev) => prev + 1);
-        setInputValue('');
-        setGameState('IDLE');
-      } else {
-        setGameState('FINISHED');
-      }
-    } else {
-      setInputValue('');
-      setErrorShake(true);
-      setTimeout(() => setErrorShake(false), 500);
-      
-      if (gameMode === 'UEBUNG') {
-        setShowScaffolding(true);
-        setTimeout(() => setShowScaffolding(false), 1500);
-      }
-      
-      inputRef.current?.focus();
-    }
-  };
-
-  // Berechnung Efficiency Index
-  const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
-  const efficiencyIndex = totalLength / (Math.max(1, metrics.peeks) * Math.max(1, metrics.attempts));
-
-  useEffect(() => {
-    if (gameState === 'FINISHED' && roomCode) {
-      const channel = supabase.channel(roomCode);
-      channel.send({
-        type: 'broadcast',
-        event: 'student-finished',
-        payload: {
-          score: efficiencyIndex,
-          peeks: metrics.peeks,
-          attempts: metrics.attempts
-        }
-      });
-    }
-  }, [gameState, roomCode, efficiencyIndex, metrics.peeks, metrics.attempts]);
-
-  const isFlickerActive = (battleOptions.flicker || forceFlicker) && gameState === 'REVEALED';
 
   return (
     <div 

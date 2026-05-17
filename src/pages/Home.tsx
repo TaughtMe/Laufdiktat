@@ -1,26 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 
+const ADJECTIVES = ['Schnelles', 'Flinkes', 'Schlaues', 'Mutiges', 'Wildes', 'Kühnes', 'Listiges', 'Starkes', 'Freches'];
+const ANIMALS = ['Nashorn', 'Känguru', 'Eichhörnchen', 'Zebra', 'Erdmännchen', 'Chamäleon', 'Faultier', 'Alpaka', 'Pinguin'];
+
 export const Home = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [roomCode, setRoomCode] = useState('');
+  const [studentName, setStudentName] = useState('');
+
+  const generateName = () => {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+    setStudentName(`${adj} ${animal}`);
+  };
 
   useEffect(() => {
+    generateName();
     const roomParam = searchParams.get('room');
     if (roomParam) {
       setRoomCode(roomParam);
-      setTimeout(() => {
-        navigate('/game', { state: { roomCode: roomParam } });
-      }, 500);
     }
-  }, [searchParams, navigate]);
+  }, [searchParams]);
 
   const handleStartDictation = () => {
-    if (roomCode.trim().length > 0) {
-      navigate('/game', { state: { roomCode } });
+    if (roomCode.trim().length > 0 && studentName.trim().length > 0) {
+      navigate('/game', { state: { roomCode, studentName } });
     } else {
-      alert("Bitte gib einen Raum-Code ein");
+      alert("Bitte gib einen Raum-Code ein und wähle einen Namen");
     }
   };
 
@@ -69,11 +77,28 @@ export const Home = () => {
             className="w-full text-center text-3xl font-bold tracking-widest p-4 rounded-2xl outline-none border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all placeholder:font-normal placeholder:text-slate-300 dark:placeholder:text-slate-700"
           />
           
+          <div className="w-full flex flex-col gap-3">
+            <input 
+              type="text" 
+              placeholder="Dein Name"
+              value={studentName}
+              readOnly
+              className="w-full text-center text-xl font-bold p-4 rounded-2xl outline-none border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"
+            />
+            <button 
+              type="button"
+              onClick={generateName}
+              className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center justify-center gap-2 transition-colors"
+            >
+              <span className="text-xl">🎲</span> Zufälligen Namen generieren
+            </button>
+          </div>
+          
           <button 
             onClick={handleStartDictation}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold py-4 px-8 rounded-2xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all active:scale-[0.98]"
           >
-            Start
+            Beitreten
           </button>
         </div>
       </div>
