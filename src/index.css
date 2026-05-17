@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #3b82f6; /* Example primary color, adjust later */
+  
+  --animate-shake: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+  
+  @keyframes shake {
+    10%, 90% { transform: translate3d(-2px, 0, 0); }
+    20%, 80% { transform: translate3d(4px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+    40%, 60% { transform: translate3d(8px, 0, 0); }
+  }
+  
+  --animate-flicker: flicker 3s infinite;
+  
+  @keyframes flicker {
+    0%, 100% { opacity: 1; filter: blur(0px); }
+    15% { opacity: 0.3; filter: blur(2px); }
+    30% { opacity: 0.8; filter: blur(0px); }
+    45% { opacity: 0.1; filter: blur(4px); transform: translateX(-2px); }
+    60% { opacity: 0.9; filter: blur(1px); }
+    80% { opacity: 0.4; filter: blur(3px); transform: translateX(2px); }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50 antialiased;
+  }
+}
+
+/* Background Animation for Home */
+.bg-anim-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0.15;
+}
+
+:is(.dark) .bg-anim-container {
+  opacity: 0.05;
+}
+
+.bg-anim-phone {
+  width: 280px;
+  height: 560px;
+  border: 4px solid currentColor;
+  border-radius: 40px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.bg-anim-touchpoint {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0;
+  animation: animPhaseA 10s infinite ease-in-out;
+}
+
+.bg-anim-touchpoint.tl { top: 20%; left: -20px; }
+.bg-anim-touchpoint.tr { top: 20%; right: -20px; }
+.bg-anim-touchpoint.bl { bottom: 20%; left: -20px; }
+.bg-anim-touchpoint.br { bottom: 20%; right: -20px; }
+
+.bg-anim-text {
+  width: 80%;
+  height: 120px;
+  border: 4px dashed currentColor;
+  border-radius: 8px;
+  opacity: 0;
+  animation: animPhaseB 10s infinite ease-in-out;
+  margin-bottom: auto;
+  margin-top: 40px;
+}
+
+.bg-anim-input-container {
+  width: 90%;
+  height: 60px;
+  border: 4px solid currentColor;
+  border-radius: 12px;
+  position: relative;
+  margin-bottom: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  opacity: 0;
+  animation: animPhaseC 10s infinite ease-in-out;
+}
+
+.bg-anim-input-text {
+  height: 20px;
+  background-color: currentColor;
+  border-radius: 4px;
+  width: 0;
+  animation: animPhaseCText 10s infinite steps(5, end);
+}
+
+.bg-anim-confetti {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  animation: animPhaseD 10s infinite ease-out;
+}
+
+.bg-anim-confetti:nth-child(1) { top: -20px; left: 20%; animation-delay: 0.1s; }
+.bg-anim-confetti:nth-child(2) { top: -40px; left: 50%; animation-delay: 0s; }
+.bg-anim-confetti:nth-child(3) { top: -20px; right: 20%; animation-delay: 0.2s; }
+
+@keyframes animPhaseA {
+  0%, 10% { opacity: 0; transform: scale(0.5); }
+  15%, 25% { opacity: 0.5; transform: scale(1); }
+  30%, 100% { opacity: 0; transform: scale(0.5); }
+}
+
+@keyframes animPhaseB {
+  0%, 25% { opacity: 0; transform: translateY(20px); }
+  30%, 45% { opacity: 0.5; transform: translateY(0); }
+  50%, 100% { opacity: 0; transform: translateY(0); }
+}
+
+@keyframes animPhaseC {
+  0%, 45% { opacity: 0; border-color: currentColor; }
+  50%, 70% { opacity: 0.8; border-color: currentColor; }
+  75%, 100% { opacity: 0; }
+}
+
+@keyframes animPhaseCText {
+  0%, 55% { width: 0; opacity: 0; }
+  60%, 70% { width: 60%; opacity: 1; }
+  75%, 100% { width: 0; opacity: 0; }
+}
+
+@keyframes animPhaseD {
+  0%, 70% { opacity: 0; transform: translateY(0) scale(1); }
+  72% { opacity: 1; transform: translateY(-30px) scale(1.5); }
+  80%, 100% { opacity: 0; transform: translateY(-50px) scale(0); }
+}
