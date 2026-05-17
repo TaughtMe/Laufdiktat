@@ -6,11 +6,13 @@ interface GameStore {
   words: WordItem[];
   gameMode: GameMode;
   battleOptions: BattleOptions;
+  bimanualLocked: boolean;
   
   // Actions
   setWords: (words: WordItem[]) => void;
   setGameMode: (mode: GameMode) => void;
   setBattleOptions: (options: Partial<BattleOptions>) => void;
+  setBimanualLocked: (locked: boolean) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -21,6 +23,7 @@ export const useGameStore = create<GameStore>((set) => ({
     ink: false,
     flicker: false,
   },
+  bimanualLocked: false,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -31,4 +34,5 @@ export const useGameStore = create<GameStore>((set) => ({
     set((state) => ({ 
       battleOptions: { ...state.battleOptions, ...options } 
     })),
+  setBimanualLocked: (locked) => set({ bimanualLocked: locked }),
 }));

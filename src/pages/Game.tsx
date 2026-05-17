@@ -26,6 +26,8 @@ export const Game = () => {
   const setBattleOptions = useGameStore((state) => state.setBattleOptions);
   const gameMode = useGameStore((state) => state.gameMode);
   const setGameMode = useGameStore((state) => state.setGameMode);
+  const bimanualLocked = useGameStore((state) => state.bimanualLocked);
+  const setBimanualLocked = useGameStore((state) => state.setBimanualLocked);
   
   const [gameState, setGameState] = useState<GameState>('IDLE');
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -94,7 +96,9 @@ export const Game = () => {
   }, [roomCode, studentName, setWords, setGameMode, setBattleOptions]);
 
   useEffect(() => {
-    if (gameState === 'WRITING') {
+    if (bimanualLocked) {
+      inputRef.current?.blur();
+    } else if (gameState === 'WRITING') {
       const timer = setTimeout(() => inputRef.current?.focus(), 10);
       
       // Ink Logik (30% Wahrscheinlichkeit)
@@ -103,10 +107,12 @@ export const Game = () => {
       }
       
       return () => clearTimeout(timer);
-    } else {
+    }
+    
+    if (gameState !== 'WRITING') {
       setInkSplats([]);
     }
-  }, [gameState, battleOptions.ink]);
+  }, [bimanualLocked, gameState, battleOptions.ink]);
 
   useEffect(() => {
     if (gameState === 'FINISHED' && roomCode) {
@@ -127,11 +133,14 @@ export const Game = () => {
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
     
-    const isMultiTouch = 'touches' in e ? e.touches.length >= 2 : e.button === 0;
+    const isMultiTouch = 'touches' in e ? e.touches.length >= 4 : e.button === 0;
     
-    if (isMultiTouch && gameState !== 'REVEALED') {
-      setGameState('REVEALED');
-      setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+    if (isMultiTouch && !bimanualLocked) {
+      setBimanualLocked(true);
+      if (gameState !== 'REVEALED') {
+        setGameState('REVEALED');
+        setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+      }
     }
   };
 
@@ -140,8 +149,11 @@ export const Game = () => {
     
     const touchesRemaining = 'touches' in e ? e.touches.length : 0;
     
-    if (touchesRemaining < 2 && gameState === 'REVEALED') {
-      setGameState('WRITING');
+    if (touchesRemaining < 4 && bimanualLocked) {
+      setBimanualLocked(false);
+      if (gameState === 'REVEALED') {
+        setGameState('WRITING');
+      }
     }
   };
 
@@ -151,7 +163,7 @@ export const Game = () => {
 
     setMetrics((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
 
-    if (inputValue.trim().toLowerCase() === currentWord.targetWord.toLowerCase()) {
+    if (inputValue.trim() === currentWord.targetWord) {
       if (currentWordIndex + 1 < words.length) {
         setCurrentWordIndex((prev) => prev + 1);
         setInputValue('');
@@ -173,7 +185,7 @@ export const Game = () => {
     }
   };
 
-  const isFlickerActive = (battleOptions.flicker || forceFlicker) && gameState === 'REVEALED';
+  const isFlickerActive = (battleOptions.flicker || forceFlicker) && bimanualLocked;
 
   // Fallback: Empty State
   if (words.length === 0) {
@@ -250,12 +262,12 @@ export const Game = () => {
         {gameState !== 'FINISHED' && (
           <>
             {/* Haptische Barriere: Visuelle Indikatoren */}
-            <div className={`absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${gameState === 'REVEALED' ? 'opacity-100' : 'opacity-30'}`}>
+            <div className={`absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
               <div className="w-16 h-24 sm:h-32 rounded-[2rem] border-4 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center">
                 <span className="text-slate-300 dark:text-slate-700 text-3xl">👇</span>
               </div>
             </div>
-            <div className={`absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${gameState === 'REVEALED' ? 'opacity-100' : 'opacity-30'}`}>
+            <div className={`absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
               <div className="w-16 h-24 sm:h-32 rounded-[2rem] border-4 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center">
                 <span className="text-slate-300 dark:text-slate-700 text-3xl">👇</span>
               </div>
@@ -276,7 +288,7 @@ export const Game = () => {
             </div>
           )}
 
-          {gameState === 'REVEALED' && (
+          {bimanualLocked && (
             <div className={`text-center transform transition-transform scale-110 pointer-events-none ${isFlickerActive ? 'animate-flicker' : ''}`}>
               <div className="flex items-center justify-center gap-4">
                 <h2 className="text-5xl sm:text-7xl font-extrabold text-indigo-600 dark:text-indigo-400 tracking-tight drop-shadow-sm">
@@ -306,7 +318,7 @@ export const Game = () => {
             </div>
           )}
 
-          {gameState === 'WRITING' && (
+          {!bimanualLocked && gameState === 'WRITING' && (
             <form 
               onSubmit={handleSubmit} 
               className={`w-full transition-transform relative ${errorShake ? 'animate-shake' : ''}`}
