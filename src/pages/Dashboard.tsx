@@ -20,7 +20,6 @@ export const Dashboard = () => {
   const [currentStep, setCurrentStep] = useState<DashboardStep>('IMPORT');
   const [manualInput, setManualInput] = useState('');
   const [roomCode, setRoomCode] = useState('');
-  const [sessionActive, setSessionActive] = useState(false);
   const [results, setResults] = useState<StudentResult[]>([]);
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
   const [connectionWarning, setConnectionWarning] = useState(false);
@@ -82,13 +81,11 @@ export const Dashboard = () => {
         battleOptions
       }
     });
-    setSessionActive(true);
     setCurrentStep('LIVE');
   };
 
   const handleEndSession = async () => {
     await supabase.removeChannel(supabase.channel(roomCode));
-    setSessionActive(false);
     setCurrentStep('IMPORT');
     setWords([]);
     setResults([]);
