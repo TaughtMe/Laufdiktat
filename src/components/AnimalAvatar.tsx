@@ -1,25 +1,6 @@
 import { useMemo } from 'react';
 
 /**
- * Mapping: Adjektiv → Hintergrundfarbe (Tailwind-Klasse)
- * Jedes Adjektiv aus der Namensgenerierung bekommt eine eigene, kräftige Farbe.
- */
-const ADJECTIVE_COLOR_MAP: Record<string, string> = {
-  schnelles:  'bg-red-500',
-  flinkes:    'bg-cyan-500',
-  schlaues:   'bg-blue-500',
-  mutiges:    'bg-amber-500',
-  wildes:     'bg-orange-500',
-  kühnes:     'bg-purple-500',
-  listiges:   'bg-emerald-500',
-  starkes:    'bg-slate-800',
-  freches:    'bg-pink-500',
-};
-
-/** Fallback-Farbe, falls ein Adjektiv nicht im Mapping enthalten ist. */
-const FALLBACK_COLOR = 'bg-indigo-500';
-
-/**
  * Sonderfall-Mapping für Tiernamen, deren Dateiname nicht durch die
  * Standard-Umlaut-Konvertierung erzeugt werden kann.
  * Key = lowercase Tiername, Value = tatsächlicher Dateiname (ohne .svg)
@@ -83,42 +64,21 @@ interface AnimalAvatarProps {
 /**
  * AnimalAvatar
  *
- * Rendert ein farbiges Tier-Icon basierend auf dem generierten Schülernamen.
- * - Das **Adjektiv** bestimmt die Farbe (CSS-Hintergrund).
- * - Das **Tier** bestimmt das SVG-Icon (per CSS-Mask).
- *
- * Die SVGs müssen als einfarbige Silhouetten in `/public/animals/` liegen,
- * z.B. `/public/animals/koala.svg`.
+ * Rendert das Original-Tier-SVG basierend auf dem generierten Schülernamen.
+ * Nutzt die SVG-Grafik direkt aus `/animals/` ohne farbliche Anpassungen.
  */
 export const AnimalAvatar = ({ studentName, className = '' }: AnimalAvatarProps) => {
-  const { colorClass, svgPath } = useMemo(() => {
-    const { adjective, animal } = parseStudentName(studentName);
-
-    // Adjektiv → Farbe (case-insensitive Lookup)
-    const color = ADJECTIVE_COLOR_MAP[adjective.toLowerCase()] ?? FALLBACK_COLOR;
-
-    // Tier → SVG-Pfad über Dateinamen-Konvertierung
+  const svgPath = useMemo(() => {
+    const { animal } = parseStudentName(studentName);
     const fileName = toFileName(animal);
-    const path = `/animals/${fileName}.svg`;
-
-    return { colorClass: color, svgPath: path };
+    return `/animals/${fileName}.svg`;
   }, [studentName]);
 
   return (
-    <div
-      className={`${colorClass} ${className}`}
-      style={{
-        WebkitMaskImage: `url(${svgPath})`,
-        maskImage: `url(${svgPath})`,
-        WebkitMaskSize: 'contain',
-        maskSize: 'contain',
-        WebkitMaskRepeat: 'no-repeat',
-        maskRepeat: 'no-repeat',
-        WebkitMaskPosition: 'center',
-        maskPosition: 'center',
-      }}
-      role="img"
-      aria-label={studentName}
+    <img
+      src={svgPath}
+      className={`object-contain ${className}`}
+      alt={studentName}
     />
   );
 };

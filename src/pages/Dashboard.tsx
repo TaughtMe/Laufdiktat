@@ -1191,14 +1191,31 @@ export const Dashboard = () => {
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 {/* Left: Status Card */}
                 <div className="lg:col-span-3 bg-white dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-850 p-8 sm:p-10 flex flex-col items-center justify-center text-center min-h-[320px]">
-                  <div className="w-20 h-20 rounded-full bg-brand-50 dark:bg-brand-950/30 flex items-center justify-center mb-6">
-                    <Activity className="w-10 h-10 text-brand-500" />
+                  {/* Runner Scene Info-Box */}
+                  <div className="w-full max-w-md mx-auto mb-8 bg-slate-50/80 dark:bg-slate-900/40 rounded-2xl p-6 border border-slate-100 dark:border-slate-850 flex items-center justify-between shadow-[0_2px_12px_rgba(0,0,0,0.015)]">
+                    {/* Left Icon (Desk / Laptop) */}
+                    <div className="text-2xl w-12 h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 dark:border-slate-750 select-none shrink-0">
+                      💻
+                    </div>
+
+                    {/* Running Track */}
+                    <div className="flex-1 mx-4 h-12 relative border-b-2 border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-start overflow-hidden">
+                      <div className="animate-run-ping-pong absolute left-0 bottom-1 text-3xl select-none leading-none">
+                        🏃‍♂️
+                      </div>
+                    </div>
+
+                    {/* Right Icon (Clipboard) */}
+                    <div className="text-2xl w-12 h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 dark:border-slate-750 select-none shrink-0">
+                      📋
+                    </div>
                   </div>
+
                   <h3 className="text-xl font-bold text-darkteal-800 dark:text-white">
-                    Die Schüler bearbeiten das Diktat...
+                    Das Diktat läuft...
                   </h3>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-md leading-relaxed">
-                    Die Fortschritte werden in Echtzeit synchronisiert. Aktuell befinden sich {studentsInLobby.length} Schüler im virtuellen Raum.
+                    Die Schüler pendeln zwischen Station und Platz.
                   </p>
                   
                   {/* Progress Bar */}

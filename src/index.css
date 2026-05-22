@@ -44,6 +44,26 @@
     60% { opacity: 0.9; filter: blur(1px); }
     80% { opacity: 0.4; filter: blur(3px); transform: translateX(2px); }
   }
+
+  --animate-run-ping-pong: run-ping-pong 3.5s infinite ease-in-out;
+
+  @keyframes run-ping-pong {
+    0% {
+      transform: translateX(0) scaleX(1);
+    }
+    49.9% {
+      transform: translateX(150px) scaleX(1);
+    }
+    50% {
+      transform: translateX(150px) scaleX(-1);
+    }
+    99.9% {
+      transform: translateX(0) scaleX(-1);
+    }
+    100% {
+      transform: translateX(0) scaleX(1);
+    }
+  }
 }
 
 @layer base {
