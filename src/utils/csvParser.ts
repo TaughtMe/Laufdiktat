@@ -1,20 +1,27 @@
 import type { WordItem } from '../types/game';
 
-export const parseCSV = (text: string): WordItem[] => {
+export const parseCSV = (text: string, mode: 'lines' | 'sentences'): WordItem[] => {
   if (!text || text.trim() === '') {
     return [];
   }
 
-  const lines = text.split('\n');
+  let segments: string[];
+  if (mode === 'sentences') {
+    // Normalize newlines and extra spaces into a single space
+    const normalizedText = text.replace(/\s+/g, ' ');
+    segments = normalizedText.split(/(?<=[.!?])\s+/);
+  } else {
+    segments = text.split('\n');
+  }
+  
   const parsedWords: WordItem[] = [];
 
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) continue;
+  for (const segment of segments) {
+    const trimmedSegment = segment.trim();
+    if (!trimmedSegment) continue;
 
-    // Optional: Wenn es ein ; gibt, könnte man "Wort;Hinweis" erwarten,
-    // aktuell nehmen wir einfach den ersten Teil als Wort.
-    const parts = trimmedLine.split(';');
+    // Support CSV style ";" separation
+    const parts = trimmedSegment.split(';');
     const targetWord = parts[0].trim();
 
     if (targetWord) {

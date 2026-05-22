@@ -3,6 +3,28 @@
 @theme {
   --color-primary: #3b82f6; /* Example primary color, adjust later */
   
+  --color-brand-50: #f0fbfc;
+  --color-brand-100: #dcf5f8;
+  --color-brand-200: #bdecf0;
+  --color-brand-300: #8ee0e9;
+  --color-brand-400: #54ccdb;
+  --color-brand-500: #008ca8;
+  --color-brand-600: #007991;
+  --color-brand-700: #00667b;
+  --color-brand-800: #005466;
+  --color-brand-900: #014554;
+  --color-brand-bg: #f4f6fa;
+  
+  --color-darkteal-50: #f3f8f9;
+  --color-darkteal-100: #e1f0f4;
+  --color-darkteal-800: #0f4a60;
+  --color-darkteal-900: #0a3c4f;
+  --color-darkteal-950: #062734;
+
+  --color-mint-100: #e5fff5;
+  --color-mint-300: #5efcc2;
+  --color-mint-800: #004730;
+  
   --animate-shake: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   
   @keyframes shake {
@@ -26,7 +48,7 @@
 
 @layer base {
   body {
-    @apply bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50 antialiased;
+    @apply bg-brand-bg text-slate-900 dark:bg-slate-950 dark:text-slate-50 antialiased;
   }
 }
 

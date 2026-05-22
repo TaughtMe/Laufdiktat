@@ -22,3 +22,12 @@ export interface StationStudentState {
   currentIndex: number;
   peeks: number;
 }
+
+export interface SessionStartPayload {
+  words: WordItem[];
+  gameMode: GameMode;
+  battleOptions: BattleOptions;
+  stationMode: boolean;
+  stationCount: number;
+}
+

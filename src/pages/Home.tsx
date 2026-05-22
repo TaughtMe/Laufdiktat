@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Dices } from 'lucide-react';
+import { AnimalAvatar } from '../components/AnimalAvatar';
 
 const ADJECTIVES = ['Schnelles', 'Flinkes', 'Schlaues', 'Mutiges', 'Wildes', 'Kühnes', 'Listiges', 'Starkes', 'Freches'];
-const ANIMALS = ['Nashorn', 'Känguru', 'Eichhörnchen', 'Zebra', 'Erdmännchen', 'Chamäleon', 'Faultier', 'Alpaka', 'Pinguin'];
+const ANIMALS = ['Koala', 'Fledermaus', 'Kamel', 'Igel', 'Capybara', 'Eichhörnchen', 'Elefant', 'Qualle', 'Tiefseefisch', 'Clownfisch', 'Schwein', 'Ente', 'Phönix', 'Kiwi', 'Roter Panda', 'Giraffe', 'Löwin', 'Einhorn', 'Orca', 'Schildkröte', 'Pfau', 'Affe', 'Gorilla', 'Fuchs', 'Sphynx-Katze', 'Lama', 'Yak', 'Kobra', 'Krokodil', 'Zebra', 'Flamingo', 'Oktopus', 'Chamäleon', 'Hirsch', 'Pelikan', 'Erdmännchen', 'Käfer', 'Heuschrecke', 'Schnabeltier', 'Mistkäfer', 'Krabbe', 'Mammut', 'Kaninchen', 'Truthahn', 'Gottesanbeterin', 'Esel', 'Robbe', 'Strauß', 'Taube', 'Gepard', 'Schmetterling', 'Libelle', 'Pudel', 'Bobtail', 'Mops', 'Deutscher Schäferhund', 'Collie', 'Dackel', 'Perserkatze', 'Europäisch Kurzhaar'];
 
 export const Home = () => {
   const navigate = useNavigate();
@@ -33,39 +35,20 @@ export const Home = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 transition-colors duration-300 relative overflow-hidden">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-brand-bg dark:bg-slate-950 transition-colors duration-300 relative overflow-hidden">
       
-      {/* Background Animation */}
-      <div className="bg-anim-container text-slate-800 dark:text-slate-200">
-        <div className="bg-anim-phone">
-          <div className="bg-anim-touchpoint tl"></div>
-          <div className="bg-anim-touchpoint tr"></div>
-          <div className="bg-anim-touchpoint bl"></div>
-          <div className="bg-anim-touchpoint br"></div>
-          
-          <div className="bg-anim-text"></div>
-          
-          <div className="bg-anim-input-container">
-            <div className="bg-anim-input-text"></div>
-            <div className="bg-anim-confetti"></div>
-            <div className="bg-anim-confetti"></div>
-            <div className="bg-anim-confetti"></div>
-          </div>
-        </div>
-      </div>
-
       {/* Main Card */}
-      <div className="z-10 bg-white dark:bg-slate-900 rounded-3xl p-8 sm:p-10 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center space-y-8 w-full max-w-md animate-in fade-in zoom-in-95 duration-500">
-        <div className="space-y-2">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+      <div className="z-10 bg-white dark:bg-slate-900 rounded-[1.8rem] p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.03)] border border-slate-100/50 dark:border-slate-800 flex flex-col items-center text-center space-y-6 w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-500">
+        <div className="space-y-1.5">
+          <h1 className="text-3.5xl font-black text-slate-900 dark:text-white tracking-tight">
             Laufdiktat
           </h1>
-          <p className="text-slate-500 dark:text-slate-400">
+          <p className="text-[0.85rem] text-slate-400 dark:text-slate-500 max-w-[280px] leading-relaxed mx-auto">
             Gib den Raumcode deines Lehrers ein, um zu starten.
           </p>
         </div>
         
-        <div className="w-full flex flex-col items-center space-y-6">
+        <div className="w-full flex flex-col items-center space-y-4">
           <input 
             type="number" 
             placeholder="Raum-Code"
@@ -74,29 +57,37 @@ export const Home = () => {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleStartDictation();
             }}
-            className="w-full text-center text-3xl font-bold tracking-widest p-4 rounded-2xl outline-none border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all placeholder:font-normal placeholder:text-slate-300 dark:placeholder:text-slate-700"
+            className="w-full text-center text-lg font-semibold py-3.5 px-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none transition-all placeholder:text-[#a0aec0] dark:placeholder:text-slate-700 tracking-wide font-sans"
           />
           
-          <div className="w-full flex flex-col gap-3">
+          {/* Animal Avatar */}
+          {studentName && (
+            <div className="flex flex-col items-center gap-2 animate-in fade-in zoom-in-95 duration-300">
+              <AnimalAvatar studentName={studentName} className="w-32 h-32 mx-auto" />
+            </div>
+          )}
+
+          <div className="w-full flex flex-col">
             <input 
               type="text" 
               placeholder="Dein Name"
               value={studentName}
               readOnly
-              className="w-full text-center text-xl font-bold p-4 rounded-2xl outline-none border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"
+              className="w-full text-center text-lg font-semibold py-3.5 px-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:outline-none transition-all"
             />
             <button 
               type="button"
               onClick={generateName}
-              className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center justify-center gap-2 transition-colors"
+              className="mt-3 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350 flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full"
             >
-              <span className="text-xl">🎲</span> Zufälligen Namen generieren
+              <Dices className="w-3.5 h-3.5 text-slate-400" />
+              <span>Zufälligen Namen generieren</span>
             </button>
           </div>
           
           <button 
             onClick={handleStartDictation}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold py-4 px-8 rounded-2xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all active:scale-[0.98]"
+            className="w-full bg-brand-500 hover:bg-brand-600 text-white text-base font-bold py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-4"
           >
             Beitreten
           </button>
@@ -109,7 +100,7 @@ export const Home = () => {
           to="/dashboard" 
           className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
         >
-          Lehrer-Dashboard
+          Login
         </Link>
       </div>
     </div>

@@ -8,6 +8,7 @@ interface GameStore {
   battleOptions: BattleOptions;
   bimanualLocked: boolean;
   stationMode: boolean;
+  stationCount: number;
   
   // Actions
   setWords: (words: WordItem[]) => void;
@@ -15,6 +16,7 @@ interface GameStore {
   setBattleOptions: (options: Partial<BattleOptions>) => void;
   setBimanualLocked: (locked: boolean) => void;
   setStationMode: (active: boolean) => void;
+  setStationCount: (count: number) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -27,6 +29,7 @@ export const useGameStore = create<GameStore>((set) => ({
   },
   bimanualLocked: false,
   stationMode: false,
+  stationCount: 24,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -39,4 +42,5 @@ export const useGameStore = create<GameStore>((set) => ({
     })),
   setBimanualLocked: (locked) => set({ bimanualLocked: locked }),
   setStationMode: (active) => set({ stationMode: active }),
+  setStationCount: (stationCount) => set({ stationCount }),
 }));

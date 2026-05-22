@@ -10,6 +10,8 @@ export const StationGame = () => {
   const location = useLocation();
   const roomCode = location.state?.roomCode as string | undefined;
   const words = useGameStore((s) => s.words);
+  const stationCount = useGameStore((s) => s.stationCount);
+  const setStationCount = useGameStore((s) => s.setStationCount);
 
   const [view, setView] = useState<StationView>('GRID');
   const [studentNumber, setStudentNumber] = useState<number | null>(null);
@@ -28,12 +30,17 @@ export const StationGame = () => {
         setCurrentIndex(d.currentIndex);
         setPeeks(d.peeks);
       }
+    }).on('broadcast', { event: 'session-start' }, (payload) => {
+      const { stationCount: newStationCount } = payload.payload;
+      if (newStationCount !== undefined) {
+        setStationCount(newStationCount);
+      }
     }).on('broadcast', { event: 'session-ended' }, () => {
       navigate('/');
     });
     channelRef.current.subscribe();
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [roomCode, studentNumber]);
+  }, [roomCode, studentNumber, setStationCount, navigate]);
 
   const sendUpdate = useCallback((idx: number, p: number) => {
     if (!channelRef.current || !studentNumber) return;
@@ -99,11 +106,15 @@ export const StationGame = () => {
 
   if (!roomCode || words.length === 0) {
     return (
-      <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900 items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 text-center max-w-md w-full">
+      <div className="flex flex-col min-h-[100dvh] bg-brand-bg dark:bg-slate-950 items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-slate-100/50 dark:border-slate-800 text-center max-w-md w-full">
           <span className="text-6xl mb-4 block animate-bounce">⏳</span>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Warte auf Lehrer...</h2>
-          {roomCode && <p className="text-slate-600 dark:text-slate-400">Raum: <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{roomCode}</span></p>}
+          <h2 className="text-2xl font-bold text-darkteal-800 dark:text-white mb-2">Warte auf Lehrer...</h2>
+          {roomCode && (
+            <p className="text-slate-550 dark:text-slate-400 font-medium">
+              Raum-Code: <span className="font-mono font-bold text-brand-500">{roomCode}</span>
+            </p>
+          )}
         </div>
       </div>
     );
@@ -112,21 +123,30 @@ export const StationGame = () => {
   // Number Grid View
   if (view === 'GRID') {
     return (
-      <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900 select-none">
-        <header className="py-4 px-6 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex justify-between items-center">
-          <button onClick={() => navigate('/')} className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+      <div className="flex flex-col min-h-[100dvh] bg-brand-bg dark:bg-slate-950 select-none">
+        <header className="py-4 px-6 border-b border-slate-150/60 dark:border-slate-900 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm flex justify-between items-center shadow-[0_2px_15px_rgba(0,0,0,0.01)]">
+          <button
+            onClick={() => navigate('/')}
+            className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 transition-colors cursor-pointer"
+            title="Zurück zur Startseite"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
           </button>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-white">Wähle deine Nummer</h1>
+          <h1 className="text-lg font-bold text-darkteal-800 dark:text-white">Wähle deine Nummer</h1>
           <div className="w-9" />
         </header>
-        <main className="flex-1 p-4 sm:p-8 flex items-center justify-center">
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 w-full max-w-lg">
-            {Array.from({ length: 24 }, (_, i) => i + 1).map((num) => (
+        <main className="flex-1 p-6 sm:p-8 flex flex-col items-center justify-center max-w-lg mx-auto w-full">
+          <p className="text-xs font-bold text-slate-450 dark:text-slate-400 uppercase tracking-wider mb-6 text-center">
+            Wähle deine zugewiesene Nummer, um an dieser Station zu starten.
+          </p>
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-4 w-full">
+            {Array.from({ length: stationCount }, (_, i) => i + 1).map((num) => (
               <button
                 key={num}
                 onClick={() => handleSelectNumber(num)}
-                className="aspect-square rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 shadow-sm hover:shadow-lg text-3xl font-black text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all active:scale-95"
+                className="aspect-square rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-brand-500 dark:hover:border-brand-500 shadow-[0_4px_12px_rgba(0,0,0,0.01)] hover:shadow-md text-3.5xl font-black text-darkteal-800 dark:text-slate-200 hover:text-brand-500 dark:hover:text-brand-450 transition-all active:scale-95 duration-150 cursor-pointer flex items-center justify-center"
               >
                 {num}
               </button>
@@ -140,62 +160,106 @@ export const StationGame = () => {
   // Active Station View
   return (
     <div
-      className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900 select-none overflow-hidden touch-none relative"
+      className="flex flex-col min-h-[100dvh] bg-brand-bg dark:bg-slate-950 select-none overflow-hidden touch-none relative"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <header className="py-4 px-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+      <header className="py-4 px-6 border-b border-slate-150/60 dark:border-slate-900 flex justify-between items-center z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm shadow-[0_2px_15px_rgba(0,0,0,0.01)]">
         <div className="flex items-center gap-3">
-          <button onClick={() => { setView('GRID'); setStudentNumber(null); if (timeoutRef.current) clearTimeout(timeoutRef.current); }} className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          <button
+            onClick={() => {
+              setView('GRID');
+              setStudentNumber(null);
+              if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            }}
+            className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 transition-colors cursor-pointer"
+            title="Zurück zur Nummernauswahl"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
           </button>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-white">Nr. {studentNumber} — Wort {currentIndex + 1}/{words.length}</h1>
+          <h1 className="text-lg font-bold text-darkteal-800 dark:text-white">
+            Nr. {studentNumber} — Wort {currentIndex + 1}/{words.length}
+          </h1>
         </div>
-        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">👁 {peeks}</span>
+        <div className="flex gap-2 text-xs font-bold">
+          <span className="bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 px-3 py-1.5 rounded-full border border-brand-100/50">
+            Spicker: {peeks}
+          </span>
+        </div>
       </header>
 
-      {/* Touch area */}
+      {/* Touch area indicators */}
       <main className="flex-1 relative flex items-center justify-center p-4">
-        <div className={`absolute left-0 top-0 bottom-0 w-24 flex items-center justify-center transition-opacity pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
-          <div className="w-16 h-24 rounded-[2rem] border-4 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center"><span className="text-slate-300 dark:text-slate-700 text-3xl">👇</span></div>
+        <div className={`absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-all duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
+          <div className={`w-16 h-24 sm:h-32 rounded-[2rem] border-4 border-dashed flex items-center justify-center transition-all duration-300 ${
+            bimanualLocked
+              ? 'border-[#5efcc2] bg-[#5efcc2]/10 scale-105 shadow-[0_0_20px_rgba(94,252,194,0.15)]'
+              : 'border-slate-200 dark:border-slate-800'
+          }`}>
+            <span className={`text-3xl transition-transform duration-300 ${bimanualLocked ? 'scale-110' : ''}`}>👇</span>
+          </div>
         </div>
-        <div className={`absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center transition-opacity pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
-          <div className="w-16 h-24 rounded-[2rem] border-4 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center"><span className="text-slate-300 dark:text-slate-700 text-3xl">👇</span></div>
+        <div className={`absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-all duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
+          <div className={`w-16 h-24 sm:h-32 rounded-[2rem] border-4 border-dashed flex items-center justify-center transition-all duration-300 ${
+            bimanualLocked
+              ? 'border-[#5efcc2] bg-[#5efcc2]/10 scale-105 shadow-[0_0_20px_rgba(94,252,194,0.15)]'
+              : 'border-slate-200 dark:border-slate-800'
+          }`}>
+            <span className={`text-3xl transition-transform duration-300 ${bimanualLocked ? 'scale-110' : ''}`}>👇</span>
+          </div>
         </div>
 
         <div className="z-10 w-full max-w-md flex flex-col items-center">
           {bimanualLocked ? (
-            <div className="text-center pointer-events-none">
-              <h2 className="text-5xl sm:text-7xl font-extrabold text-indigo-600 dark:text-indigo-400 tracking-tight drop-shadow-sm">{currentWord}</h2>
-              <p className="mt-8 text-slate-500 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-full inline-block">Wort einprägen... Loslassen zum Schreiben!</p>
+            <div className="text-center transform transition-transform scale-110 pointer-events-none px-6">
+              <h2 className="text-5xl sm:text-7xl font-black text-brand-500 dark:text-brand-450 tracking-tight drop-shadow-sm font-sans select-none">
+                {currentWord}
+              </h2>
+              <p className="mt-8 text-xs font-bold tracking-wider uppercase text-slate-400 dark:text-slate-500 bg-[#f0f5fa] dark:bg-slate-805/80 px-5 py-2.5 rounded-full inline-block border border-slate-100/50 dark:border-slate-800">
+                Wort einprägen... Loslassen zum Schreiben!
+              </p>
             </div>
           ) : (
-            <div className="text-center space-y-4 animate-pulse pointer-events-none">
-              <div className="w-20 h-20 mx-auto bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center shadow-inner"><span className="text-4xl">👆</span></div>
-              <p className="text-slate-500 dark:text-slate-400 font-medium text-xl px-8 max-w-md">2 Finger auflegen, um das Wort anzuzeigen. Danach auf deinem Papier aufschreiben!</p>
+            <div className="text-center space-y-6 animate-pulse pointer-events-none max-w-sm px-6">
+              <div className="w-24 h-24 mx-auto bg-white dark:bg-slate-900 rounded-full flex items-center justify-center shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100/50 dark:border-slate-800">
+                <span className="text-4xl">👆</span>
+              </div>
+              <p className="text-darkteal-800 dark:text-slate-300 font-extrabold text-lg sm:text-xl leading-relaxed">
+                Mit zwei Fingern gleichzeitig die Bildschirmränder gedrückt halten, um das Wort zu sehen.
+              </p>
+              <p className="text-slate-550 dark:text-slate-400 font-medium text-sm mt-3">
+                Präge dir das Wort ein und schreibe es danach auf dein Papier!
+              </p>
             </div>
           )}
         </div>
       </main>
 
       {/* Navigation arrows */}
-      <footer className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-between gap-4 z-10">
+      <footer className="p-4 border-t border-slate-150/60 dark:border-slate-900 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm flex items-center justify-between gap-4 z-10 shadow-[0_-2px_15px_rgba(0,0,0,0.01)]">
         <button
           onClick={handlePrev}
           disabled={currentIndex <= 0}
-          className="flex-1 py-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-800 dark:text-white rounded-xl font-bold text-2xl transition-all active:scale-95"
+          className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-30 text-darkteal-800 dark:text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center"
         >
-          ←
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+          </svg>
         </button>
         <button
           onClick={handleNext}
           disabled={currentIndex >= words.length - 1}
-          className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 text-white rounded-xl font-bold text-2xl transition-all active:scale-95"
+          className="flex-1 py-4 bg-brand-500 hover:bg-brand-600 disabled:opacity-30 text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer shadow-md hover:shadow-lg flex items-center justify-center"
         >
-          →
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+          </svg>
         </button>
       </footer>
     </div>
   );
 };
+
