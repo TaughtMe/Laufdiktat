@@ -3,8 +3,30 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Dices } from 'lucide-react';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 
-const ADJECTIVES = ['Schnelles', 'Flinkes', 'Schlaues', 'Mutiges', 'Wildes', 'Kühnes', 'Listiges', 'Starkes', 'Freches'];
-const ANIMALS = ['Koala', 'Fledermaus', 'Kamel', 'Igel', 'Capybara', 'Eichhörnchen', 'Elefant', 'Qualle', 'Tiefseefisch', 'Clownfisch', 'Schwein', 'Ente', 'Phönix', 'Kiwi', 'Roter Panda', 'Giraffe', 'Löwin', 'Einhorn', 'Orca', 'Schildkröte', 'Pfau', 'Affe', 'Gorilla', 'Fuchs', 'Sphynx-Katze', 'Lama', 'Yak', 'Kobra', 'Krokodil', 'Zebra', 'Flamingo', 'Oktopus', 'Chamäleon', 'Hirsch', 'Pelikan', 'Erdmännchen', 'Käfer', 'Heuschrecke', 'Schnabeltier', 'Mistkäfer', 'Krabbe', 'Mammut', 'Kaninchen', 'Truthahn', 'Gottesanbeterin', 'Esel', 'Robbe', 'Strauß', 'Taube', 'Gepard', 'Schmetterling', 'Libelle', 'Pudel', 'Bobtail', 'Mops', 'Deutscher Schäferhund', 'Collie', 'Dackel', 'Perserkatze', 'Europäisch Kurzhaar'];
+const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
+const ANIMALS = [
+  { name: 'Koala', g: 'm' }, { name: 'Fledermaus', g: 'f' }, { name: 'Kamel', g: 'n' },
+  { name: 'Igel', g: 'm' }, { name: 'Capybara', g: 'n' }, { name: 'Eichhörnchen', g: 'n' },
+  { name: 'Elefant', g: 'm' }, { name: 'Qualle', g: 'f' }, { name: 'Tiefseefisch', g: 'm' },
+  { name: 'Clownfisch', g: 'm' }, { name: 'Schwein', g: 'n' }, { name: 'Ente', g: 'f' },
+  { name: 'Phönix', g: 'm' }, { name: 'Kiwi', g: 'm' }, { name: 'Roter Panda', g: 'm' },
+  { name: 'Giraffe', g: 'f' }, { name: 'Löwin', g: 'f' }, { name: 'Einhorn', g: 'n' },
+  { name: 'Orca', g: 'm' }, { name: 'Schildkröte', g: 'f' }, { name: 'Pfau', g: 'm' },
+  { name: 'Hund', g: 'm' }, { name: 'Affe', g: 'm' }, { name: 'Gorilla', g: 'm' },
+  { name: 'Fuchs', g: 'm' }, { name: 'Katze', g: 'f' }, { name: 'Sphynx-Katze', g: 'f' },
+  { name: 'Spielzeugkatze', g: 'f' }, { name: 'Lama', g: 'n' }, { name: 'Yak', g: 'n' },
+  { name: 'Kobra', g: 'f' }, { name: 'Krokodil', g: 'n' }, { name: 'Zebra', g: 'n' },
+  { name: 'Flamingo', g: 'm' }, { name: 'Oktopus', g: 'm' }, { name: 'Chamäleon', g: 'n' },
+  { name: 'Hirsch', g: 'm' }, { name: 'Pelikan', g: 'm' }, { name: 'Erdmännchen', g: 'n' },
+  { name: 'Käfer', g: 'm' }, { name: 'Heuschrecke', g: 'f' }, { name: 'Schnabeltier', g: 'n' },
+  { name: 'Mistkäfer', g: 'm' }, { name: 'Krabbe', g: 'f' }, { name: 'Mammut', g: 'n' },
+  { name: 'Kaninchen', g: 'n' }, { name: 'Truthahn', g: 'm' }, { name: 'Gottesanbeterin', g: 'f' },
+  { name: 'Esel', g: 'm' }, { name: 'Robbe', g: 'f' }, { name: 'Strauß', g: 'm' },
+  { name: 'Taube', g: 'f' }, { name: 'Gepard', g: 'm' }, { name: 'Schmetterling', g: 'm' },
+  { name: 'Libelle', g: 'f' }, { name: 'Pudel', g: 'm' }, { name: 'Bobtail', g: 'm' },
+  { name: 'Mops', g: 'm' }, { name: 'Deutscher Schäferhund', g: 'm' }, { name: 'Collie', g: 'm' },
+  { name: 'Dackel', g: 'm' }, { name: 'Perserkatze', g: 'f' }, { name: 'Europäisch Kurzhaar', g: 'f' }
+];
 
 export const Home = () => {
   const navigate = useNavigate();
@@ -13,9 +35,17 @@ export const Home = () => {
   const [studentName, setStudentName] = useState('');
 
   const generateName = () => {
-    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-    const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-    setStudentName(`${adj} ${animal}`);
+    const baseAdj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const animalObj = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+    
+    let ending = 'es';
+    if (animalObj.g === 'm') {
+      ending = 'er';
+    } else if (animalObj.g === 'f') {
+      ending = 'e';
+    }
+    
+    setStudentName(`${baseAdj}${ending} ${animalObj.name}`);
   };
 
   useEffect(() => {
