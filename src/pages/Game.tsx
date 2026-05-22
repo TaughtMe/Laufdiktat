@@ -32,6 +32,8 @@ export const Game = () => {
   const stationMode = useGameStore((state) => state.stationMode);
   const setStationMode = useGameStore((state) => state.setStationMode);
   const setStationCount = useGameStore((state) => state.setStationCount);
+  const isTtsEnabled = useGameStore((state) => state.isTtsEnabled);
+  const setTtsEnabled = useGameStore((state) => state.setTtsEnabled);
   
   const [gameState, setGameState] = useState<GameState>('IDLE');
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -74,12 +76,13 @@ export const Game = () => {
       'broadcast',
       { event: 'session-start' },
       (payload) => {
-        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount } = payload.payload;
+        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled } = payload.payload;
         setWords(newWords);
         setGameMode(newMode);
         setBattleOptions(newOptions);
         if (newStationMode !== undefined) setStationMode(newStationMode);
         if (newStationCount !== undefined) setStationCount(newStationCount);
+        if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
       }
     ).on(
       'broadcast',
@@ -305,7 +308,7 @@ export const Game = () => {
                 <h2 className="text-5xl sm:text-7xl font-black text-brand-500 dark:text-brand-400 tracking-tight drop-shadow-sm font-sans select-none">
                   {currentWord.targetWord}
                 </h2>
-                {gameMode === 'UEBUNG' && (
+                {gameMode === 'UEBUNG' && isTtsEnabled && (
                   <button
                     type="button"
                     className="pointer-events-auto bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-3 rounded-2xl shadow-sm border border-slate-100/80 dark:border-slate-700 transition-colors flex items-center justify-center cursor-pointer"

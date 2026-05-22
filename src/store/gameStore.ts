@@ -9,6 +9,7 @@ interface GameStore {
   bimanualLocked: boolean;
   stationMode: boolean;
   stationCount: number;
+  isTtsEnabled: boolean;
   
   // Actions
   setWords: (words: WordItem[]) => void;
@@ -17,6 +18,8 @@ interface GameStore {
   setBimanualLocked: (locked: boolean) => void;
   setStationMode: (active: boolean) => void;
   setStationCount: (count: number) => void;
+  toggleTts: () => void;
+  setTtsEnabled: (enabled: boolean) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -30,6 +33,7 @@ export const useGameStore = create<GameStore>((set) => ({
   bimanualLocked: false,
   stationMode: false,
   stationCount: 24,
+  isTtsEnabled: true,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -43,4 +47,6 @@ export const useGameStore = create<GameStore>((set) => ({
   setBimanualLocked: (locked) => set({ bimanualLocked: locked }),
   setStationMode: (active) => set({ stationMode: active }),
   setStationCount: (stationCount) => set({ stationCount }),
+  toggleTts: () => set((state) => ({ isTtsEnabled: !state.isTtsEnabled })),
+  setTtsEnabled: (isTtsEnabled) => set({ isTtsEnabled }),
 }));

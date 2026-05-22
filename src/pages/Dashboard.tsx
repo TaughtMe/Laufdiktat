@@ -16,13 +16,15 @@ import {
   X,
   ChevronLeft,
   Activity,
-  XCircle
+  XCircle,
+  Download
 } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { parseCSV } from '../utils/csvParser';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import type { GameMode, StationStudentState } from '../types/game';
+import { exportResultsToCSV } from '../utils/exportUtils';
 
 type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 
@@ -72,6 +74,8 @@ export const Dashboard = () => {
   const setStationMode = useGameStore((state) => state.setStationMode);
   const stationCount = useGameStore((state) => state.stationCount);
   const setStationCount = useGameStore((state) => state.setStationCount);
+  const isTtsEnabled = useGameStore((state) => state.isTtsEnabled);
+  const toggleTts = useGameStore((state) => state.toggleTts);
 
   useEffect(() => {
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
@@ -105,7 +109,8 @@ export const Dashboard = () => {
                 gameMode,
                 battleOptions,
                 stationMode,
-                stationCount
+                stationCount,
+                isTtsEnabled
               }
             });
           }
@@ -169,7 +174,8 @@ export const Dashboard = () => {
         gameMode,
         battleOptions,
         stationMode,
-        stationCount
+        stationCount,
+        isTtsEnabled
       }
     });
     setCurrentStep('LIVE');
@@ -185,6 +191,35 @@ export const Dashboard = () => {
     setStudentsInLobby([]);
     setStationStates(new Map());
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
+  };
+
+  const handleExportCSV = () => {
+    if (stationMode) {
+      const data = Array.from({ length: stationCount }, (_, i) => {
+        const num = i + 1;
+        const state = stationStates.get(num);
+        const status = getStationStatus(num);
+        const progress = status === 'done' ? 100 : (state ? Math.round(((state.currentIndex + 1) / words.length) * 100) : 0);
+        const reached = status === 'done' ? 'Fertig' : (state ? `${state.currentIndex + 1}/${words.length}` : 'Inaktiv');
+        return {
+          name: `Schüler Nr. ${num}`,
+          reachedStation: reached,
+          progressPercent: progress
+        };
+      });
+      exportResultsToCSV(data);
+    } else {
+      const data = studentsInLobby.map((name) => {
+        const result = results.find((r) => r.name === name);
+        const isFinished = !!result;
+        return {
+          name: name,
+          reachedStation: isFinished ? 'Fertig' : 'Aktiv',
+          progressPercent: isFinished ? 100 : 0
+        };
+      });
+      exportResultsToCSV(data);
+    }
   };
 
   const handleManualInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -857,7 +892,6 @@ export const Dashboard = () => {
                 
                 {/* Left Column (Col span 7) */}
                 <div className="md:col-span-7 flex flex-col gap-6 md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2">
-                  
                   {/* Station Mode Toggle Card */}
                   <div className="p-5 rounded-2xl border-2 border-dashed border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/10 transition-all duration-300 shadow-sm">
                     <label className="flex items-center justify-between cursor-pointer">
@@ -869,7 +903,7 @@ export const Dashboard = () => {
                           <span className="font-bold text-darkteal-800 dark:text-white block text-base">
                             Stations-Modus aktiv
                           </span>
-                          <span className="text-xs text-slate-500 dark:text-slate-450 mt-0.5 block leading-relaxed max-w-[280px]">
+                          <span className="text-xs text-slate-500 dark:text-slate-455 mt-0.5 block leading-relaxed max-w-[280px]">
                             Papier-Diktat — Schüler schreiben auf Papier, Tablet/iPad zeigt nur Wörter.
                           </span>
                         </div>
@@ -908,6 +942,37 @@ export const Dashboard = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* TTS (Vorlesen) Toggle Card */}
+                  <div className="p-5 rounded-2xl border border-slate-150 dark:border-slate-850 bg-white dark:bg-slate-900 transition-all duration-300 shadow-sm">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 flex items-center justify-center text-2xl font-bold">
+                          🔊
+                        </div>
+                        <div>
+                          <span className="font-bold text-darkteal-800 dark:text-white block text-base">
+                            Sprachausgabe (Vorlesen)
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-450 mt-0.5 block leading-relaxed max-w-[280px]">
+                            Aktiviert die Audio-Sprachausgabe im Übungsmodus und beim Aufdecken der Wörter.
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Premium Toggle Switch */}
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={isTtsEnabled}
+                          onChange={toggleTts}
+                          className="sr-only peer"
+                        />
+                        <div className="w-12 h-7 bg-slate-250 dark:bg-slate-800 peer-checked:bg-brand-500 rounded-full transition-colors duration-250"></div>
+                        <div className="absolute left-1 top-1 w-5 h-5 bg-white dark:bg-slate-100 rounded-full shadow-md transition-transform duration-250 peer-checked:translate-x-5"></div>
+                      </div>
+                    </label>
                   </div>
 
                   {/* Mode Selector */}
@@ -1288,6 +1353,14 @@ export const Dashboard = () => {
               <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-850 p-6">
                 <div className="flex items-center justify-between mb-5">
                   <h3 className="text-lg font-bold text-darkteal-800 dark:text-white">Schüler Übersicht</h3>
+                  <button
+                    onClick={handleExportCSV}
+                    disabled={stationMode ? stationCount === 0 : studentsInLobby.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-450 rounded-xl text-xs font-bold cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Ergebnisse exportieren (CSV)</span>
+                  </button>
                 </div>
                 
                 {stationMode ? (
