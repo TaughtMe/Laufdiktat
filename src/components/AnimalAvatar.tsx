@@ -10,7 +10,6 @@ const FILENAME_OVERRIDES: Record<string, string> = {
   'tiefseefisch': 'anglerfisch',
   'phönix':       'phoenix',
   'sphynx-katze': 'sphynxkatze',
-  'spielzeugkatze': 'spielzeugkatze',
 };
 
 /**

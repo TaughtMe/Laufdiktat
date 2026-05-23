@@ -14,7 +14,7 @@ const ANIMALS = [
   { name: 'Orca', g: 'm' }, { name: 'Schildkröte', g: 'f' }, { name: 'Pfau', g: 'm' },
   { name: 'Hund', g: 'm' }, { name: 'Affe', g: 'm' }, { name: 'Gorilla', g: 'm' },
   { name: 'Fuchs', g: 'm' }, { name: 'Katze', g: 'f' }, { name: 'Sphynx-Katze', g: 'f' },
-  { name: 'Spielzeugkatze', g: 'f' }, { name: 'Lama', g: 'n' }, { name: 'Yak', g: 'n' },
+  { name: 'Lama', g: 'n' }, { name: 'Yak', g: 'n' },
   { name: 'Kobra', g: 'f' }, { name: 'Krokodil', g: 'n' }, { name: 'Zebra', g: 'n' },
   { name: 'Flamingo', g: 'm' }, { name: 'Oktopus', g: 'm' }, { name: 'Chamäleon', g: 'n' },
   { name: 'Hirsch', g: 'm' }, { name: 'Pelikan', g: 'm' }, { name: 'Erdmännchen', g: 'n' },
@@ -25,7 +25,7 @@ const ANIMALS = [
   { name: 'Taube', g: 'f' }, { name: 'Gepard', g: 'm' }, { name: 'Schmetterling', g: 'm' },
   { name: 'Libelle', g: 'f' }, { name: 'Pudel', g: 'm' }, { name: 'Bobtail', g: 'm' },
   { name: 'Mops', g: 'm' }, { name: 'Deutscher Schäferhund', g: 'm' }, { name: 'Collie', g: 'm' },
-  { name: 'Dackel', g: 'm' }, { name: 'Perserkatze', g: 'f' }, { name: 'Europäisch Kurzhaar', g: 'f' }
+  { name: 'Dackel', g: 'm' }, { name: 'Perserkatze', g: 'f' }
 ];
 const getRandomName = () => {
   const baseAdj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
