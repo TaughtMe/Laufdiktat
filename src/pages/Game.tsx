@@ -108,26 +108,30 @@ export const Game = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions]);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled]);
 
   useEffect(() => {
     if (bimanualLocked) {
       inputRef.current?.blur();
     } else if (gameState === 'WRITING') {
-      const timer = setTimeout(() => inputRef.current?.focus(), 10);
-      
-      // Ink Logik (30% Wahrscheinlichkeit)
-      if (battleOptions.ink && Math.random() < 0.3 && inkSplats.length === 0) {
-        setInkSplats([generateInkSplat()]);
-      }
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+        // Ink Logik (30% Wahrscheinlichkeit)
+        if (battleOptions.ink && Math.random() < 0.3 && inkSplats.length === 0) {
+          setInkSplats([generateInkSplat()]);
+        }
+      }, 10);
       
       return () => clearTimeout(timer);
     }
     
     if (gameState !== 'WRITING') {
-      setInkSplats([]);
+      // Defer this setState call to avoid synchronous update in effect
+      setTimeout(() => {
+        setInkSplats([]);
+      }, 0);
     }
-  }, [bimanualLocked, gameState, battleOptions.ink]);
+  }, [bimanualLocked, gameState, battleOptions.ink, inkSplats.length]);
 
   useEffect(() => {
     if (gameState === 'FINISHED' && roomCode) {

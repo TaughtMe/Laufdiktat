@@ -51,9 +51,10 @@ export const Dashboard = () => {
   const [manualChunks, setManualChunks] = useState<Array<{ id: string; start: number; end: number; text: string }>>([]);
   const highlightContainerRef = useRef<HTMLDivElement>(null);
 
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [results, setResults] = useState<StudentResult[]>([]);
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
+  const [hadTwoConnections, setHadTwoConnections] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
 
   // Station mode RAM state
@@ -77,15 +78,12 @@ export const Dashboard = () => {
   const isTtsEnabled = useGameStore((state) => state.isTtsEnabled);
   const toggleTts = useGameStore((state) => state.toggleTts);
 
-  useEffect(() => {
-    setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
-  }, []);
-
   const handleOpenLobby = async () => {
     if (words.length === 0) {
       alert("Bitte füge zuerst Wörter hinzu!");
       return;
     }
+    setHadTwoConnections(false);
     const channel = supabase.channel(`room-${roomCode}`);
     
     channel.on(
@@ -95,7 +93,11 @@ export const Dashboard = () => {
         if (payload.payload?.name) {
           setStudentsInLobby((prev) => {
             if (!prev.includes(payload.payload.name)) {
-              return [...prev, payload.payload.name];
+              const next = [...prev, payload.payload.name];
+              if (next.length >= 2) {
+                setHadTwoConnections(true);
+              }
+              return next;
             }
             return prev;
           });
@@ -189,6 +191,7 @@ export const Dashboard = () => {
     setWords([]);
     setResults([]);
     setStudentsInLobby([]);
+    setHadTwoConnections(false);
     setStationStates(new Map());
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
   };
@@ -367,16 +370,13 @@ export const Dashboard = () => {
     let leftChunkIdx = -1;
     let canMergeLeft = false;
     let searchIdx = clickedTokenIdx - 1;
-    let hasWordBetweenLeft = false;
     while (searchIdx >= 0) {
       const t = tokens[searchIdx];
       if (t.isWord) {
         const chunk = manualChunks.find((c) => t.start >= c.start && t.end <= c.end);
         if (chunk) {
           leftChunkIdx = manualChunks.indexOf(chunk);
-          canMergeLeft = !hasWordBetweenLeft;
-        } else {
-          hasWordBetweenLeft = true;
+          canMergeLeft = true;
         }
         break;
       }
@@ -387,16 +387,13 @@ export const Dashboard = () => {
     let rightChunkIdx = -1;
     let canMergeRight = false;
     searchIdx = clickedTokenIdx + 1;
-    let hasWordBetweenRight = false;
     while (searchIdx < tokens.length) {
       const t = tokens[searchIdx];
       if (t.isWord) {
         const chunk = manualChunks.find((c) => t.start >= c.start && t.end <= c.end);
         if (chunk) {
           rightChunkIdx = manualChunks.indexOf(chunk);
-          canMergeRight = !hasWordBetweenRight;
-        } else {
-          hasWordBetweenRight = true;
+          canMergeRight = true;
         }
         break;
       }
@@ -1180,10 +1177,52 @@ export const Dashboard = () => {
 
               {/* Middle part: Waiting Participants / Connection Status (flex-grow + scrollable) */}
               <div className="w-full bg-[#f4f6fa] dark:bg-slate-900/60 rounded-2xl p-6 border border-slate-100 dark:border-slate-850/80 flex-1 min-h-0 overflow-y-auto mb-6 flex flex-col justify-center">
-                {studentsInLobby.length < 2 ? (
+                {connectionWarning ? (
+                  /* Verbindung abgebrochen zum Server */
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 text-red-650 dark:text-red-450 flex items-center justify-center mb-4">
+                      <XCircle className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                      Server-Verbindung verloren
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-[280px] leading-relaxed">
+                      Die Echtzeit-Verbindung zum Server wurde unterbrochen. Bitte versuche es erneut.
+                    </p>
+                    
+                    <button
+                      type="button"
+                      onClick={handleOpenLobby}
+                      className="mt-5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      Verbindung wiederherstellen
+                    </button>
+                  </div>
+                ) : (hadTwoConnections && studentsInLobby.length < 2) ? (
+                  /* Verbindung abgebrochen Zustand */
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center mb-4">
+                      <XCircle className="w-6 h-6 animate-bounce" />
+                    </div>
+                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                      Verbindung abgebrochen
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-[280px] leading-relaxed">
+                      Ein zuvor verbundenes Gerät hat die Verbindung verloren.
+                    </p>
+                    
+                    <button
+                      type="button"
+                      onClick={handleOpenLobby}
+                      className="mt-5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      Verbindung wiederherstellen
+                    </button>
+                  </div>
+                ) : studentsInLobby.length < 2 ? (
                   /* Welle 1: "Warte auf Verbindung"-Panel */
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-8 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-650 dark:text-indigo-400 flex items-center justify-center mb-4 animate-pulse">
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 animate-pulse">
                       <Activity className="w-6 h-6" />
                     </div>
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
@@ -1193,7 +1232,7 @@ export const Dashboard = () => {
                       Es müssen mindestens zwei Geräte verbunden sein, um das Diktat zu starten.
                     </p>
                     
-                    <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-1.5 rounded-full">
+                    <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-1.5 rounded-full">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
@@ -1226,17 +1265,17 @@ export const Dashboard = () => {
                         {studentsInLobby.length}
                       </span>
                     </h3>
-                    <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto w-full animate-in zoom-in-95 duration-300">
+                    <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto w-full animate-in zoom-in-95 duration-300">
                       {studentsInLobby.map((name, i) => (
                         <div 
                           key={i}
-                          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 flex flex-col items-center text-center shadow-sm hover:shadow-md transition-all hover:scale-[1.02] duration-250 relative group"
+                          className="rounded-2xl border p-4 flex flex-col items-center text-center transition-all border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm"
                         >
-                          <AnimalAvatar studentName={name} className="w-16 h-16 mb-3" />
+                          <AnimalAvatar studentName={name} className="w-14 h-14 mb-2" />
                           <span className="text-sm font-bold text-darkteal-800 dark:text-white truncate w-full">
                             {name}
                           </span>
-                          <div className="flex items-center gap-1.5 mt-3 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-1.5 rounded-full border border-emerald-100/30">
+                          <div className="flex items-center gap-1.5 mt-2 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1 rounded-full border border-emerald-100/30 dark:border-emerald-800/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                             <span className="text-[10px] text-emerald-700 dark:text-emerald-450 font-bold uppercase tracking-wider">
                               Online

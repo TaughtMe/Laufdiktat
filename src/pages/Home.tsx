@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Dices } from 'lucide-react';
 import { AnimalAvatar } from '../components/AnimalAvatar';
@@ -27,34 +27,28 @@ const ANIMALS = [
   { name: 'Mops', g: 'm' }, { name: 'Deutscher Schäferhund', g: 'm' }, { name: 'Collie', g: 'm' },
   { name: 'Dackel', g: 'm' }, { name: 'Perserkatze', g: 'f' }, { name: 'Europäisch Kurzhaar', g: 'f' }
 ];
+const getRandomName = () => {
+  const baseAdj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const animalObj = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+  
+  let ending = 'es';
+  if (animalObj.g === 'm') {
+    ending = 'er';
+  } else if (animalObj.g === 'f') {
+    ending = 'e';
+  }
+  return `${baseAdj}${ending} ${animalObj.name}`;
+};
 
 export const Home = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [roomCode, setRoomCode] = useState('');
-  const [studentName, setStudentName] = useState('');
+  const [roomCode, setRoomCode] = useState(() => searchParams.get('room') || '');
+  const [studentName, setStudentName] = useState(getRandomName);
 
   const generateName = () => {
-    const baseAdj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-    const animalObj = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-    
-    let ending = 'es';
-    if (animalObj.g === 'm') {
-      ending = 'er';
-    } else if (animalObj.g === 'f') {
-      ending = 'e';
-    }
-    
-    setStudentName(`${baseAdj}${ending} ${animalObj.name}`);
+    setStudentName(getRandomName());
   };
-
-  useEffect(() => {
-    generateName();
-    const roomParam = searchParams.get('room');
-    if (roomParam) {
-      setRoomCode(roomParam);
-    }
-  }, [searchParams]);
 
   const handleStartDictation = () => {
     if (roomCode.trim().length > 0 && studentName.trim().length > 0) {
