@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'laufdiktat_icon.svg'],
       manifest: {
         name: 'Laufdiktat',
         short_name: 'Laufdiktat',
@@ -19,9 +19,16 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'favicon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml'
+            src: 'laufdiktat_icon.svg',
+            sizes: '1024x1024',
+            type: 'image/svg+xml',
+            purpose: 'any'
+          },
+          {
+            src: 'laufdiktat_icon.svg',
+            sizes: '1024x1024',
+            type: 'image/svg+xml',
+            purpose: 'maskable'
           }
         ]
       },

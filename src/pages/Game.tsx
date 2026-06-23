@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import { StationGame } from './StationGame';
+import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 
 interface InkSplat {
   id: number;
@@ -101,6 +102,9 @@ export const Game = () => {
   // Freies Üben: Fehlversuche beim aktuellen Wort + Abtipp-Phase.
   const [wrongCount, setWrongCount] = useState(0);
   const [copyMode, setCopyMode] = useState(false);
+  // Verlassen-Bestätigung & "Sitzung beendet"-Hinweis.
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
   // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
   const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
 
@@ -167,7 +171,7 @@ export const Game = () => {
       'broadcast',
       { event: 'session-ended' },
       () => {
-        navigate('/');
+        setSessionEnded(true);
       }
     ).on(
       'broadcast',
@@ -285,6 +289,9 @@ export const Game = () => {
 
   // Station mode: delegate to separate component (AFTER all hooks)
   if (stationMode) return <StationGame />;
+
+  // Lehrkraft hat die Sitzung beendet → Hinweis mit Zurück-Button.
+  if (sessionEnded) return <SessionEndedOverlay onBack={() => navigate('/')} />;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
@@ -499,8 +506,8 @@ export const Game = () => {
       )}
       <header className="py-4 px-6 flex justify-between items-center z-10">
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigate('/')}
+          <button
+            onClick={() => { if (gameState === 'FINISHED') { navigate('/'); } else { setShowExitConfirm(true); } }}
             className="p-2 -ml-2 rounded-full hover:bg-white/10 text-slate-400 transition-colors cursor-pointer"
             title="Spiel abbrechen und zur Startseite"
           >
@@ -823,6 +830,13 @@ export const Game = () => {
           </div>
         )}
       </main>
+
+      {showExitConfirm && (
+        <ExitConfirm
+          onConfirm={() => navigate('/')}
+          onCancel={() => setShowExitConfirm(false)}
+        />
+      )}
     </div>
   );
 };

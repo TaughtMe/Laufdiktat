@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
+import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -22,6 +23,8 @@ export const StationGame = () => {
   // Bleibt erhalten, solange das Gerät montiert ist – auch nach dem Zurückkehren
   // zur Übersicht. Steuert Spickenzähler (erstes Ansehen frei) und Weiter-Sperre.
   const [seenKeys, setSeenKeys] = useState<Set<string>>(new Set());
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -43,7 +46,7 @@ export const StationGame = () => {
         setStationCount(newStationCount);
       }
     }).on('broadcast', { event: 'session-ended' }, () => {
-      navigate('/');
+      setSessionEnded(true);
     });
     channelRef.current.subscribe();
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
@@ -120,6 +123,9 @@ export const StationGame = () => {
 
   const currentWord = words[currentIndex]?.targetWord || '';
 
+  // Lehrkraft hat die Sitzung beendet → Hinweis mit Zurück-Button.
+  if (sessionEnded) return <SessionEndedOverlay onBack={() => navigate('/')} />;
+
   if (!roomCode || words.length === 0) {
     return (
       <div className="flex flex-col min-h-[100dvh] bg-brand-bg dark:bg-slate-950 items-center justify-center p-4">
@@ -142,7 +148,7 @@ export const StationGame = () => {
       <div className="flex flex-col min-h-[100dvh] bg-brand-bg dark:bg-slate-950 select-none">
         <header className="py-4 px-6 border-b border-slate-150/60 dark:border-slate-900 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm flex justify-between items-center shadow-[0_2px_15px_rgba(0,0,0,0.01)]">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => setShowExitConfirm(true)}
             className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 transition-colors cursor-pointer"
             title="Zurück zur Startseite"
           >
@@ -153,6 +159,9 @@ export const StationGame = () => {
           <h1 className="text-lg font-bold text-darkteal-800 dark:text-white">Wähle deine Nummer</h1>
           <div className="w-9" />
         </header>
+        {showExitConfirm && (
+          <ExitConfirm onConfirm={() => navigate('/')} onCancel={() => setShowExitConfirm(false)} />
+        )}
         <main className="flex-1 p-6 sm:p-8 flex flex-col items-center justify-center max-w-lg mx-auto w-full">
           <p className="text-xs font-bold text-slate-450 dark:text-slate-400 uppercase tracking-wider mb-6 text-center">
             Wähle deine zugewiesene Nummer, um an dieser Station zu starten.
