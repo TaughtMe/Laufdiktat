@@ -30,6 +30,46 @@ const generateInkSplat = (): InkSplat => ({
   rotation: Math.random() * 360,
 });
 
+// Stabiler Hash + deterministische "Zufalls"-Reihenfolge, damit ein Hinweis
+// bei jedem Render gleich aussieht (kein Flackern).
+const hashStr = (s: string): number => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+};
+const deterministicOrder = (n: number, seed: string): number[] =>
+  Array.from({ length: n }, (_, i) => i).sort(
+    (a, b) => hashStr(`${seed}:${a}`) - hashStr(`${seed}:${b}`)
+  );
+
+/**
+ * Baut den Hinweis für Freies Üben.
+ * fraction (0..1) = wie viel schon aufgedeckt ist.
+ * Einzelwort  -> einzelne Buchstaben werden nach und nach gezeigt, Rest "_".
+ * Satz (Leerz.) -> ganze Wörter werden nach und nach gezeigt, Rest maskiert.
+ */
+const buildHint = (target: string, fraction: number): string => {
+  const isSentence = target.trim().includes(' ');
+  if (isSentence) {
+    const tokens = target.split(/(\s+)/); // Trenner behalten
+    const wordPositions = tokens
+      .map((t, i) => (t.trim() !== '' ? i : -1))
+      .filter((i) => i >= 0);
+    const revealCount = Math.ceil(wordPositions.length * fraction);
+    const order = deterministicOrder(wordPositions.length, target);
+    const revealed = new Set(order.slice(0, revealCount).map((k) => wordPositions[k]));
+    return tokens
+      .map((t, i) => (t.trim() === '' ? t : revealed.has(i) ? t : t.replace(/\S/g, '_')))
+      .join('');
+  }
+  const chars = [...target];
+  const letterIdx = chars.map((c, i) => ({ c, i })).filter((x) => x.c.trim() !== '').map((x) => x.i);
+  const revealCount = Math.ceil(letterIdx.length * fraction);
+  const order = deterministicOrder(letterIdx.length, target);
+  const revealed = new Set(order.slice(0, revealCount).map((k) => letterIdx[k]));
+  return chars.map((c, i) => (c.trim() === '' ? c : revealed.has(i) ? c : '_')).join(' ');
+};
+
 export const Game = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,14 +89,18 @@ export const Game = () => {
   const setStationCount = useGameStore((state) => state.setStationCount);
   const isTtsEnabled = useGameStore((state) => state.isTtsEnabled);
   const setTtsEnabled = useGameStore((state) => state.setTtsEnabled);
-  
+  const uebungMaxAttempts = useGameStore((state) => state.uebungMaxAttempts);
+  const setUebungMaxAttempts = useGameStore((state) => state.setUebungMaxAttempts);
+
   const [gameState, setGameState] = useState<GameState>('IDLE');
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [inputValue, setInputValue] = useState('');
   const [metrics, setMetrics] = useState<GameMetrics>({ peeks: 0, attempts: 0 });
   const [errorShake, setErrorShake] = useState(false);
-  const [showScaffolding, setShowScaffolding] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
+  // Freies Üben: Fehlversuche beim aktuellen Wort + Abtipp-Phase.
+  const [wrongCount, setWrongCount] = useState(0);
+  const [copyMode, setCopyMode] = useState(false);
   // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
   const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
 
@@ -72,6 +116,7 @@ export const Game = () => {
   const [battleToast, setBattleToast] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const karaokeRef = useRef<HTMLDivElement>(null);
   // Abonnierter Channel – wird für das Senden des Ergebnisses wiederverwendet.
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   // Refs für Werte, die in Channel-Callbacks aktuell sein müssen.
@@ -109,13 +154,14 @@ export const Game = () => {
       'broadcast',
       { event: 'session-start' },
       (payload) => {
-        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled } = payload.payload;
+        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts } = payload.payload;
         setWords(newWords);
         setGameMode(newMode);
         setBattleOptions(newOptions);
         if (newStationMode !== undefined) setStationMode(newStationMode);
         if (newStationCount !== undefined) setStationCount(newStationCount);
         if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
+        if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
       }
     ).on(
       'broadcast',
@@ -200,7 +246,7 @@ export const Game = () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled, showBattleToast]);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled, setUebungMaxAttempts, showBattleToast]);
 
   useEffect(() => {
     if (bimanualLocked) {
@@ -229,6 +275,13 @@ export const Game = () => {
       });
     }
   }, [gameState, roomCode, studentName, efficiencyIndex, metrics.peeks, metrics.attempts]);
+
+  // Abtipp-Phase: aktiven Buchstaben mittig in den Blick scrollen (Karaoke).
+  useEffect(() => {
+    if (!copyMode) return;
+    const el = karaokeRef.current?.querySelector('[data-active="true"]');
+    el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [inputValue, copyMode]);
 
   // Station mode: delegate to separate component (AFTER all hooks)
   if (stationMode) return <StationGame />;
@@ -343,27 +396,50 @@ export const Game = () => {
         setCurrentWordIndex((prev) => prev + 1);
         setInputValue('');
         setGameState('IDLE');
-        // Nächstes Wort: erstes Ansehen ist wieder kostenlos.
+        // Nächstes Wort: erstes Ansehen wieder kostenlos, Hilfe zurücksetzen.
         setRevealedCurrentWord(false);
+        setWrongCount(0);
+        setCopyMode(false);
       } else {
         setGameState('FINISHED');
       }
     } else {
-      setInputValue('');
       setErrorShake(true);
       setTimeout(() => setErrorShake(false), 500);
-      
+
       if (gameMode === 'UEBUNG') {
-        setShowScaffolding(true);
-        setTimeout(() => setShowScaffolding(false), 1500);
+        if (!copyMode) {
+          const nextWrong = wrongCount + 1;
+          setWrongCount(nextWrong);
+          setInputValue('');
+          // Ab der eingestellten Anzahl Fehlversuche: ganzes Wort zum Abtippen.
+          if (nextWrong >= uebungMaxAttempts) setCopyMode(true);
+        }
+        // In der Abtipp-Phase die Eingabe NICHT löschen – Tippfehler korrigierbar.
+      } else {
+        setInputValue('');
       }
-      
+
       inputRef.current?.focus();
     }
   };
 
   // Flimmern nur, wenn gerade ein Flimmer-Angriff aktiv ist und das Wort gezeigt wird.
   const isFlickerActive = activeAttack?.type === 'flicker' && bimanualLocked;
+
+  // --- Freies Üben: Hinweis-/Abtipp-Anzeige ---
+  const target = currentWord.targetWord;
+  const showHint = gameMode === 'UEBUNG' && !copyMode && wrongCount > 0;
+  const hintText = showHint ? buildHint(target, wrongCount / uebungMaxAttempts) : '';
+  // Länge des korrekt getippten Anfangs (für grünes Karaoke-Feedback).
+  let correctPrefixLen = 0;
+  while (
+    correctPrefixLen < inputValue.length &&
+    correctPrefixLen < target.length &&
+    inputValue[correctPrefixLen] === target[correctPrefixLen]
+  ) {
+    correctPrefixLen++;
+  }
 
   // Welche Angriffsarten der Lehrer freigeschaltet hat (Fallback: beide).
   const availableAttacks: AttackType[] = [];
@@ -613,10 +689,44 @@ export const Game = () => {
           )}
 
           {!bimanualLocked && gameState === 'WRITING' && (
-            <form 
-              onSubmit={handleSubmit} 
+            <form
+              onSubmit={handleSubmit}
               className={`w-full transition-transform relative ${errorShake ? 'animate-shake' : ''} px-4`}
             >
+              {/* Freies Üben: Hinweis (Striche → Buchstaben) bzw. Abtipp-Vorlage */}
+              {gameMode === 'UEBUNG' && (copyMode || showHint) && (
+                <div className="mb-5 text-center">
+                  {copyMode ? (
+                    <>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-[#5efcc2] mb-2">
+                        Tippe das Wort ab
+                      </p>
+                      <div ref={karaokeRef} className="max-w-full overflow-x-auto whitespace-nowrap py-1">
+                        {[...target].map((ch, i) => (
+                          <span
+                            key={i}
+                            data-active={i === correctPrefixLen ? 'true' : undefined}
+                            className={`text-3xl sm:text-4xl font-black transition-colors duration-150 ${
+                              i < correctPrefixLen ? 'text-emerald-400/40' : 'text-white'
+                            }`}
+                          >
+                            {ch === ' ' ? ' ' : ch}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                        Tipp ({wrongCount}/{uebungMaxAttempts})
+                      </p>
+                      <p className="text-3xl sm:text-4xl font-black text-slate-300 tracking-[0.15em] break-words">
+                        {hintText}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="relative">
                 <input
                   ref={inputRef}
@@ -624,11 +734,11 @@ export const Game = () => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className={`w-full text-center text-4xl font-bold py-6 px-4 bg-white/10 backdrop-blur-sm border-4 ${
-                    errorShake 
-                      ? 'border-red-500 text-red-400' 
+                    errorShake
+                      ? 'border-red-500 text-red-400'
                       : 'border-brand-500 text-white focus:ring-brand-500/20'
                   } rounded-[1.8rem] shadow-[0_10px_35px_rgba(0,0,0,0.1)] focus:outline-none focus:ring-4 transition-all relative z-10 font-sans tracking-wide placeholder:text-slate-500`}
-                  placeholder="Wort eingeben..."
+                  placeholder={copyMode ? 'Hier abtippen...' : 'Wort eingeben...'}
                   autoComplete="off"
                   spellCheck="false"
                   autoCorrect="off"
@@ -649,15 +759,6 @@ export const Game = () => {
                     }}
                   />
                 ))}
-                
-                {/* Visuelles Scaffolding (UEBUNG) */}
-                {showScaffolding && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                    <span className="text-4xl font-bold text-slate-800 dark:text-white opacity-30 select-none">
-                      {currentWord.targetWord}
-                    </span>
-                  </div>
-                )}
               </div>
 
               <p className="text-center mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider pointer-events-none">

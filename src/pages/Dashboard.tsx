@@ -84,6 +84,8 @@ export const Dashboard = () => {
   const setStationCount = useGameStore((state) => state.setStationCount);
   const isTtsEnabled = useGameStore((state) => state.isTtsEnabled);
   const toggleTts = useGameStore((state) => state.toggleTts);
+  const uebungMaxAttempts = useGameStore((state) => state.uebungMaxAttempts);
+  const setUebungMaxAttempts = useGameStore((state) => state.setUebungMaxAttempts);
 
   const handleOpenLobby = async () => {
     if (words.length === 0) {
@@ -128,7 +130,8 @@ export const Dashboard = () => {
                 battleOptions,
                 stationMode,
                 stationCount,
-                isTtsEnabled
+                isTtsEnabled,
+                uebungMaxAttempts
               }
             });
           }
@@ -209,7 +212,8 @@ export const Dashboard = () => {
         battleOptions,
         stationMode,
         stationCount,
-        isTtsEnabled
+        isTtsEnabled,
+        uebungMaxAttempts
       }
     });
     setCurrentStep('LIVE');
@@ -1139,17 +1143,40 @@ export const Dashboard = () => {
                         ))}
                       </div>
                     </div>
+                  ) : (!stationMode && gameMode === 'UEBUNG') ? (
+                    <div className="bg-brand-50/40 dark:bg-brand-950/10 border border-brand-200/50 dark:border-brand-900/30 rounded-2xl p-5 flex flex-col h-full animate-in fade-in duration-300 shadow-sm">
+                      <div className="flex items-center gap-2.5 mb-4 text-brand-700 dark:text-brand-400">
+                        <Sparkles className="w-5 h-5 text-brand-600" />
+                        <h3 className="font-bold text-sm uppercase tracking-wide">Übungs-Optionen</h3>
+                      </div>
+                      <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
+                        Fehlversuche bis zur Lösung
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={uebungMaxAttempts}
+                          onChange={(e) => setUebungMaxAttempts(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
+                          className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
+                        />
+                        <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Nach so vielen falschen Eingaben erscheint das ganze Wort zum Abtippen. Davor gibt es nach und nach Buchstaben-Hinweise.
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[12rem]">
                       <div className="w-12 h-12 rounded-full bg-slate-200/50 dark:bg-slate-800/80 flex items-center justify-center mb-3">
                         <HelpCircle className="w-6 h-6 text-slate-400 dark:text-slate-500" />
                       </div>
                       <p className="text-xs font-semibold text-slate-650 dark:text-slate-300 max-w-[200px] leading-relaxed">
-                        Wählen Sie den Battle-Modus aus, um zusätzliche Optionen anzuzeigen.
+                        Wählen Sie den Battle- oder Übungs-Modus, um zusätzliche Optionen anzuzeigen.
                       </p>
                       {stationMode && (
                         <p className="text-[10px] text-slate-450 dark:text-slate-500 mt-2 max-w-[200px]">
-                          Im Stations-Modus sind Multiplayer-Optionen deaktiviert.
+                          Im Stations-Modus sind diese Optionen deaktiviert.
                         </p>
                       )}
                     </div>

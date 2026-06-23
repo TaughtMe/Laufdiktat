@@ -31,5 +31,6 @@ export interface SessionStartPayload {
   battleOptions: BattleOptions;
   stationMode: boolean;
   stationCount: number;
+  uebungMaxAttempts: number;
 }
 

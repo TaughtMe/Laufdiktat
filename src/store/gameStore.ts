@@ -10,7 +10,8 @@ interface GameStore {
   stationMode: boolean;
   stationCount: number;
   isTtsEnabled: boolean;
-  
+  uebungMaxAttempts: number;
+
   // Actions
   setWords: (words: WordItem[]) => void;
   setGameMode: (mode: GameMode) => void;
@@ -20,6 +21,7 @@ interface GameStore {
   setStationCount: (count: number) => void;
   toggleTts: () => void;
   setTtsEnabled: (enabled: boolean) => void;
+  setUebungMaxAttempts: (count: number) => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -34,6 +36,7 @@ export const useGameStore = create<GameStore>((set) => ({
   stationMode: false,
   stationCount: 24,
   isTtsEnabled: true,
+  uebungMaxAttempts: 3,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -49,4 +52,5 @@ export const useGameStore = create<GameStore>((set) => ({
   setStationCount: (stationCount) => set({ stationCount }),
   toggleTts: () => set((state) => ({ isTtsEnabled: !state.isTtsEnabled })),
   setTtsEnabled: (isTtsEnabled) => set({ isTtsEnabled }),
+  setUebungMaxAttempts: (uebungMaxAttempts) => set({ uebungMaxAttempts }),
 }));
