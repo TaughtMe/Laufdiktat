@@ -42,12 +42,16 @@ export const Game = () => {
   const [errorShake, setErrorShake] = useState(false);
   const [showScaffolding, setShowScaffolding] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
+  // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
+  const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
 
   // Lokale Interferenz-States
   const [inkSplats, setInkSplats] = useState<InkSplat[]>([]);
   const [forceFlicker, setForceFlicker] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  // Abonnierter Channel – wird für das Senden des Ergebnisses wiederverwendet.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
@@ -71,7 +75,8 @@ export const Game = () => {
     
     const channelName = `room-${roomCode}`;
     const channel = supabase.channel(channelName);
-    
+    channelRef.current = channel;
+
     channel.on(
       'broadcast',
       { event: 'session-start' },
@@ -106,6 +111,7 @@ export const Game = () => {
     });
 
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled]);
@@ -134,9 +140,10 @@ export const Game = () => {
   }, [bimanualLocked, gameState, battleOptions.ink, inkSplats.length]);
 
   useEffect(() => {
-    if (gameState === 'FINISHED' && roomCode) {
-      const channel = supabase.channel(`room-${roomCode}`);
-      channel.send({
+    if (gameState === 'FINISHED' && roomCode && channelRef.current) {
+      // Auf dem bereits abonnierten Channel senden, sonst kommt das Ergebnis
+      // nicht im Lehrer-Dashboard an.
+      channelRef.current.send({
         type: 'broadcast',
         event: 'student-finished',
         payload: {
@@ -157,7 +164,12 @@ export const Game = () => {
     
     if (e.touches.length >= 2) {
       if (!bimanualLocked) {
-        setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+        // Erstes Ansehen des aktuellen Wortes zählt nicht als Spicker.
+        if (revealedCurrentWord) {
+          setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+        } else {
+          setRevealedCurrentWord(true);
+        }
         setBimanualLocked(true);
         setGameState('REVEALED');
       }
@@ -186,6 +198,8 @@ export const Game = () => {
         setCurrentWordIndex((prev) => prev + 1);
         setInputValue('');
         setGameState('IDLE');
+        // Nächstes Wort: erstes Ansehen ist wieder kostenlos.
+        setRevealedCurrentWord(false);
       } else {
         setGameState('FINISHED');
       }

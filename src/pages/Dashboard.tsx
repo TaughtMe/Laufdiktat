@@ -57,6 +57,11 @@ export const Dashboard = () => {
   const [hadTwoConnections, setHadTwoConnections] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
 
+  // Der abonnierte Realtime-Channel. Broadcasts (send) funktionieren nur auf
+  // einem bereits abonnierten Channel, daher halten wir genau diese Instanz fest
+  // und verwenden sie für alle Sende-Aktionen wieder.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   // Station mode RAM state
   const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
   const stationStatesRef = useRef<Map<number, StationStudentState>>(new Map());
@@ -84,8 +89,17 @@ export const Dashboard = () => {
       return;
     }
     setHadTwoConnections(false);
+
+    // Falls bereits ein Channel offen ist (z. B. erneuter Klick auf "Lobby"),
+    // diesen zuerst sauber entfernen, um doppelte Abos zu vermeiden.
+    if (channelRef.current) {
+      await supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     const channel = supabase.channel(`room-${roomCode}`);
-    
+    channelRef.current = channel;
+
     channel.on(
       'broadcast',
       { event: 'student-joined' },
@@ -166,9 +180,13 @@ export const Dashboard = () => {
     });
   };
 
-  const handleStartSession = () => {
-    const channel = supabase.channel(`room-${roomCode}`);
-    channel.send({
+  const handleStartSession = async () => {
+    // Auf dem bereits abonnierten Lobby-Channel senden – sonst kommt die
+    // Nachricht bei den Schülern nicht an.
+    if (!channelRef.current) {
+      await handleOpenLobby();
+    }
+    await channelRef.current?.send({
       type: 'broadcast',
       event: 'session-start',
       payload: {
@@ -184,9 +202,11 @@ export const Dashboard = () => {
   };
 
   const handleEndSession = async () => {
-    const channel = supabase.channel(`room-${roomCode}`);
-    await channel.send({ type: 'broadcast', event: 'session-ended' });
-    await supabase.removeChannel(channel);
+    if (channelRef.current) {
+      await channelRef.current.send({ type: 'broadcast', event: 'session-ended' });
+      await supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
     setCurrentStep('IMPORT');
     setWords([]);
     setResults([]);
