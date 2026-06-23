@@ -944,96 +944,13 @@ export const Dashboard = () => {
                 
                 {/* Left Column (Col span 7) */}
                 <div className="md:col-span-7 flex flex-col gap-6 md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2">
-                  {/* Station Mode Toggle Card */}
-                  <div className="p-5 rounded-2xl border-2 border-dashed border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/10 transition-all duration-300 shadow-sm">
-                    <label className="flex items-center justify-between cursor-pointer">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-2xl font-bold">
-                          📋
-                        </div>
-                        <div>
-                          <span className="font-bold text-darkteal-800 dark:text-white block text-base">
-                            Stations-Modus aktiv
-                          </span>
-                          <span className="text-xs text-slate-500 dark:text-slate-455 mt-0.5 block leading-relaxed max-w-[280px]">
-                            Papier-Diktat — Schüler schreiben auf Papier, Tablet/iPad zeigt nur Wörter.
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {/* Premium Green Toggle Switch */}
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={stationMode}
-                          onChange={(e) => setStationMode(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-12 h-7 bg-slate-250 dark:bg-slate-800 peer-checked:bg-[#5efcc2] rounded-full transition-colors duration-250"></div>
-                        <div className="absolute left-1 top-1 w-5 h-5 bg-white dark:bg-slate-100 rounded-full shadow-md transition-transform duration-250 peer-checked:translate-x-5 peer-checked:bg-[#004730]"></div>
-                      </div>
-                    </label>
-                    
-                    {stationMode && (
-                      <div className="mt-4 pt-4 border-t border-emerald-200/50 dark:border-emerald-900/30 animate-in fade-in duration-300">
-                        <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-450 mb-2 uppercase tracking-wider">
-                          Anzahl der Schüler / Stationen
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={stationCount}
-                            onChange={(e) => setStationCount(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
-                          />
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
-                            (Erstellt Nummernfelder für die Schüler)
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* TTS (Vorlesen) Toggle Card */}
-                  <div className="p-5 rounded-2xl border border-slate-150 dark:border-slate-850 bg-white dark:bg-slate-900 transition-all duration-300 shadow-sm">
-                    <label className="flex items-center justify-between cursor-pointer">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 flex items-center justify-center text-2xl font-bold">
-                          🔊
-                        </div>
-                        <div>
-                          <span className="font-bold text-darkteal-800 dark:text-white block text-base">
-                            Sprachausgabe (Vorlesen)
-                          </span>
-                          <span className="text-xs text-slate-500 dark:text-slate-450 mt-0.5 block leading-relaxed max-w-[280px]">
-                            Aktiviert die Audio-Sprachausgabe im Übungsmodus und beim Aufdecken der Wörter.
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {/* Premium Toggle Switch */}
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={isTtsEnabled}
-                          onChange={toggleTts}
-                          className="sr-only peer"
-                        />
-                        <div className="w-12 h-7 bg-slate-250 dark:bg-slate-800 peer-checked:bg-brand-500 rounded-full transition-colors duration-250"></div>
-                        <div className="absolute left-1 top-1 w-5 h-5 bg-white dark:bg-slate-100 rounded-full shadow-md transition-transform duration-250 peer-checked:translate-x-5"></div>
-                      </div>
-                    </label>
-                  </div>
-
                   {/* Mode Selector */}
                   <div className="flex flex-col gap-3">
                     <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
                       Wählen Sie den Modus
                     </span>
                     
-                    <div className={`space-y-3 transition-all duration-300 ${stationMode ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div className="space-y-3">
                       {([
                         {
                           id: 'LAUFDIKTAT',
@@ -1052,14 +969,25 @@ export const Dashboard = () => {
                           name: 'Battle-Modus (Multiplayer)',
                           desc: 'Spiele im Team oder gegeneinander! Aktiviert Störangriffe wie Tintenflecken und Bildschirmflimmern.',
                           icon: '⚔️'
+                        },
+                        {
+                          id: 'STATION',
+                          name: 'Stations-Modus (Papier)',
+                          desc: 'Schüler schreiben auf Papier; das Tablet/iPad zeigt nur die Wörter.',
+                          icon: '📋'
                         }
-                      ] as Array<{ id: GameMode; name: string; desc: string; icon: string }>).map((mode) => {
-                        const isSelected = gameMode === mode.id && !stationMode;
+                      ] as Array<{ id: string; name: string; desc: string; icon: string }>).map((mode) => {
+                        const isSelected = (stationMode ? 'STATION' : gameMode) === mode.id;
                         return (
                           <div
                             key={mode.id}
                             onClick={() => {
-                              if (!stationMode) setGameMode(mode.id);
+                              if (mode.id === 'STATION') {
+                                setStationMode(true);
+                              } else {
+                                setStationMode(false);
+                                setGameMode(mode.id as GameMode);
+                              }
                             }}
                             className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 ${
                               isSelected
@@ -1101,86 +1029,131 @@ export const Dashboard = () => {
                     Modus-Optionen
                   </span>
                   
-                  {!stationMode && gameMode === 'BATTLE' ? (
-                    <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-2xl p-5 flex flex-col h-full animate-in fade-in duration-300 shadow-sm">
-                      <div className="flex items-center gap-2.5 mb-4 text-amber-800 dark:text-amber-450">
-                        <Sparkles className="w-5 h-5 text-amber-600" />
-                        <h3 className="font-bold text-sm uppercase tracking-wide">Battle-Optionen</h3>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        {[
-                          {
-                            key: 'ink',
-                            label: 'Tintenfleck-Angriff',
-                            desc: 'Sichtverschleierung durch zufällige Tintenflecke auf dem Eingabebildschirm.',
-                          },
-                          {
-                            key: 'flicker',
-                            label: 'Flimmern-Angriff',
-                            desc: 'Ablenkung durch periodisches Bildschirmflimmern während des Einprägens.',
-                          }
-                        ].map((opt) => (
-                          <label key={opt.key} className="flex items-start gap-3 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={battleOptions[opt.key as keyof typeof battleOptions] || false}
-                              onChange={(e) => setBattleOptions({ [opt.key]: e.target.checked })}
-                              className="sr-only peer"
-                            />
-                            <div className="mt-1 w-5 h-5 rounded-lg border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center transition-all peer-checked:border-brand-500 peer-checked:bg-brand-500 text-white">
-                              <Check className="w-3.5 h-3.5 opacity-0 peer-checked:opacity-100 stroke-[3]" />
-                            </div>
-                            <div>
-                              <span className="font-bold text-sm text-darkteal-800 dark:text-white block group-hover:text-brand-500 transition-colors">
-                                {opt.label}
-                              </span>
-                              <span className="text-[11px] text-slate-500 dark:text-slate-450 block mt-0.5 leading-relaxed">
-                                {opt.desc}
-                              </span>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (!stationMode && gameMode === 'UEBUNG') ? (
-                    <div className="bg-brand-50/40 dark:bg-brand-950/10 border border-brand-200/50 dark:border-brand-900/30 rounded-2xl p-5 flex flex-col h-full animate-in fade-in duration-300 shadow-sm">
-                      <div className="flex items-center gap-2.5 mb-4 text-brand-700 dark:text-brand-400">
-                        <Sparkles className="w-5 h-5 text-brand-600" />
-                        <h3 className="font-bold text-sm uppercase tracking-wide">Übungs-Optionen</h3>
-                      </div>
-                      <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
-                        Fehlversuche bis zur Lösung
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={uebungMaxAttempts}
-                          onChange={(e) => setUebungMaxAttempts(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
-                          className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
-                        />
-                        <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                          Nach so vielen falschen Eingaben erscheint das ganze Wort zum Abtippen. Davor gibt es nach und nach Buchstaben-Hinweise.
+                  {(() => {
+                    const sel: string = stationMode ? 'STATION' : gameMode;
+
+                    const tonToggle = (
+                      <label className="flex items-center justify-between cursor-pointer p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
+                        <span className="flex items-center gap-2.5 text-sm font-bold text-darkteal-800 dark:text-white">
+                          <span className="text-lg">🔊</span> Vorlesen (Ton)
                         </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[12rem]">
-                      <div className="w-12 h-12 rounded-full bg-slate-200/50 dark:bg-slate-800/80 flex items-center justify-center mb-3">
-                        <HelpCircle className="w-6 h-6 text-slate-400 dark:text-slate-500" />
-                      </div>
-                      <p className="text-xs font-semibold text-slate-650 dark:text-slate-300 max-w-[200px] leading-relaxed">
-                        Wählen Sie den Battle- oder Übungs-Modus, um zusätzliche Optionen anzuzeigen.
-                      </p>
-                      {stationMode && (
-                        <p className="text-[10px] text-slate-450 dark:text-slate-500 mt-2 max-w-[200px]">
-                          Im Stations-Modus sind diese Optionen deaktiviert.
+                        <div className="relative">
+                          <input type="checkbox" checked={isTtsEnabled} onChange={toggleTts} className="sr-only peer" />
+                          <div className="w-12 h-7 bg-slate-250 dark:bg-slate-800 peer-checked:bg-brand-500 rounded-full transition-colors duration-250"></div>
+                          <div className="absolute left-1 top-1 w-5 h-5 bg-white dark:bg-slate-100 rounded-full shadow-md transition-transform duration-250 peer-checked:translate-x-5"></div>
+                        </div>
+                      </label>
+                    );
+
+                    if (sel === 'BATTLE') {
+                      return (
+                        <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-2xl p-5 flex flex-col h-full animate-in fade-in duration-300 shadow-sm">
+                          <div className="flex items-center gap-2.5 mb-4 text-amber-800 dark:text-amber-450">
+                            <Sparkles className="w-5 h-5 text-amber-600" />
+                            <h3 className="font-bold text-sm uppercase tracking-wide">Battle-Optionen</h3>
+                          </div>
+                          <div className="space-y-4">
+                            {[
+                              { key: 'ink', label: 'Tintenfleck-Angriff', desc: 'Sichtverschleierung durch zufällige Tintenflecke auf dem Eingabebildschirm.' },
+                              { key: 'flicker', label: 'Flimmern-Angriff', desc: 'Ablenkung durch periodisches Bildschirmflimmern während des Einprägens.' },
+                            ].map((opt) => (
+                              <label key={opt.key} className="flex items-start gap-3 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={battleOptions[opt.key as keyof typeof battleOptions] || false}
+                                  onChange={(e) => setBattleOptions({ [opt.key]: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="mt-1 w-5 h-5 rounded-lg border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center transition-all peer-checked:border-brand-500 peer-checked:bg-brand-500 text-white">
+                                  <Check className="w-3.5 h-3.5 opacity-0 peer-checked:opacity-100 stroke-[3]" />
+                                </div>
+                                <div>
+                                  <span className="font-bold text-sm text-darkteal-800 dark:text-white block group-hover:text-brand-500 transition-colors">
+                                    {opt.label}
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-450 block mt-0.5 leading-relaxed">
+                                    {opt.desc}
+                                  </span>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (sel === 'UEBUNG') {
+                      return (
+                        <div className="bg-brand-50/40 dark:bg-brand-950/10 border border-brand-200/50 dark:border-brand-900/30 rounded-2xl p-5 flex flex-col gap-4 h-full animate-in fade-in duration-300 shadow-sm">
+                          <div className="flex items-center gap-2.5 text-brand-700 dark:text-brand-400">
+                            <Sparkles className="w-5 h-5 text-brand-600" />
+                            <h3 className="font-bold text-sm uppercase tracking-wide">Übungs-Optionen</h3>
+                          </div>
+                          {tonToggle}
+                          <div>
+                            <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
+                              Fehlversuche bis zur Lösung
+                            </label>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={uebungMaxAttempts}
+                                onChange={(e) => setUebungMaxAttempts(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
+                                className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
+                              />
+                              <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                                Nach so vielen falschen Eingaben erscheint das ganze Wort zum Abtippen. Davor gibt es nach und nach Buchstaben-Hinweise.
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (sel === 'STATION') {
+                      return (
+                        <div className="bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-200/50 dark:border-emerald-900/30 rounded-2xl p-5 flex flex-col gap-4 h-full animate-in fade-in duration-300 shadow-sm">
+                          <div className="flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400">
+                            <Sparkles className="w-5 h-5 text-emerald-600" />
+                            <h3 className="font-bold text-sm uppercase tracking-wide">Stations-Optionen</h3>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-450 mb-2 uppercase tracking-wider">
+                              Anzahl der Schüler / Stationen
+                            </label>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={stationCount}
+                                onChange={(e) => setStationCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
+                              />
+                              <span className="text-xs text-slate-400 dark:text-slate-500">
+                                (Erstellt Nummernfelder für die Schüler)
+                              </span>
+                            </div>
+                          </div>
+                          {tonToggle}
+                        </div>
+                      );
+                    }
+
+                    // LAUFDIKTAT
+                    return (
+                      <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[12rem]">
+                        <div className="w-12 h-12 rounded-full bg-slate-200/50 dark:bg-slate-800/80 flex items-center justify-center mb-3">
+                          <HelpCircle className="w-6 h-6 text-slate-400 dark:text-slate-500" />
+                        </div>
+                        <p className="text-xs font-semibold text-slate-650 dark:text-slate-300 max-w-[220px] leading-relaxed">
+                          Das klassische Laufdiktat braucht keine zusätzlichen Optionen.
                         </p>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
               </div>
