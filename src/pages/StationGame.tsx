@@ -18,11 +18,15 @@ export const StationGame = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [peeks, setPeeks] = useState(0);
   const [bimanualLocked, setBimanualLocked] = useState(false);
-  // Wurde das aktuelle Wort schon mindestens einmal angezeigt? Steuert sowohl
-  // den Spickenzähler (erstes Ansehen zählt nicht) als auch die Weiter-Sperre.
-  const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
+  // Welche Wörter ein Schüler schon gesehen hat (Schlüssel "nummer:index").
+  // Bleibt erhalten, solange das Gerät montiert ist – auch nach dem Zurückkehren
+  // zur Übersicht. Steuert Spickenzähler (erstes Ansehen frei) und Weiter-Sperre.
+  const [seenKeys, setSeenKeys] = useState<Set<string>>(new Set());
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const seenKey = studentNumber !== null ? `${studentNumber}:${currentIndex}` : '';
+  const hasSeenCurrent = seenKey !== '' && seenKeys.has(seenKey);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -32,7 +36,6 @@ export const StationGame = () => {
       if (d.studentNumber === studentNumber) {
         setCurrentIndex(d.currentIndex);
         setPeeks(d.peeks);
-        setRevealedCurrentWord(false);
       }
     }).on('broadcast', { event: 'session-start' }, (payload) => {
       const { stationCount: newStationCount } = payload.payload;
@@ -59,7 +62,6 @@ export const StationGame = () => {
       setCurrentIndex(0);
       setPeeks(0);
       setBimanualLocked(false);
-      setRevealedCurrentWord(false);
     }, 3000);
   }, []);
 
@@ -67,7 +69,6 @@ export const StationGame = () => {
     setStudentNumber(num);
     setCurrentIndex(0);
     setPeeks(0);
-    setRevealedCurrentWord(false);
     setView('ACTIVE');
     if (channelRef.current) {
       channelRef.current.send({ type: 'broadcast', event: 'request-station-state', payload: { studentNumber: num } });
@@ -79,18 +80,16 @@ export const StationGame = () => {
     if (currentIndex <= 0) return;
     const next = currentIndex - 1;
     setCurrentIndex(next);
-    setRevealedCurrentWord(false);
     sendUpdate(next, peeks);
     resetTimeout();
   };
 
   const handleNext = () => {
     if (currentIndex >= words.length - 1) return;
-    // Erst weiterblättern, wenn das aktuelle Wort einmal angezeigt wurde.
-    if (!revealedCurrentWord) return;
+    // Erst weiterblättern, wenn das aktuelle Wort einmal gesehen wurde.
+    if (!hasSeenCurrent) return;
     const next = currentIndex + 1;
     setCurrentIndex(next);
-    setRevealedCurrentWord(false);
     sendUpdate(next, peeks);
     resetTimeout();
   };
@@ -105,14 +104,15 @@ export const StationGame = () => {
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2 && bimanualLocked) {
       setBimanualLocked(false);
-      if (revealedCurrentWord) {
-        // Wiederholtes Ansehen zählt als Spicker.
+      if (hasSeenCurrent) {
+        // Wiederholtes Ansehen desselben Wortes zählt als Spicker.
         const newPeeks = peeks + 1;
         setPeeks(newPeeks);
         sendUpdate(currentIndex, newPeeks);
-      } else {
-        // Erstes Ansehen: schaltet das Weiterblättern frei, zählt aber nicht.
-        setRevealedCurrentWord(true);
+      } else if (seenKey) {
+        // Erstes Ansehen: dauerhaft merken (auch nach Zurückkehren),
+        // schaltet das Weiterblättern frei, zählt aber nicht.
+        setSeenKeys((prev) => new Set(prev).add(seenKey));
       }
       resetTimeout();
     }
@@ -267,8 +267,8 @@ export const StationGame = () => {
         </button>
         <button
           onClick={handleNext}
-          disabled={currentIndex >= words.length - 1 || !revealedCurrentWord}
-          title={!revealedCurrentWord ? 'Sieh dir zuerst das Wort an' : undefined}
+          disabled={currentIndex >= words.length - 1 || !hasSeenCurrent}
+          title={!hasSeenCurrent ? 'Sieh dir zuerst das Wort an' : undefined}
           className="flex-1 py-4 bg-brand-500 hover:bg-brand-600 disabled:opacity-30 text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer shadow-md hover:shadow-lg flex items-center justify-center"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
