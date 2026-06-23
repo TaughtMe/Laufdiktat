@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import { StationGame } from './StationGame';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
+import { useExitGuard } from '../hooks/useExitGuard';
 
 interface InkSplat {
   id: number;
@@ -279,6 +280,10 @@ export const Game = () => {
       });
     }
   }, [gameState, roomCode, studentName, efficiencyIndex, metrics.peeks, metrics.attempts]);
+
+  // Geräte-/Browser-Zurück abfangen, solange das Spiel läuft.
+  const requestExit = useCallback(() => setShowExitConfirm(true), []);
+  useExitGuard(!sessionEnded && gameState !== 'FINISHED' && !!roomCode, requestExit);
 
   // Abtipp-Phase: aktiven Buchstaben mittig in den Blick scrollen (Karaoke).
   useEffect(() => {
@@ -820,15 +825,6 @@ export const Game = () => {
             </div>
           )}
         </div>
-        {/* FOKUS-MODUS Badge */}
-        {gameState !== 'FINISHED' && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-500 bg-white/5 border border-white/10 px-5 py-2.5 rounded-full backdrop-blur-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" strokeWidth="2"/><line x1="10" y1="15" x2="10" y2="9" strokeWidth="2"/><line x1="14" y1="15" x2="14" y2="9" strokeWidth="2"/></svg>
-              Fokus-Modus aktiv
-            </span>
-          </div>
-        )}
       </main>
 
       {showExitConfirm && (

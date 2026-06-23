@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
+import { useExitGuard } from '../hooks/useExitGuard';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -122,6 +123,10 @@ export const StationGame = () => {
   };
 
   const currentWord = words[currentIndex]?.targetWord || '';
+
+  // Geräte-/Browser-Zurück abfangen, solange die Station läuft.
+  const requestExit = useCallback(() => setShowExitConfirm(true), []);
+  useExitGuard(!sessionEnded && !!roomCode, requestExit);
 
   // Lehrkraft hat die Sitzung beendet → Hinweis mit Zurück-Button.
   if (sessionEnded) return <SessionEndedOverlay onBack={() => navigate('/')} />;

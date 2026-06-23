@@ -112,7 +112,7 @@ export const Dashboard = () => {
           setStudentsInLobby((prev) => {
             if (!prev.includes(payload.payload.name)) {
               const next = [...prev, payload.payload.name];
-              if (next.length >= 2) {
+              if (next.length >= 1) {
                 setHadTwoConnections(true);
               }
               return next;
@@ -1276,7 +1276,7 @@ export const Dashboard = () => {
                       Verbindung wiederherstellen
                     </button>
                   </div>
-                ) : (hadTwoConnections && studentsInLobby.length < 2) ? (
+                ) : (hadTwoConnections && studentsInLobby.length < 1) ? (
                   /* Verbindung abgebrochen Zustand */
                   <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
                     <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center mb-4">
@@ -1297,7 +1297,7 @@ export const Dashboard = () => {
                       Verbindung wiederherstellen
                     </button>
                   </div>
-                ) : studentsInLobby.length < 2 ? (
+                ) : studentsInLobby.length < 1 ? (
                   /* Welle 1: "Warte auf Verbindung"-Panel */
                   <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
                     <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 animate-pulse">
@@ -1307,7 +1307,7 @@ export const Dashboard = () => {
                       Warte auf Verbindung...
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-[280px] leading-relaxed">
-                      Es müssen mindestens zwei Geräte verbunden sein, um das Diktat zu starten.
+                      Sobald mindestens ein Gerät verbunden ist, kannst du das Diktat starten.
                     </p>
                     
                     <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-1.5 rounded-full">
@@ -1315,7 +1315,7 @@ export const Dashboard = () => {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
                       </span>
-                      <span>Verbunden: {studentsInLobby.length} / 2</span>
+                      <span>Verbunden: {studentsInLobby.length}</span>
                     </div>
 
                     {/* Single device connected feedback */}
@@ -1376,7 +1376,7 @@ export const Dashboard = () => {
                 </button>
                 <button 
                   onClick={handleStartSession}
-                  disabled={!stationMode && studentsInLobby.length < 2}
+                  disabled={!stationMode && studentsInLobby.length < 1}
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 dark:disabled:bg-slate-850 disabled:text-slate-450 disabled:shadow-none text-white text-base py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <span>{stationMode ? 'Stationen starten' : 'Diktat jetzt starten'}</span>
