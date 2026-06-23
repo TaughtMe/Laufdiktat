@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import type { GameState, GameMetrics } from '../types/game';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { GameState, GameMetrics, AttackType } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
@@ -14,6 +14,21 @@ interface InkSplat {
   borderRadius: string;
   rotation: number;
 }
+
+// Wie lange ein Angriff wirkt (ms) und wie schnell sich die Ladung füllt.
+const ATTACK_DURATION_MS = 15000;
+const CHARGE_PER_WORD = 25;        // ~4 Wörter bis voll (schnelle Schüler)
+const CHARGE_PER_WORD_SLOW = 34;   // ~3 Wörter bis voll (Schüler, die hinten liegen)
+
+const generateInkSplat = (): InkSplat => ({
+  id: Math.random(),
+  top: `${Math.random() * 40 + 30}%`,
+  left: `${Math.random() * 60 + 20}%`,
+  width: `${Math.random() * 80 + 80}px`,
+  height: `${Math.random() * 60 + 60}px`,
+  borderRadius: `${Math.random() * 30 + 40}% ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 30}% / ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 60}% ${Math.random() * 30 + 40}%`,
+  rotation: Math.random() * 360,
+});
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -45,30 +60,43 @@ export const Game = () => {
   // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
   const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
 
-  // Lokale Interferenz-States
+  // Lokale Interferenz-States (durch eingehende Angriffe ausgelöst)
   const [inkSplats, setInkSplats] = useState<InkSplat[]>([]);
-  const [forceFlicker, setForceFlicker] = useState(false);
+
+  // --- Battle-Modus: Mehrspieler-Mechanik ---
+  const [charge, setCharge] = useState(0);                 // Aufladebalken 0..100
+  const [shieldActive, setShieldActive] = useState(false); // Schild hoch (blockt nächsten Angriff)
+  const [activeAttack, setActiveAttack] = useState<{ type: AttackType; until: number } | null>(null);
+  const [picker, setPicker] = useState<AttackType | null>(null); // Zielauswahl offen für diesen Angriffstyp
+  const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
+  const [battleToast, setBattleToast] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   // Abonnierter Channel – wird für das Senden des Ergebnisses wiederverwendet.
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Refs für Werte, die in Channel-Callbacks aktuell sein müssen.
+  const shieldRef = useRef(false);
+  const activeAttackRef = useRef<{ type: AttackType; until: number } | null>(null);
+  const currentWordIndexRef = useRef(0);
+  const attackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { shieldRef.current = shieldActive; }, [shieldActive]);
+  useEffect(() => { activeAttackRef.current = activeAttack; }, [activeAttack]);
+  useEffect(() => { currentWordIndexRef.current = currentWordIndex; }, [currentWordIndex]);
 
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
   const efficiencyIndex = totalLength / (Math.max(1, metrics.peeks) * Math.max(1, metrics.attempts));
   const currentWord = words[currentWordIndex] || { targetWord: '' };
-  
-  const generateInkSplat = (): InkSplat => {
-    return {
-      id: Math.random(),
-      top: `${Math.random() * 40 + 30}%`,
-      left: `${Math.random() * 60 + 20}%`,
-      width: `${Math.random() * 80 + 80}px`,
-      height: `${Math.random() * 60 + 60}px`,
-      borderRadius: `${Math.random() * 30 + 40}% ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 30}% / ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 60}% ${Math.random() * 30 + 40}%`,
-      rotation: Math.random() * 360
-    };
-  };
+
+  // Kurze Battle-Hinweise ("Angriff geblockt" usw.). Stabil, damit es in
+  // Channel-Callbacks und Aktionen gleichermaßen nutzbar ist.
+  const showBattleToast = useCallback((msg: string) => {
+    setBattleToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setBattleToast(null), 2500);
+  }, []);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -95,6 +123,55 @@ export const Game = () => {
       () => {
         navigate('/');
       }
+    ).on(
+      'broadcast',
+      { event: 'student-progress' },
+      (payload) => {
+        const { name, index } = payload.payload;
+        if (typeof name === 'string' && name !== studentName) {
+          setRoster((prev) => ({ ...prev, [name]: index }));
+        }
+      }
+    ).on(
+      'broadcast',
+      { event: 'request-progress' },
+      () => {
+        // Neuer Spieler fragt den Stand ab – eigenen Fortschritt erneut senden.
+        if (studentName) {
+          channel.send({
+            type: 'broadcast',
+            event: 'student-progress',
+            payload: { name: studentName, index: currentWordIndexRef.current }
+          });
+        }
+      }
+    ).on(
+      'broadcast',
+      { event: 'attack' },
+      (payload) => {
+        const { to, type } = payload.payload as { to: string; type: AttackType };
+        if (to !== studentName) return;
+
+        // Schild blockt den Angriff komplett (und wird verbraucht).
+        if (shieldRef.current) {
+          setShieldActive(false);
+          showBattleToast('🛡️ Angriff geblockt!');
+          return;
+        }
+        // Es wirkt immer nur ein Angriff gleichzeitig.
+        if (activeAttackRef.current && activeAttackRef.current.until > Date.now()) return;
+
+        setActiveAttack({ type, until: Date.now() + ATTACK_DURATION_MS });
+        showBattleToast(type === 'ink' ? '🖋️ Tinten-Angriff!' : '✨ Flimmer-Angriff!');
+        if (type === 'ink') {
+          setInkSplats([generateInkSplat(), generateInkSplat(), generateInkSplat()]);
+        }
+        if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+        attackTimerRef.current = setTimeout(() => {
+          setActiveAttack(null);
+          setInkSplats([]);
+        }, ATTACK_DURATION_MS);
+      }
     ).subscribe(async (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         setConnectionWarning(true);
@@ -106,15 +183,24 @@ export const Game = () => {
             event: 'student-joined',
             payload: { name: studentName }
           });
+          // Eigenen Fortschritt ankündigen und den der anderen abfragen.
+          await channel.send({
+            type: 'broadcast',
+            event: 'student-progress',
+            payload: { name: studentName, index: currentWordIndexRef.current }
+          });
+          await channel.send({ type: 'broadcast', event: 'request-progress', payload: {} });
         }
       }
     });
 
     return () => {
       channelRef.current = null;
+      if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled]);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled, showBattleToast]);
 
   useEffect(() => {
     if (bimanualLocked) {
@@ -122,22 +208,10 @@ export const Game = () => {
     } else if (gameState === 'WRITING') {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
-        // Ink Logik (30% Wahrscheinlichkeit)
-        if (battleOptions.ink && Math.random() < 0.3 && inkSplats.length === 0) {
-          setInkSplats([generateInkSplat()]);
-        }
       }, 10);
-      
       return () => clearTimeout(timer);
     }
-    
-    if (gameState !== 'WRITING') {
-      // Defer this setState call to avoid synchronous update in effect
-      setTimeout(() => {
-        setInkSplats([]);
-      }, 0);
-    }
-  }, [bimanualLocked, gameState, battleOptions.ink, inkSplats.length]);
+  }, [bimanualLocked, gameState]);
 
   useEffect(() => {
     if (gameState === 'FINISHED' && roomCode && channelRef.current) {
@@ -187,6 +261,55 @@ export const Game = () => {
     }
   };
 
+  // Ladegewinn pro Wort: Schüler, die (mind. zur Hälfte) hinter den anderen
+  // liegen, laden etwas schneller – für Fairness, Fokus bleibt die Belohnung.
+  const chargeGain = () => {
+    const others = Object.entries(roster).filter(([n]) => n !== studentName);
+    const total = others.length + 1;
+    const ahead = others.filter(([, i]) => i > currentWordIndex).length;
+    const isBehind = total > 1 && ahead >= total / 2;
+    return isBehind ? CHARGE_PER_WORD_SLOW : CHARGE_PER_WORD;
+  };
+
+  // Bis zu 3 Angriffsziele: Mitspieler, die weiter oder gleich weit sind
+  // (nächste zuerst). Wer selbst führt, sieht die 3 direkt dahinter.
+  const getAttackCandidates = (): Array<{ name: string; index: number }> => {
+    const others = Object.entries(roster)
+      .filter(([n]) => n !== studentName)
+      .map(([name, index]) => ({ name, index }));
+    if (others.length === 0) return [];
+    const maxIndex = Math.max(currentWordIndex, ...others.map((o) => o.index));
+    if (currentWordIndex >= maxIndex) {
+      return others
+        .filter((o) => o.index < currentWordIndex)
+        .sort((a, b) => b.index - a.index)
+        .slice(0, 3);
+    }
+    return others
+      .filter((o) => o.index >= currentWordIndex)
+      .sort((a, b) => a.index - b.index)
+      .slice(0, 3);
+  };
+
+  const launchAttack = (targetName: string) => {
+    if (!picker || !channelRef.current) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'attack',
+      payload: { from: studentName, to: targetName, type: picker }
+    });
+    setCharge(0);
+    setPicker(null);
+    showBattleToast(`Angriff auf ${targetName} gestartet!`);
+  };
+
+  const raiseShield = () => {
+    if (charge < 100) return;
+    setShieldActive(true);
+    setCharge(0);
+    showBattleToast('🛡️ Schild aktiviert');
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (gameState !== 'WRITING' || words.length === 0) return;
@@ -194,6 +317,18 @@ export const Game = () => {
     setMetrics((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
 
     if (inputValue.trim() === currentWord.targetWord) {
+      // Mitspielern den neuen Fortschritt mitteilen (für Battle-Zielauswahl).
+      const newIndex = currentWordIndex + 1;
+      channelRef.current?.send({
+        type: 'broadcast',
+        event: 'student-progress',
+        payload: { name: studentName, index: newIndex }
+      });
+      // Battle-Modus: Aufladebalken füllen (langsamere Schüler etwas schneller).
+      if (gameMode === 'BATTLE') {
+        setCharge((c) => Math.min(100, c + chargeGain()));
+      }
+
       if (currentWordIndex + 1 < words.length) {
         setCurrentWordIndex((prev) => prev + 1);
         setInputValue('');
@@ -217,7 +352,17 @@ export const Game = () => {
     }
   };
 
-  const isFlickerActive = (battleOptions.flicker || forceFlicker) && bimanualLocked;
+  // Flimmern nur, wenn gerade ein Flimmer-Angriff aktiv ist und das Wort gezeigt wird.
+  const isFlickerActive = activeAttack?.type === 'flicker' && bimanualLocked;
+
+  // Welche Angriffsarten der Lehrer freigeschaltet hat (Fallback: beide).
+  const availableAttacks: AttackType[] = [];
+  if (battleOptions.ink) availableAttacks.push('ink');
+  if (battleOptions.flicker) availableAttacks.push('flicker');
+  if (availableAttacks.length === 0) availableAttacks.push('ink', 'flicker');
+
+  const chargeReady = charge >= 100;
+  const attackCandidates = picker ? getAttackCandidates() : [];
 
   // Fallback: Empty State
   if (words.length === 0) {
@@ -286,6 +431,113 @@ export const Game = () => {
           <span>Fehler: {Math.max(0, metrics.attempts - currentWordIndex)}</span>
         </div>
       </header>
+
+      {/* Battle-HUD: Aufladebalken + Angriffe/Schild (oben) */}
+      {gameMode === 'BATTLE' && gameState !== 'FINISHED' && (
+        <div className="px-6 pb-3 z-20">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3 backdrop-blur-sm flex flex-col gap-2.5">
+            {/* Aufladebalken */}
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-14 shrink-0">Ladung</span>
+              <div className="flex-1 h-3 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${chargeReady ? 'bg-[#5efcc2]' : 'bg-brand-500'}`}
+                  style={{ width: `${charge}%` }}
+                />
+              </div>
+              <span className="text-[11px] font-bold text-slate-300 w-9 text-right">{Math.round(charge)}%</span>
+            </div>
+
+            {/* Aktions-Buttons */}
+            <div className="flex items-center gap-2">
+              {availableAttacks.includes('ink') && (
+                <button
+                  type="button"
+                  disabled={!chargeReady}
+                  onClick={(e) => { e.stopPropagation(); setPicker('ink'); }}
+                  className="flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:bg-white/20 enabled:active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                >
+                  🖋️ Tinte
+                </button>
+              )}
+              {availableAttacks.includes('flicker') && (
+                <button
+                  type="button"
+                  disabled={!chargeReady}
+                  onClick={(e) => { e.stopPropagation(); setPicker('flicker'); }}
+                  className="flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:bg-white/20 enabled:active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                >
+                  ✨ Flimmern
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={!chargeReady || shieldActive}
+                onClick={(e) => { e.stopPropagation(); raiseShield(); }}
+                className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed enabled:active:scale-95 cursor-pointer flex items-center justify-center gap-1 ${shieldActive ? 'bg-[#5efcc2] text-[#004730]' : 'bg-white/10 text-white enabled:hover:bg-white/20'}`}
+              >
+                🛡️ {shieldActive ? 'Schild aktiv' : 'Schild'}
+              </button>
+            </div>
+
+            {/* Statusanzeige */}
+            {activeAttack && (
+              <div className="text-center text-[11px] font-bold text-red-300 animate-pulse">
+                {activeAttack.type === 'ink' ? 'Tinten-Angriff aktiv!' : 'Flimmer-Angriff aktiv!'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Kurze Battle-Hinweise */}
+      {battleToast && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-black/70 text-white text-sm font-bold px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200">
+          {battleToast}
+        </div>
+      )}
+
+      {/* Ziel-Auswahl für einen Angriff */}
+      {picker && (
+        <div
+          className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={(e) => { e.stopPropagation(); setPicker(null); }}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-white font-bold text-center mb-1">
+              {picker === 'ink' ? '🖋️ Tinten-Angriff' : '✨ Flimmer-Angriff'}
+            </h3>
+            <p className="text-slate-400 text-xs text-center mb-4">Wähle dein Ziel</p>
+            {attackCandidates.length === 0 ? (
+              <p className="text-slate-500 text-sm text-center py-4">Noch keine Mitspieler in Reichweite.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {attackCandidates.map((c) => (
+                  <button
+                    key={c.name}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); launchAttack(c.name); }}
+                    className="w-full py-3 px-4 rounded-xl bg-white/5 hover:bg-white/15 text-white font-bold text-sm transition-colors active:scale-[0.98] cursor-pointer flex items-center justify-between"
+                  >
+                    <span>{c.name}</span>
+                    <span className="text-[11px] text-slate-400 font-medium">Wort {c.index + 1}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPicker(null); }}
+              className="w-full mt-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 relative flex items-center justify-center p-4">
         {gameState !== 'FINISHED' && (
@@ -460,32 +712,6 @@ export const Game = () => {
           </div>
         )}
       </main>
-
-      {/* Dev-Buttons Layer (nur sichtbar, wenn das Spiel läuft und BATTLE aktiv ist) */}
-      {gameState !== 'FINISHED' && gameState !== 'IDLE' && words.length > 0 && gameMode === 'BATTLE' && (
-        <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-50">
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setForceFlicker(prev => !prev);
-            }}
-            className="text-xs bg-black/50 text-white px-3 py-1 rounded opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
-          >
-            {forceFlicker ? 'Stop Flimmern' : 'Simuliere Flimmern'}
-          </button>
-          {gameState === 'WRITING' && (
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setInkSplats(prev => [...prev, generateInkSplat()]);
-              }}
-              className="text-xs bg-black/50 text-white px-3 py-1 rounded opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
-            >
-              Simuliere Tinte
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

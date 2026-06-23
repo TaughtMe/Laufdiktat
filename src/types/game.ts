@@ -18,6 +18,8 @@ export interface BattleOptions {
   flicker: boolean;
 }
 
+export type AttackType = 'ink' | 'flicker';
+
 export interface StationStudentState {
   currentIndex: number;
   peeks: number;
