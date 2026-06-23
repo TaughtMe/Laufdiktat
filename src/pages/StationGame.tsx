@@ -10,7 +10,8 @@ type StationView = 'GRID' | 'ACTIVE';
 export const StationGame = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const roomCode = location.state?.roomCode as string | undefined;
+  // Einmalig festhalten (überlebt den popstate des Zurück-Guards).
+  const [roomCode] = useState<string | undefined>(() => (location.state as { roomCode?: string } | null)?.roomCode);
   const words = useGameStore((s) => s.words);
   const stationCount = useGameStore((s) => s.stationCount);
   const setStationCount = useGameStore((s) => s.setStationCount);
@@ -290,6 +291,9 @@ export const StationGame = () => {
           </svg>
         </button>
       </footer>
+      {showExitConfirm && (
+        <ExitConfirm onConfirm={() => navigate('/')} onCancel={() => setShowExitConfirm(false)} />
+      )}
     </div>
   );
 };

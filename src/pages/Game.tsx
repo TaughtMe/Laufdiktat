@@ -75,8 +75,10 @@ const buildHint = (target: string, fraction: number): string => {
 export const Game = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const roomCode = location.state?.roomCode as string | undefined;
-  const studentName = location.state?.studentName as string | undefined;
+  // Einmalig festhalten: ein Browser-/Geräte-Zurück löst einen popstate aus,
+  // bei dem location.state (und damit der Raum-Code) verloren ginge.
+  const [roomCode] = useState<string | undefined>(() => (location.state as { roomCode?: string } | null)?.roomCode);
+  const [studentName] = useState<string | undefined>(() => (location.state as { studentName?: string } | null)?.studentName);
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -474,6 +476,9 @@ export const Game = () => {
               Raum-Code: <span className="font-mono font-bold text-brand-400">{roomCode}</span>
             </p>
           </div>
+          {showExitConfirm && (
+            <ExitConfirm onConfirm={() => navigate('/')} onCancel={() => setShowExitConfirm(false)} />
+          )}
         </div>
       );
     }
