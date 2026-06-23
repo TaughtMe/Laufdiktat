@@ -56,6 +56,8 @@ export const Dashboard = () => {
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
   const [hadTwoConnections, setHadTwoConnections] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
+  // Live-Fortschritt pro Schüler: Name -> Index des aktuellen Wortes.
+  const [liveProgress, setLiveProgress] = useState<Record<string, number>>({});
 
   // Der abonnierte Realtime-Channel. Broadcasts (send) funktionieren nur auf
   // einem bereits abonnierten Channel, daher halten wir genau diese Instanz fest
@@ -142,6 +144,18 @@ export const Dashboard = () => {
       }
     );
 
+    // Live-Fortschritt der Schüler mitschreiben (für die Schüler-Übersicht).
+    channel.on(
+      'broadcast',
+      { event: 'student-progress' },
+      (payload) => {
+        const { name, index } = payload.payload;
+        if (typeof name === 'string' && typeof index === 'number') {
+          setLiveProgress((prev) => ({ ...prev, [name]: index }));
+        }
+      }
+    );
+
     // Station mode listeners
     channel.on(
       'broadcast',
@@ -211,6 +225,7 @@ export const Dashboard = () => {
     setWords([]);
     setResults([]);
     setStudentsInLobby([]);
+    setLiveProgress({});
     setHadTwoConnections(false);
     setStationStates(new Map());
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
@@ -567,6 +582,22 @@ export const Dashboard = () => {
     if (s.currentIndex >= words.length - 1 && s.peeks > 0) return 'done';
     return 'active';
   };
+
+  // Fortschritt eines Schülers in Prozent (fertige = 100 %).
+  const getStudentProgress = (name: string): number => {
+    if (results.find((r) => r.name === name)) return 100;
+    if (words.length === 0) return 0;
+    const idx = liveProgress[name] ?? 0;
+    return Math.min(100, Math.round((idx / words.length) * 100));
+  };
+
+  // Durchschnittlicher Fortschritt aller verbundenen Schüler.
+  const overallProgress = studentsInLobby.length === 0
+    ? 0
+    : Math.round(
+        studentsInLobby.reduce((acc, name) => acc + getStudentProgress(name), 0) /
+          studentsInLobby.length
+      );
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
@@ -1391,13 +1422,13 @@ export const Dashboard = () => {
                   {/* Progress Bar */}
                   <div className="w-full max-w-md mt-8">
                     <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${studentsInLobby.length > 0 ? Math.round((results.length / studentsInLobby.length) * 100) : 0}%` }}
+                        style={{ width: `${overallProgress}%` }}
                       />
                     </div>
                     <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-2 text-right">
-                      {studentsInLobby.length > 0 ? Math.round((results.length / studentsInLobby.length) * 100) : 0}% Gesamtfortschritt
+                      {overallProgress}% Gesamtfortschritt
                     </p>
                   </div>
                 </div>
@@ -1512,24 +1543,26 @@ export const Dashboard = () => {
                     {studentsInLobby.map((name, i) => {
                       const result = results.find(r => r.name === name);
                       const isFinished = !!result;
+                      const progress = getStudentProgress(name);
+                      const wordNo = Math.min((liveProgress[name] ?? 0) + 1, words.length);
                       return (
-                        <div 
+                        <div
                           key={i}
                           className={`rounded-2xl border p-4 flex flex-col items-center text-center transition-all ${
-                            isFinished 
-                              ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/30 dark:bg-emerald-950/10' 
+                            isFinished
+                              ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/30 dark:bg-emerald-950/10'
                               : 'border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900'
                           }`}
                         >
                           <AnimalAvatar studentName={name} className="w-14 h-14 mb-2" />
                           <span className="text-sm font-bold text-darkteal-800 dark:text-white truncate w-full">{name}</span>
                           <span className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
-                            {isFinished ? 'Fertig' : 'Aktiv'}
+                            {isFinished ? 'Fertig' : words.length > 0 ? `Wort ${wordNo}/${words.length}` : 'Aktiv'}
                           </span>
                           <div className="w-full mt-2 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                            <div 
+                            <div
                               className={`h-full rounded-full transition-all duration-500 ${isFinished ? 'bg-emerald-500' : 'bg-brand-500'}`}
-                              style={{ width: isFinished ? '100%' : '33%' }}
+                              style={{ width: `${progress}%` }}
                             />
                           </div>
                         </div>

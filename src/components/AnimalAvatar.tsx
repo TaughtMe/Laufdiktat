@@ -1,4 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+
+/** Wird angezeigt, wenn das eigentliche Tier-SVG nicht geladen werden kann. */
+const FALLBACK_ANIMAL = 'koala';
 
 /**
  * Sonderfall-Mapping für Tiernamen, deren Dateiname nicht durch die
@@ -10,6 +13,7 @@ const FILENAME_OVERRIDES: Record<string, string> = {
   'tiefseefisch': 'anglerfisch',
   'phönix':       'phoenix',
   'sphynx-katze': 'sphynxkatze',
+  'hund':         'dackel', // generischer "Hund" → vorhandenes Hunde-SVG
 };
 
 /**
@@ -67,15 +71,22 @@ interface AnimalAvatarProps {
  * Nutzt die SVG-Grafik direkt aus `/animals/` ohne farbliche Anpassungen.
  */
 export const AnimalAvatar = ({ studentName, className = '' }: AnimalAvatarProps) => {
+  // Merkt sich, welcher Pfad fehlgeschlagen ist. Ändert sich der Name (und damit
+  // svgPath), wird automatisch wieder das echte Tier versucht – ohne Effekt.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
   const svgPath = useMemo(() => {
     const { animal } = parseStudentName(studentName);
     const fileName = toFileName(animal);
     return `/animals/${fileName}.svg`;
   }, [studentName]);
 
+  const src = failedSrc === svgPath ? `/animals/${FALLBACK_ANIMAL}.svg` : svgPath;
+
   return (
     <img
-      src={svgPath}
+      src={src}
+      onError={() => setFailedSrc(svgPath)}
       className={`object-contain ${className}`}
       alt={studentName}
     />

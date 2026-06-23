@@ -48,21 +48,19 @@
   --animate-run-ping-pong: run-ping-pong 3.5s infinite ease-in-out;
 
   @keyframes run-ping-pong {
-    0% {
-      transform: translateX(0) scaleX(1);
-    }
-    49.9% {
-      transform: translateX(150px) scaleX(1);
-    }
-    50% {
-      transform: translateX(150px) scaleX(-1);
-    }
-    99.9% {
-      transform: translateX(0) scaleX(-1);
-    }
-    100% {
-      transform: translateX(0) scaleX(1);
-    }
+    /* Hinweg (nach rechts): gespiegelt, damit er nach rechts blickt.
+       Rückweg (nach links): normal. Leichtes Auf-und-Ab = Lauf-Gefühl. */
+    0%    { transform: translateX(0)     scaleX(-1) translateY(0); }
+    12%   { transform: translateX(38px)  scaleX(-1) translateY(-3px); }
+    25%   { transform: translateX(75px)  scaleX(-1) translateY(0); }
+    37%   { transform: translateX(113px) scaleX(-1) translateY(-3px); }
+    49.9% { transform: translateX(150px) scaleX(-1) translateY(0); }
+    50%   { transform: translateX(150px) scaleX(1)  translateY(0); }
+    62%   { transform: translateX(113px) scaleX(1)  translateY(-3px); }
+    75%   { transform: translateX(75px)  scaleX(1)  translateY(0); }
+    87%   { transform: translateX(38px)  scaleX(1)  translateY(-3px); }
+    99.9% { transform: translateX(0)     scaleX(1)  translateY(0); }
+    100%  { transform: translateX(0)     scaleX(-1) translateY(0); }
   }
 }
 
