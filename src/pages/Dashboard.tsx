@@ -35,7 +35,21 @@ interface StudentResult {
   attempts: number;
 }
 
-
+// Liest beim Senden immer den AKTUELLEN Store-Stand – so kommen z. B. ein
+// deaktivierter Ton oder geänderte Optionen garantiert frisch beim Schüler an
+// (keine veralteten Werte aus alten Closures).
+const buildSessionPayload = () => {
+  const s = useGameStore.getState();
+  return {
+    words: s.words,
+    gameMode: s.gameMode,
+    battleOptions: s.battleOptions,
+    stationMode: s.stationMode,
+    stationCount: s.stationCount,
+    isTtsEnabled: s.isTtsEnabled,
+    uebungMaxAttempts: s.uebungMaxAttempts,
+  };
+};
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -124,15 +138,7 @@ export const Dashboard = () => {
             channel.send({
               type: 'broadcast',
               event: 'session-start',
-              payload: {
-                words,
-                gameMode,
-                battleOptions,
-                stationMode,
-                stationCount,
-                isTtsEnabled,
-                uebungMaxAttempts
-              }
+              payload: buildSessionPayload()
             });
           }
         }
@@ -206,15 +212,7 @@ export const Dashboard = () => {
     await channelRef.current?.send({
       type: 'broadcast',
       event: 'session-start',
-      payload: {
-        words,
-        gameMode,
-        battleOptions,
-        stationMode,
-        stationCount,
-        isTtsEnabled,
-        uebungMaxAttempts
-      }
+      payload: buildSessionPayload()
     });
     setCurrentStep('LIVE');
   };
@@ -1031,66 +1029,58 @@ export const Dashboard = () => {
                   
                   {(() => {
                     const sel: string = stationMode ? 'STATION' : gameMode;
+                    const panelClass = "bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 flex flex-col gap-3.5 h-full animate-in fade-in duration-300 shadow-sm";
 
-                    const tonToggle = (
-                      <label className="flex items-center justify-between cursor-pointer p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
-                        <span className="flex items-center gap-2.5 text-sm font-bold text-darkteal-800 dark:text-white">
-                          <span className="text-lg">🔊</span> Vorlesen (Ton)
+                    // Einheitlicher Schalter (wie der Ton-Schalter), für alle Optionen.
+                    const toggleRow = (
+                      icon: string,
+                      label: string,
+                      desc: string | null,
+                      checked: boolean,
+                      onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+                    ) => (
+                      <label className="flex items-center justify-between gap-3 cursor-pointer p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center gap-2.5 text-sm font-bold text-darkteal-800 dark:text-white">
+                            <span className="text-lg">{icon}</span> {label}
+                          </span>
+                          {desc ? (
+                            <span className="block text-[11px] text-slate-500 dark:text-slate-450 mt-0.5 leading-relaxed">{desc}</span>
+                          ) : null}
                         </span>
-                        <div className="relative">
-                          <input type="checkbox" checked={isTtsEnabled} onChange={toggleTts} className="sr-only peer" />
+                        <div className="relative shrink-0">
+                          <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
                           <div className="w-12 h-7 bg-slate-250 dark:bg-slate-800 peer-checked:bg-brand-500 rounded-full transition-colors duration-250"></div>
                           <div className="absolute left-1 top-1 w-5 h-5 bg-white dark:bg-slate-100 rounded-full shadow-md transition-transform duration-250 peer-checked:translate-x-5"></div>
                         </div>
                       </label>
                     );
 
+                    const header = (color: string, title: string) => (
+                      <div className="flex items-center gap-2.5 text-darkteal-800 dark:text-white">
+                        <Sparkles className={`w-5 h-5 ${color}`} />
+                        <h3 className="font-bold text-sm uppercase tracking-wide">{title}</h3>
+                      </div>
+                    );
+
+                    const tonRow = toggleRow('🔊', 'Vorlesen (Ton)', 'Schüler können sich das Wort vorlesen lassen (zählt als Spicker).', isTtsEnabled, toggleTts);
+
                     if (sel === 'BATTLE') {
                       return (
-                        <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-2xl p-5 flex flex-col h-full animate-in fade-in duration-300 shadow-sm">
-                          <div className="flex items-center gap-2.5 mb-4 text-amber-800 dark:text-amber-450">
-                            <Sparkles className="w-5 h-5 text-amber-600" />
-                            <h3 className="font-bold text-sm uppercase tracking-wide">Battle-Optionen</h3>
-                          </div>
-                          <div className="space-y-4">
-                            {[
-                              { key: 'ink', label: 'Tintenfleck-Angriff', desc: 'Sichtverschleierung durch zufällige Tintenflecke auf dem Eingabebildschirm.' },
-                              { key: 'flicker', label: 'Flimmern-Angriff', desc: 'Ablenkung durch periodisches Bildschirmflimmern während des Einprägens.' },
-                            ].map((opt) => (
-                              <label key={opt.key} className="flex items-start gap-3 cursor-pointer group">
-                                <input
-                                  type="checkbox"
-                                  checked={battleOptions[opt.key as keyof typeof battleOptions] || false}
-                                  onChange={(e) => setBattleOptions({ [opt.key]: e.target.checked })}
-                                  className="sr-only peer"
-                                />
-                                <div className="mt-1 w-5 h-5 rounded-lg border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center transition-all peer-checked:border-brand-500 peer-checked:bg-brand-500 text-white">
-                                  <Check className="w-3.5 h-3.5 opacity-0 peer-checked:opacity-100 stroke-[3]" />
-                                </div>
-                                <div>
-                                  <span className="font-bold text-sm text-darkteal-800 dark:text-white block group-hover:text-brand-500 transition-colors">
-                                    {opt.label}
-                                  </span>
-                                  <span className="text-[11px] text-slate-500 dark:text-slate-450 block mt-0.5 leading-relaxed">
-                                    {opt.desc}
-                                  </span>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
+                        <div className={panelClass}>
+                          {header('text-amber-500', 'Battle-Optionen')}
+                          {toggleRow('🖋️', 'Tintenfleck-Angriff', 'Sichtverschleierung durch zufällige Tintenflecke auf dem Eingabebildschirm.', battleOptions.ink, (e) => setBattleOptions({ ink: e.target.checked }))}
+                          {toggleRow('✨', 'Flimmern-Angriff', 'Ablenkung durch periodisches Bildschirmflimmern während des Einprägens.', battleOptions.flicker, (e) => setBattleOptions({ flicker: e.target.checked }))}
                         </div>
                       );
                     }
 
                     if (sel === 'UEBUNG') {
                       return (
-                        <div className="bg-brand-50/40 dark:bg-brand-950/10 border border-brand-200/50 dark:border-brand-900/30 rounded-2xl p-5 flex flex-col gap-4 h-full animate-in fade-in duration-300 shadow-sm">
-                          <div className="flex items-center gap-2.5 text-brand-700 dark:text-brand-400">
-                            <Sparkles className="w-5 h-5 text-brand-600" />
-                            <h3 className="font-bold text-sm uppercase tracking-wide">Übungs-Optionen</h3>
-                          </div>
-                          {tonToggle}
-                          <div>
+                        <div className={panelClass}>
+                          {header('text-brand-500', 'Übungs-Optionen')}
+                          {tonRow}
+                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
                             <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
                               Fehlversuche bis zur Lösung
                             </label>
@@ -1114,13 +1104,10 @@ export const Dashboard = () => {
 
                     if (sel === 'STATION') {
                       return (
-                        <div className="bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-200/50 dark:border-emerald-900/30 rounded-2xl p-5 flex flex-col gap-4 h-full animate-in fade-in duration-300 shadow-sm">
-                          <div className="flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400">
-                            <Sparkles className="w-5 h-5 text-emerald-600" />
-                            <h3 className="font-bold text-sm uppercase tracking-wide">Stations-Optionen</h3>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-450 mb-2 uppercase tracking-wider">
+                        <div className={panelClass}>
+                          {header('text-emerald-500', 'Stations-Optionen')}
+                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
+                            <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
                               Anzahl der Schüler / Stationen
                             </label>
                             <div className="flex items-center gap-3">
@@ -1137,14 +1124,14 @@ export const Dashboard = () => {
                               </span>
                             </div>
                           </div>
-                          {tonToggle}
+                          {tonRow}
                         </div>
                       );
                     }
 
                     // LAUFDIKTAT
                     return (
-                      <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[12rem]">
+                      <div className="bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[12rem] animate-in fade-in duration-300 shadow-sm">
                         <div className="w-12 h-12 rounded-full bg-slate-200/50 dark:bg-slate-800/80 flex items-center justify-center mb-3">
                           <HelpCircle className="w-6 h-6 text-slate-400 dark:text-slate-500" />
                         </div>
