@@ -15,6 +15,8 @@ export const StationGame = () => {
   const words = useGameStore((s) => s.words);
   const stationCount = useGameStore((s) => s.stationCount);
   const setStationCount = useGameStore((s) => s.setStationCount);
+  const isTtsEnabled = useGameStore((s) => s.isTtsEnabled);
+  const setTtsEnabled = useGameStore((s) => s.setTtsEnabled);
 
   const [view, setView] = useState<StationView>('GRID');
   const [studentNumber, setStudentNumber] = useState<number | null>(null);
@@ -43,16 +45,19 @@ export const StationGame = () => {
         setPeeks(d.peeks);
       }
     }).on('broadcast', { event: 'session-start' }, (payload) => {
-      const { stationCount: newStationCount } = payload.payload;
+      const { stationCount: newStationCount, isTtsEnabled: newTts } = payload.payload;
       if (newStationCount !== undefined) {
         setStationCount(newStationCount);
+      }
+      if (newTts !== undefined) {
+        setTtsEnabled(newTts);
       }
     }).on('broadcast', { event: 'session-ended' }, () => {
       setSessionEnded(true);
     });
     channelRef.current.subscribe();
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [roomCode, studentNumber, setStationCount, navigate]);
+  }, [roomCode, studentNumber, setStationCount, setTtsEnabled, navigate]);
 
   const sendUpdate = useCallback((idx: number, p: number) => {
     if (!channelRef.current || !studentNumber) return;
@@ -124,6 +129,24 @@ export const StationGame = () => {
   };
 
   const currentWord = words[currentIndex]?.targetWord || '';
+
+  // Wort vorlesen – wird wie ein Blick behandelt (erstes Mal frei, dann Spicker)
+  // und schaltet das Weiterblättern frei.
+  const speakWord = () => {
+    if (!currentWord) return;
+    const u = new SpeechSynthesisUtterance(currentWord);
+    u.lang = 'de-DE';
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    if (hasSeenCurrent) {
+      const newPeeks = peeks + 1;
+      setPeeks(newPeeks);
+      sendUpdate(currentIndex, newPeeks);
+    } else if (seenKey) {
+      setSeenKeys((prev) => new Set(prev).add(seenKey));
+    }
+    resetTimeout();
+  };
 
   // Geräte-/Browser-Zurück abfangen, solange die Station läuft.
   const requestExit = useCallback(() => setShowExitConfirm(true), []);
@@ -224,6 +247,21 @@ export const StationGame = () => {
 
       {/* Touch area indicators */}
       <main className="flex-1 relative flex items-center justify-center p-4">
+        {/* Vorlesen-Button: oben, außerhalb des Doppel-Touch-Bereichs, zählt als Spicker */}
+        {isTtsEnabled && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); speakWord(); }}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-2 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/50 text-brand-700 dark:text-brand-300 text-sm font-bold px-4 py-2.5 rounded-full border border-brand-100/50 dark:border-brand-800/50 shadow-sm transition-colors active:scale-95 cursor-pointer"
+            title="Wort vorlesen (zählt als Spicker)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+            </svg>
+            <span>Vorlesen</span>
+          </button>
+        )}
         <div className={`absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-center transition-all duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-30'}`}>
           <div className={`w-16 h-24 sm:h-32 rounded-[2rem] border-4 border-dashed flex items-center justify-center transition-all duration-300 ${
             bimanualLocked
