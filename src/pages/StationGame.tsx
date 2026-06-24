@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 import { useExitGuard } from '../hooks/useExitGuard';
+import { LegalLink } from '../components/LegalLink';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -167,6 +168,9 @@ export const StationGame = () => {
             </p>
           )}
         </div>
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+          <LegalLink />
+        </div>
       </div>
     );
   }
@@ -207,6 +211,9 @@ export const StationGame = () => {
             ))}
           </div>
         </main>
+        <footer className="py-4 text-center">
+          <LegalLink />
+        </footer>
       </div>
     );
   }
@@ -308,26 +315,31 @@ export const StationGame = () => {
       </main>
 
       {/* Navigation arrows */}
-      <footer className="p-4 border-t border-slate-150/60 dark:border-slate-900 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm flex items-center justify-between gap-4 z-10 shadow-[0_-2px_15px_rgba(0,0,0,0.01)]">
-        <button
-          onClick={handlePrev}
-          disabled={currentIndex <= 0}
-          className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-30 text-darkteal-800 dark:text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <button
-          onClick={handleNext}
-          disabled={currentIndex >= words.length - 1 || !hasSeenCurrent}
-          title={!hasSeenCurrent ? 'Sieh dir zuerst das Wort an' : undefined}
-          className="flex-1 py-4 bg-brand-500 hover:bg-brand-600 disabled:opacity-30 text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer shadow-md hover:shadow-lg flex items-center justify-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+      <footer className="p-4 border-t border-slate-150/60 dark:border-slate-900 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm flex flex-col gap-2 z-10 shadow-[0_-2px_15px_rgba(0,0,0,0.01)]">
+        <div className="flex items-center justify-between gap-4">
+          <button
+            onClick={handlePrev}
+            disabled={currentIndex <= 0}
+            className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-30 text-darkteal-800 dark:text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={currentIndex >= words.length - 1 || !hasSeenCurrent}
+            title={!hasSeenCurrent ? 'Sieh dir zuerst das Wort an' : undefined}
+            className="flex-1 py-4 bg-brand-500 hover:bg-brand-600 disabled:opacity-30 text-white rounded-2xl font-bold transition-all active:scale-95 cursor-pointer shadow-md hover:shadow-lg flex items-center justify-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+        <div className="text-center">
+          <LegalLink />
+        </div>
       </footer>
       {showExitConfirm && (
         <ExitConfirm onConfirm={() => navigate('/')} onCancel={() => setShowExitConfirm(false)} />

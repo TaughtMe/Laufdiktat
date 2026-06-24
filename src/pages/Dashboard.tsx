@@ -25,6 +25,7 @@ import { parseCSV } from '../utils/csvParser';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { NumberStepper } from '../components/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
+import { LegalLink } from '../components/LegalLink';
 import type { GameMode, StationStudentState } from '../types/game';
 import { exportResultsToCSV } from '../utils/exportUtils';
 
@@ -1565,6 +1566,9 @@ export const Dashboard = () => {
 
         </div>
       </main>
+      <footer className="py-4 text-center">
+        <LegalLink />
+      </footer>
     </div>
   );
 };

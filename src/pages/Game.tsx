@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabaseClient';
 import { StationGame } from './StationGame';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 import { useExitGuard } from '../hooks/useExitGuard';
+import { LegalLink } from '../components/LegalLink';
 
 interface InkSplat {
   id: number;
@@ -479,6 +480,7 @@ export const Game = () => {
           {showExitConfirm && (
             <ExitConfirm onConfirm={() => navigate('/')} onCancel={() => setShowExitConfirm(false)} />
           )}
+          <LegalLink dark className="absolute bottom-4 left-1/2 -translate-x-1/2" />
         </div>
       );
     }
@@ -838,6 +840,7 @@ export const Game = () => {
           onCancel={() => setShowExitConfirm(false)}
         />
       )}
+      <LegalLink dark className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-40" />
     </div>
   );
 };

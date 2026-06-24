@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LegalLink } from './LegalLink';
 
 /**
  * Bestätigung beim Verlassen des Spiels. Der "Verlassen"-Button ist die ersten
@@ -73,6 +74,9 @@ export const SessionEndedOverlay = ({ onBack }: { onBack: () => void }) => (
       >
         Zur Startseite
       </button>
+    </div>
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+      <LegalLink dark />
     </div>
   </div>
 );
