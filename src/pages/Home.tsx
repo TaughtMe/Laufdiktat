@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Dices } from 'lucide-react';
+import { Dices, Camera } from 'lucide-react';
 import { AnimalAvatar } from '../components/AnimalAvatar';
+import { QrScannerOverlay } from '../components/QrScannerOverlay';
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -45,6 +46,24 @@ export const Home = () => {
   const [searchParams] = useSearchParams();
   const [roomCode, setRoomCode] = useState(() => searchParams.get('room') || '');
   const [studentName, setStudentName] = useState(getRandomName);
+  const [scanning, setScanning] = useState(false);
+
+  // QR-Code-Ergebnis verarbeiten: Raum-Code aus der URL (?room=) extrahieren,
+  // sonst auf eine Zahlenfolge zurückfallen.
+  const handleScanResult = useCallback((text: string) => {
+    let code = '';
+    try {
+      code = new URL(text).searchParams.get('room') || '';
+    } catch {
+      // kein gültiger URL-String – ignorieren
+    }
+    if (!code) {
+      const match = text.match(/\d{3,}/);
+      code = match ? match[0] : text.trim();
+    }
+    if (code) setRoomCode(code);
+    setScanning(false);
+  }, []);
 
   const generateName = () => {
     setStudentName(getRandomName());
@@ -73,16 +92,27 @@ export const Home = () => {
         </div>
         
         <div className="w-full flex flex-col items-center space-y-4">
-          <input 
-            type="number" 
-            placeholder="Raum-Code"
-            value={roomCode}
-            onChange={(e) => setRoomCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleStartDictation();
-            }}
-            className="w-full text-center text-lg font-semibold py-3.5 px-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none transition-all placeholder:text-[#a0aec0] dark:placeholder:text-slate-700 tracking-wide font-sans"
-          />
+          <div className="relative w-full">
+            <input
+              type="number"
+              placeholder="Raum-Code"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleStartDictation();
+              }}
+              className="w-full text-center text-lg font-semibold py-3.5 pl-12 pr-12 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none transition-all placeholder:text-[#a0aec0] dark:placeholder:text-slate-700 tracking-wide font-sans"
+            />
+            <button
+              type="button"
+              onClick={() => setScanning(true)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-brand-500 hover:bg-brand-500/10 transition-colors cursor-pointer"
+              title="QR-Code scannen"
+              aria-label="QR-Code scannen"
+            >
+              <Camera className="w-5 h-5" />
+            </button>
+          </div>
           
           {/* Animal Avatar */}
           {studentName && (
@@ -120,13 +150,17 @@ export const Home = () => {
 
       {/* Footer Link */}
       <div className="z-10 absolute bottom-8 text-sm">
-        <Link 
-          to="/dashboard" 
+        <Link
+          to="/dashboard"
           className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
         >
           Login
         </Link>
       </div>
+
+      {scanning && (
+        <QrScannerOverlay onResult={handleScanResult} onClose={() => setScanning(false)} />
+      )}
     </div>
   );
 };

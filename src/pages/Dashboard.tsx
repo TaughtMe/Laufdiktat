@@ -23,6 +23,7 @@ import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { parseCSV } from '../utils/csvParser';
 import { AnimalAvatar } from '../components/AnimalAvatar';
+import { NumberStepper } from '../components/NumberStepper';
 import type { GameMode, StationStudentState } from '../types/game';
 import { exportResultsToCSV } from '../utils/exportUtils';
 
@@ -1085,14 +1086,7 @@ export const Dashboard = () => {
                               Fehlversuche bis zur Lösung
                             </label>
                             <div className="flex items-center gap-3">
-                              <input
-                                type="number"
-                                min="1"
-                                max="10"
-                                value={uebungMaxAttempts}
-                                onChange={(e) => setUebungMaxAttempts(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
-                                className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
-                              />
+                              <NumberStepper value={uebungMaxAttempts} onChange={setUebungMaxAttempts} min={1} max={10} />
                               <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                                 Nach so vielen falschen Eingaben erscheint das ganze Wort zum Abtippen. Davor gibt es nach und nach Buchstaben-Hinweise.
                               </span>
@@ -1111,14 +1105,7 @@ export const Dashboard = () => {
                               Anzahl der Schüler / Stationen
                             </label>
                             <div className="flex items-center gap-3">
-                              <input
-                                type="number"
-                                min="1"
-                                max="100"
-                                value={stationCount}
-                                onChange={(e) => setStationCount(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="w-24 text-center font-bold py-2 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:text-white"
-                              />
+                              <NumberStepper value={stationCount} onChange={setStationCount} min={1} max={100} />
                               <span className="text-xs text-slate-400 dark:text-slate-500">
                                 (Erstellt Nummernfelder für die Schüler)
                               </span>
