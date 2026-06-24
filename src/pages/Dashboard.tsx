@@ -24,6 +24,7 @@ import { useGameStore } from '../store/gameStore';
 import { parseCSV } from '../utils/csvParser';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { NumberStepper } from '../components/NumberStepper';
+import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
 import type { GameMode, StationStudentState } from '../types/game';
 import { exportResultsToCSV } from '../utils/exportUtils';
 
@@ -56,6 +57,14 @@ export const Dashboard = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<DashboardStep>('IMPORT');
   const stepRef = useRef<DashboardStep>('IMPORT');
+  // Funktionsübersicht nur beim ersten Öffnen des Dashboards zeigen.
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try { return localStorage.getItem(ONBOARDING_KEY) !== '1'; } catch { return false; }
+  });
+  const dismissOnboarding = () => {
+    try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch { /* ignore */ }
+    setShowOnboarding(false);
+  };
 
   useEffect(() => {
     stepRef.current = currentStep;
@@ -604,6 +613,7 @@ export const Dashboard = () => {
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
+      {showOnboarding && <DashboardOnboarding onClose={dismissOnboarding} />}
       {connectionWarning && (
         <div className="bg-red-500 text-white text-center py-2 text-sm font-medium z-50">
           Verbindung zum Server verloren. Echtzeit-Updates sind derzeit nicht möglich.
@@ -674,7 +684,7 @@ export const Dashboard = () => {
                     1. Wortliste &amp; Text vorbereiten
                   </h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Gib deinen Text ein und wähle die Art der automatischen Aufteilung oder markiere Chunks manuell.
+                    Text eingeben und Aufteilung wählen – oder Chunks manuell markieren.
                   </p>
                 </div>
                 
@@ -904,7 +914,7 @@ export const Dashboard = () => {
                   className="flex items-center gap-1 text-darkteal-800 hover:text-brand-500 dark:text-slate-400 dark:hover:text-white font-bold text-sm transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span>Back</span>
+                  <span>Zurück</span>
                 </button>
                 
                 {/* Stepper Dots (Schritt 1 von 3) */}
@@ -935,7 +945,7 @@ export const Dashboard = () => {
                   2. Spielmodus &amp; Optionen
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Konfigurieren Sie das Diktat-Erlebnis für Ihre Klasse.
+                  Diktat für die Klasse einrichten.
                 </p>
               </div>
 
@@ -946,7 +956,7 @@ export const Dashboard = () => {
                   {/* Mode Selector */}
                   <div className="flex flex-col gap-3">
                     <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
-                      Wählen Sie den Modus
+                      Modus wählen
                     </span>
                     
                     <div className="space-y-3">
@@ -954,25 +964,25 @@ export const Dashboard = () => {
                         {
                           id: 'LAUFDIKTAT',
                           name: 'Klassisches Laufdiktat',
-                          desc: 'Der klassische Ablauf. Mit haptischer Barriere (2-Finger-Touch) zum Einprägen und direktem Tippen der Wörter.',
+                          desc: '2-Finger-Touch zum Einprägen, danach Wort tippen.',
                           icon: '🏃‍♂️'
                         },
                         {
                           id: 'UEBUNG',
-                          name: 'Freie Übung (ohne Stress)',
-                          desc: 'Übungsmodus mit Unterstützung wie Text-to-Speech (Vorlesen) und Hilfestellungen bei Fehlern.',
+                          name: 'Freie Übung',
+                          desc: 'Ohne Stress – mit Vorlesen und Buchstaben-Hilfen.',
                           icon: '📖'
                         },
                         {
                           id: 'BATTLE',
-                          name: 'Battle-Modus (Multiplayer)',
-                          desc: 'Spiele im Team oder gegeneinander! Aktiviert Störangriffe wie Tintenflecken und Bildschirmflimmern.',
+                          name: 'Battle-Modus',
+                          desc: 'Gegeneinander – mit Störangriffen (Tinte, Flimmern).',
                           icon: '⚔️'
                         },
                         {
                           id: 'STATION',
-                          name: 'Stations-Modus (Papier)',
-                          desc: 'Schüler schreiben auf Papier; das Tablet/iPad zeigt nur die Wörter.',
+                          name: 'Stations-Modus',
+                          desc: 'Auf Papier schreiben, Tablet zeigt nur die Wörter.',
                           icon: '📋'
                         }
                       ] as Array<{ id: string; name: string; desc: string; icon: string }>).map((mode) => {
@@ -1064,14 +1074,14 @@ export const Dashboard = () => {
                       </div>
                     );
 
-                    const tonRow = toggleRow('🔊', 'Vorlesen (Ton)', 'Schüler können sich das Wort vorlesen lassen (zählt als Spicker).', isTtsEnabled, toggleTts);
+                    const tonRow = toggleRow('🔊', 'Vorlesen (Ton)', 'Wort vorlesen lassen – zählt als Spicker.', isTtsEnabled, toggleTts);
 
                     if (sel === 'BATTLE') {
                       return (
                         <div className={panelClass}>
                           {header('text-amber-500', 'Battle-Optionen')}
-                          {toggleRow('🖋️', 'Tintenfleck-Angriff', 'Sichtverschleierung durch zufällige Tintenflecke auf dem Eingabebildschirm.', battleOptions.ink, (e) => setBattleOptions({ ink: e.target.checked }))}
-                          {toggleRow('✨', 'Flimmern-Angriff', 'Ablenkung durch periodisches Bildschirmflimmern während des Einprägens.', battleOptions.flicker, (e) => setBattleOptions({ flicker: e.target.checked }))}
+                          {toggleRow('🖋️', 'Tintenfleck-Angriff', 'Zufällige Tintenflecke verdecken die Sicht.', battleOptions.ink, (e) => setBattleOptions({ ink: e.target.checked }))}
+                          {toggleRow('✨', 'Flimmern-Angriff', 'Bildschirm flimmert beim Einprägen.', battleOptions.flicker, (e) => setBattleOptions({ flicker: e.target.checked }))}
                         </div>
                       );
                     }
@@ -1088,7 +1098,7 @@ export const Dashboard = () => {
                             <div className="flex items-center gap-3">
                               <NumberStepper value={uebungMaxAttempts} onChange={setUebungMaxAttempts} min={1} max={10} />
                               <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                                Nach so vielen falschen Eingaben erscheint das ganze Wort zum Abtippen. Davor gibt es nach und nach Buchstaben-Hinweise.
+                                So viele Fehlversuche, dann erscheint das ganze Wort. Davor schrittweise Buchstaben-Hinweise.
                               </span>
                             </div>
                           </div>

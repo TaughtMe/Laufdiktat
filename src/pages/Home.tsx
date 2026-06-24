@@ -148,13 +148,20 @@ export const Home = () => {
         </div>
       </div>
 
-      {/* Footer Link */}
-      <div className="z-10 absolute bottom-8 text-sm">
+      {/* Footer Links */}
+      <div className="z-10 absolute bottom-8 text-sm flex items-center gap-4">
         <Link
           to="/dashboard"
           className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
         >
           Login
+        </Link>
+        <span className="text-slate-300 dark:text-slate-700">·</span>
+        <Link
+          to="/legal"
+          className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
+        >
+          Impressum &amp; Datenschutz
         </Link>
       </div>
 

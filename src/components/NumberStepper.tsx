@@ -17,7 +17,7 @@ export const NumberStepper = ({ value, onChange, min = 1, max = 999 }: NumberSte
     'w-10 h-10 flex items-center justify-center text-darkteal-800 dark:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:bg-slate-100 dark:enabled:hover:bg-slate-800 enabled:active:scale-95 cursor-pointer';
 
   return (
-    <div className="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden select-none">
+    <div className="inline-flex shrink-0 items-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden select-none">
       <button type="button" onClick={() => onChange(clamp(value - 1))} disabled={value <= min} className={btn} aria-label="Weniger">
         <Minus className="w-4 h-4" />
       </button>
