@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Dices, Camera } from 'lucide-react';
+import { Dices, Camera, LogIn } from 'lucide-react';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { QrScannerOverlay } from '../components/QrScannerOverlay';
 
@@ -94,10 +94,13 @@ export const Home = () => {
         <div className="w-full flex flex-col items-center space-y-4">
           <div className="relative w-full">
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
               placeholder="Raum-Code"
               value={roomCode}
-              onChange={(e) => setRoomCode(e.target.value)}
+              onChange={(e) => setRoomCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleStartDictation();
               }}
@@ -148,15 +151,17 @@ export const Home = () => {
         </div>
       </div>
 
-      {/* Footer Links */}
-      <div className="z-10 absolute bottom-8 text-sm flex items-center gap-4">
-        <Link
-          to="/dashboard"
-          className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
-        >
-          Login
-        </Link>
-        <span className="text-slate-300 dark:text-slate-700">·</span>
+      {/* Lehrer-Login – direkt unter der Schüler-Karte, gut sichtbar */}
+      <Link
+        to="/dashboard"
+        className="z-10 mt-5 inline-flex items-center gap-2 text-sm font-bold text-darkteal-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-500 hover:text-brand-600 dark:hover:text-brand-400 px-6 py-2.5 rounded-xl shadow-sm hover:shadow transition-all active:scale-[0.98]"
+      >
+        <LogIn className="w-4 h-4" />
+        Lehrer-Login
+      </Link>
+
+      {/* Footer: Impressum/Datenschutz */}
+      <div className="z-10 absolute bottom-8 text-sm">
         <Link
           to="/legal"
           className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
