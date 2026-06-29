@@ -4,8 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { 
   FileText, 
   Type, 
-  Highlighter, 
-  HelpCircle,
+  Highlighter,
   Sparkles,
   ArrowRight,
   ListRestart,
@@ -31,14 +30,19 @@ import { LegalLink } from '../components/LegalLink';
 import { VersionBadge } from '../components/VersionBadge';
 import type { GameMode, StationStudentState } from '../types/game';
 import { exportResultsToCSV } from '../utils/exportUtils';
+import { computeStars } from '../utils/scoring';
 
 type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 
 interface StudentResult {
   name?: string;
-  score: number;
   peeks: number;
   attempts: number;
+  errors?: number;
+  durationMs?: number;
+  totalLength?: number;
+  wordCount?: number;
+  wordErrors?: Record<string, number>;
 }
 
 // Liest beim Senden immer den AKTUELLEN Store-Stand – so kommen z. B. ein
@@ -54,6 +58,7 @@ const buildSessionPayload = () => {
     stationCount: s.stationCount,
     isTtsEnabled: s.isTtsEnabled,
     uebungMaxAttempts: s.uebungMaxAttempts,
+    showStars: s.showStars,
   };
 };
 
@@ -124,6 +129,8 @@ export const Dashboard = () => {
   const toggleTts = useGameStore((state) => state.toggleTts);
   const uebungMaxAttempts = useGameStore((state) => state.uebungMaxAttempts);
   const setUebungMaxAttempts = useGameStore((state) => state.setUebungMaxAttempts);
+  const showStars = useGameStore((state) => state.showStars);
+  const setShowStars = useGameStore((state) => state.setShowStars);
 
   const handleOpenLobby = async () => {
     if (words.length === 0) {
@@ -279,10 +286,14 @@ export const Dashboard = () => {
         return {
           name: name,
           reachedStation: isFinished ? 'Fertig' : 'Aktiv',
-          progressPercent: isFinished ? 100 : 0
+          progressPercent: isFinished ? 100 : 0,
+          errors: result?.errors ?? 0,
+          attempts: result?.attempts ?? 0,
+          peeks: result?.peeks ?? 0,
+          stars: isFinished ? computeStars(result?.errors ?? 0, result?.wordCount ?? words.length) : undefined,
         };
       });
-      exportResultsToCSV(data);
+      exportResultsToCSV(data, wordErrorRanking);
     }
   };
 
@@ -656,6 +667,16 @@ export const Dashboard = () => {
         studentsInLobby.reduce((acc, name) => acc + getStudentProgress(name), 0) /
           studentsInLobby.length
       );
+
+  // Ranking: welche Wörter/Aufgaben wurden über alle Schüler am häufigsten falsch?
+  const wordErrorRanking: Array<[string, number]> = (() => {
+    const agg: Record<string, number> = {};
+    for (const r of results) {
+      if (!r.wordErrors) continue;
+      for (const [w, n] of Object.entries(r.wordErrors)) agg[w] = (agg[w] || 0) + n;
+    }
+    return Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  })();
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
@@ -1201,6 +1222,7 @@ export const Dashboard = () => {
                     );
 
                     const tonRow = toggleRow('🔊', 'Vorlesen (Ton)', 'Wort vorlesen lassen – zählt als Spicker.', isTtsEnabled, toggleTts);
+                    const starsRow = toggleRow('⭐', 'Sterne für Schüler', 'Bewertung (Sterne + Tempo) am Ende anzeigen.', showStars, (e) => setShowStars(e.target.checked));
 
                     if (sel === 'BATTLE') {
                       return (
@@ -1208,6 +1230,7 @@ export const Dashboard = () => {
                           {header('text-amber-500', 'Battle-Optionen')}
                           {toggleRow('🖋️', 'Tintenfleck-Angriff', 'Zufällige Tintenflecke verdecken die Sicht.', battleOptions.ink, (e) => setBattleOptions({ ink: e.target.checked }))}
                           {toggleRow('✨', 'Flimmern-Angriff', 'Bildschirm flimmert beim Einprägen.', battleOptions.flicker, (e) => setBattleOptions({ flicker: e.target.checked }))}
+                          {starsRow}
                         </div>
                       );
                     }
@@ -1228,6 +1251,7 @@ export const Dashboard = () => {
                               </span>
                             </div>
                           </div>
+                          {starsRow}
                         </div>
                       );
                     }
@@ -1254,13 +1278,9 @@ export const Dashboard = () => {
 
                     // LAUFDIKTAT
                     return (
-                      <div className="bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[12rem] animate-in fade-in duration-300 shadow-sm">
-                        <div className="w-12 h-12 rounded-full bg-slate-200/50 dark:bg-slate-800/80 flex items-center justify-center mb-3">
-                          <HelpCircle className="w-6 h-6 text-slate-400 dark:text-slate-500" />
-                        </div>
-                        <p className="text-xs font-semibold text-slate-650 dark:text-slate-300 max-w-[220px] leading-relaxed">
-                          Das klassische Laufdiktat braucht keine zusätzlichen Optionen.
-                        </p>
+                      <div className={panelClass}>
+                        {header('text-brand-500', 'Optionen')}
+                        {starsRow}
                       </div>
                     );
                   })()}
@@ -1585,7 +1605,9 @@ export const Dashboard = () => {
                             <span className="mt-1.5 w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                             <div>
                               <p className="text-sm font-bold text-darkteal-800 dark:text-white leading-tight">{r.name || 'Teilnehmer'} hat abgeschlossen</p>
-                              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Score: {r.score.toFixed(2)} · {r.peeks} Spicker</p>
+                              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                {r.errors ?? 0} Fehler · {r.attempts} Versuche · {r.peeks} Spicker
+                              </p>
                             </div>
                           </div>
                         ))
@@ -1669,6 +1691,16 @@ export const Dashboard = () => {
                           <span className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
                             {isFinished ? 'Fertig' : words.length > 0 ? `Wort ${wordNo}/${words.length}` : 'Aktiv'}
                           </span>
+                          {isFinished && result && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {showStars && (
+                                <span className="text-amber-500 mr-1">
+                                  {'★'.repeat(computeStars(result.errors ?? 0, result.wordCount ?? words.length))}
+                                </span>
+                              )}
+                              {result.errors ?? 0} F · {result.peeks} Sp
+                            </span>
+                          )}
                           <div className="w-full mt-2 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${isFinished ? 'bg-emerald-500' : 'bg-brand-500'}`}
@@ -1686,6 +1718,39 @@ export const Dashboard = () => {
                   </div>
                 )}
               </div>
+
+              {/* Häufigste Fehler – Ranking über alle Schüler */}
+              {!stationMode && (
+                <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-850 p-6">
+                  <h3 className="text-lg font-bold text-darkteal-800 dark:text-white mb-1">Häufigste Fehler</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                    Wo am meisten falsch gemacht wurde – hier lohnt sich das Weiterüben.
+                  </p>
+                  {wordErrorRanking.length === 0 ? (
+                    <p className="text-sm text-slate-400 dark:text-slate-500 italic py-4 text-center">
+                      Noch keine Fehler erfasst (Ergebnisse erscheinen, sobald Schüler abschließen).
+                    </p>
+                  ) : (
+                    <ol className="space-y-2">
+                      {wordErrorRanking.map(([word, count], idx) => {
+                        const maxCount = wordErrorRanking[0][1] || 1;
+                        return (
+                          <li key={word} className="flex items-center gap-3">
+                            <span className="text-xs font-mono text-slate-400 dark:text-slate-500 w-5 shrink-0">{idx + 1}.</span>
+                            <span className="text-sm font-bold text-darkteal-800 dark:text-white w-32 sm:w-40 truncate shrink-0">{word}</span>
+                            <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                              <div className="h-full bg-red-400 rounded-full" style={{ width: `${Math.round((count / maxCount) * 100)}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-red-500 w-16 text-right shrink-0">
+                              {count} {count === 1 ? 'Fehler' : 'Fehler'}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </div>
+              )}
             </section>
           )}
 

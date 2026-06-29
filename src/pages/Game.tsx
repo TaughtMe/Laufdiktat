@@ -7,6 +7,7 @@ import { StationGame } from './StationGame';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 import { useExitGuard } from '../hooks/useExitGuard';
 import { LegalLink } from '../components/LegalLink';
+import { computeStars, computeSpeedPoints } from '../utils/scoring';
 
 interface InkSplat {
   id: number;
@@ -107,11 +108,19 @@ export const Game = () => {
   const setTtsEnabled = useGameStore((state) => state.setTtsEnabled);
   const uebungMaxAttempts = useGameStore((state) => state.uebungMaxAttempts);
   const setUebungMaxAttempts = useGameStore((state) => state.setUebungMaxAttempts);
+  const showStars = useGameStore((state) => state.showStars);
+  const setShowStars = useGameStore((state) => state.setShowStars);
+
+  // Auswertung: Startzeit, Gesamtfehler und Fehler je Aufgabe (für Lehrer-Statistik).
+  const startedAtRef = useRef(0);
+  const errorsRef = useRef(0);
+  const wordErrorsRef = useRef<Record<string, number>>({});
 
   const [gameState, setGameState] = useState<GameState>('IDLE');
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [inputValue, setInputValue] = useState('');
   const [metrics, setMetrics] = useState<GameMetrics>({ peeks: 0, attempts: 0 });
+  const [finalDurationMs, setFinalDurationMs] = useState(0);
   const [errorShake, setErrorShake] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
   // Freies Üben: Fehlversuche beim aktuellen Wort + Abtipp-Phase.
@@ -151,7 +160,6 @@ export const Game = () => {
 
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
-  const efficiencyIndex = totalLength / (Math.max(1, metrics.peeks) * Math.max(1, metrics.attempts));
   const currentWord = words[currentWordIndex] || { targetWord: '' };
   const isMath = !!currentWord.prompt;
   const displayPrompt = currentWord.prompt ?? currentWord.targetWord;
@@ -175,11 +183,15 @@ export const Game = () => {
       'broadcast',
       { event: 'session-start' },
       (payload) => {
-        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts } = payload.payload;
+        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars } = payload.payload;
         // Neue Sitzung -> evtl. "Sitzung beendet"-Hinweis verlassen und frisch starten.
         setSessionEnded(false);
         setCurrentWordIndex(0);
         setGameState('IDLE');
+        // Auswertung für die neue Runde zurücksetzen.
+        startedAtRef.current = 0;
+        errorsRef.current = 0;
+        wordErrorsRef.current = {};
         setWords(newWords);
         setGameMode(newMode);
         setBattleOptions(newOptions);
@@ -187,6 +199,7 @@ export const Game = () => {
         if (newStationCount !== undefined) setStationCount(newStationCount);
         if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
         if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
+        if (newShowStars !== undefined) setShowStars(newShowStars);
       }
     ).on(
       'broadcast',
@@ -271,7 +284,7 @@ export const Game = () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled, setUebungMaxAttempts, showBattleToast]);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled, setUebungMaxAttempts, setShowStars, showBattleToast]);
 
   useEffect(() => {
     if (bimanualLocked) {
@@ -285,7 +298,11 @@ export const Game = () => {
   }, [bimanualLocked, gameState]);
 
   useEffect(() => {
-    if (gameState === 'FINISHED' && roomCode && channelRef.current) {
+    if (gameState !== 'FINISHED') return;
+    // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
+    const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+    setFinalDurationMs(durationMs);
+    if (roomCode && channelRef.current) {
       // Auf dem bereits abonnierten Channel senden, sonst kommt das Ergebnis
       // nicht im Lehrer-Dashboard an.
       channelRef.current.send({
@@ -293,13 +310,17 @@ export const Game = () => {
         event: 'student-finished',
         payload: {
           name: studentName,
-          score: efficiencyIndex,
           peeks: metrics.peeks,
-          attempts: metrics.attempts
+          attempts: metrics.attempts,
+          errors: errorsRef.current,
+          durationMs,
+          totalLength,
+          wordCount: words.length,
+          wordErrors: wordErrorsRef.current,
         }
       });
     }
-  }, [gameState, roomCode, studentName, efficiencyIndex, metrics.peeks, metrics.attempts]);
+  }, [gameState, roomCode, studentName, metrics.peeks, metrics.attempts, totalLength, words.length]);
 
   // Geräte-/Browser-Zurück abfangen, solange das Spiel läuft.
   const requestExit = useCallback(() => setShowExitConfirm(true), []);
@@ -320,7 +341,10 @@ export const Game = () => {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
-    
+
+    // Zeitmessung beginnt bei der ersten Interaktion.
+    if (startedAtRef.current === 0) startedAtRef.current = Date.now();
+
     if (e.touches.length >= 2) {
       if (!bimanualLocked) {
         // Erstes Ansehen des aktuellen Wortes zählt nicht als Spicker.
@@ -444,6 +468,11 @@ export const Game = () => {
         setGameState('FINISHED');
       }
     } else {
+      // Fehler erfassen (gesamt + je Aufgabe für die Lehrer-Statistik).
+      errorsRef.current += 1;
+      const key = currentWord.prompt ?? currentWord.targetWord;
+      wordErrorsRef.current[key] = (wordErrorsRef.current[key] || 0) + 1;
+
       setErrorShake(true);
       setTimeout(() => setErrorShake(false), 500);
 
@@ -558,7 +587,7 @@ export const Game = () => {
         </div>
         <div className="flex gap-4 text-sm font-semibold text-slate-400">
           <span>Spicker: {metrics.peeks}</span>
-          <span>Fehler: {Math.max(0, metrics.attempts - currentWordIndex)}</span>
+          <span>Fehler: {Math.max(0, metrics.attempts - (gameState === 'FINISHED' ? words.length : currentWordIndex))}</span>
         </div>
       </header>
 
@@ -830,23 +859,32 @@ export const Game = () => {
               <p className="mt-3 text-sm text-slate-400 leading-relaxed max-w-[280px]">
                 Du hast alle {words.length} Wörter erfolgreich absolviert.
               </p>
-              
-              <div className="mt-8 w-full">
-                <div className="bg-white/10 backdrop-blur-sm px-6 py-5 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.1)] border border-white/10 flex flex-col items-center">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold mb-1">
-                    Efficiency Index (EI)
-                  </div>
-                  <div className="text-4.5xl font-black text-brand-400">
-                    {efficiencyIndex.toFixed(2)}
-                  </div>
-                </div>
-              </div>
 
-              <div className="mt-4 w-full flex justify-between gap-3 text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-4 py-3 rounded-2xl">
-                <span>Spicker gesamt: {metrics.peeks}</span>
-                <span>Fehler gesamt: {Math.max(0, metrics.attempts - words.length)}</span>
-              </div>
-              
+              {showStars && (() => {
+                const stars = computeStars(metrics.attempts - words.length, words.length);
+                const speed = computeSpeedPoints(totalLength, finalDurationMs);
+                return (
+                  <div className="mt-8 w-full">
+                    <div className="bg-white/10 backdrop-blur-sm px-6 py-5 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.1)] border border-white/10 flex flex-col items-center">
+                      <div className="text-3xl tracking-wide" aria-label={`${stars} von 5 Sternen`}>
+                        <span className="text-amber-400">{'★'.repeat(stars)}</span><span className="text-white/20">{'★'.repeat(5 - stars)}</span>
+                      </div>
+                      <div className="mt-3 text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">
+                        Tempo
+                      </div>
+                      <div className="text-3xl font-black text-brand-400">{speed}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {showStars && (
+                <div className="mt-4 w-full flex justify-between gap-3 text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-4 py-3 rounded-2xl">
+                  <span>Spicker gesamt: {metrics.peeks}</span>
+                  <span>Fehler gesamt: {Math.max(0, metrics.attempts - words.length)}</span>
+                </div>
+              )}
+
               <div className="mt-8 w-full">
                 <button
                   onClick={() => navigate('/')}

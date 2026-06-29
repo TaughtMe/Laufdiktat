@@ -2,44 +2,58 @@ export interface Student {
   name: string;
   reachedStation: string | number;
   progressPercent: number;
+  errors?: number;
+  attempts?: number;
+  peeks?: number;
+  stars?: number;
 }
 
+const escape = (val: unknown): string => {
+  const s = String(val);
+  if (s.includes(';') || s.includes('"') || s.includes('\n')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+};
+
 /**
- * Exports student results to a CSV file.
- * Uses semicolon (;) separator for German Excel compatibility.
- * Prepends UTF-8 BOM (\uFEFF) to ensure correct character encoding in Excel on Windows.
+ * Exportiert Schülerergebnisse als CSV (Semikolon-getrennt für deutsches Excel,
+ * mit UTF-8-BOM). Optional wird ein "Häufigste Fehler"-Ranking angehängt.
  */
-export const exportResultsToCSV = (students: Student[]) => {
-  const headers = ['Name', 'Erreichte_Station', 'Fortschritt_Prozent'];
+export const exportResultsToCSV = (
+  students: Student[],
+  wordErrors?: Array<[string, number]>
+) => {
+  const hasDetails = students.some((s) => s.attempts !== undefined || s.errors !== undefined);
+  const headers = hasDetails
+    ? ['Name', 'Status', 'Fortschritt_Prozent', 'Fehler', 'Versuche', 'Spicker', 'Sterne']
+    : ['Name', 'Erreichte_Station', 'Fortschritt_Prozent'];
+
   const csvRows = [headers.join(';')];
 
-  for (const student of students) {
-    const row = [
-      student.name,
-      student.reachedStation,
-      `${student.progressPercent}%`
-    ];
-    
-    // Escape values that contain semicolons, quotes, or newlines
-    const escapedRow = row.map(val => {
-      const stringVal = String(val);
-      if (stringVal.includes(';') || stringVal.includes('"') || stringVal.includes('\n')) {
-        return `"${stringVal.replace(/"/g, '""')}"`;
-      }
-      return stringVal;
-    });
-    
-    csvRows.push(escapedRow.join(';'));
+  for (const s of students) {
+    const row = hasDetails
+      ? [s.name, s.reachedStation, `${s.progressPercent}%`, s.errors ?? '', s.attempts ?? '', s.peeks ?? '', s.stars ?? '']
+      : [s.name, s.reachedStation, `${s.progressPercent}%`];
+    csvRows.push(row.map(escape).join(';'));
   }
 
-  const csvContent = '\uFEFF' + csvRows.join('\n');
+  if (wordErrors && wordErrors.length > 0) {
+    csvRows.push('');
+    csvRows.push(['Häufigste Fehler', 'Anzahl'].join(';'));
+    for (const [word, count] of wordErrors) {
+      csvRows.push([escape(word), count].join(';'));
+    }
+  }
+
+  const csvContent = '﻿' + csvRows.join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  
+
   const link = document.createElement('a');
   link.href = url;
   link.setAttribute('download', `laufdiktat_ergebnisse_${new Date().toISOString().split('T')[0]}.csv`);
-  
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

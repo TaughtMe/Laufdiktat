@@ -11,6 +11,7 @@ interface GameStore {
   stationCount: number;
   isTtsEnabled: boolean;
   uebungMaxAttempts: number;
+  showStars: boolean;
 
   // Actions
   setWords: (words: WordItem[]) => void;
@@ -22,6 +23,7 @@ interface GameStore {
   toggleTts: () => void;
   setTtsEnabled: (enabled: boolean) => void;
   setUebungMaxAttempts: (count: number) => void;
+  setShowStars: (show: boolean) => void;
   /** Setzt die Spieldaten zurück (sauberer Beitritt – kein altes Spiel im Speicher). */
   resetGameData: () => void;
 }
@@ -39,6 +41,7 @@ export const useGameStore = create<GameStore>((set) => ({
   stationCount: 24,
   isTtsEnabled: true,
   uebungMaxAttempts: 3,
+  showStars: true,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -55,6 +58,7 @@ export const useGameStore = create<GameStore>((set) => ({
   toggleTts: () => set((state) => ({ isTtsEnabled: !state.isTtsEnabled })),
   setTtsEnabled: (isTtsEnabled) => set({ isTtsEnabled }),
   setUebungMaxAttempts: (uebungMaxAttempts) => set({ uebungMaxAttempts }),
+  setShowStars: (showStars) => set({ showStars }),
   resetGameData: () =>
     set({
       words: [],
