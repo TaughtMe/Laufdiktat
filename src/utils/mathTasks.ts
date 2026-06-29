@@ -46,28 +46,37 @@ export interface GenOptions {
   noNegative: boolean;  // keine negativen Ergebnisse (nur für −)
 }
 
-/** Erzeugt zufällige Aufgaben-Zeilen (als Text), die dann normal geparst werden. */
+/**
+ * Erzeugt zufällige Aufgaben-Zeilen (als Text), die dann normal geparst werden.
+ * Der Zahlenraum (max) wird strikt eingehalten: Operanden UND Ergebnis bleiben
+ * im Bereich 0..max (bei − optional negativ, wenn nicht verboten).
+ */
 export const generateMathLines = (opts: GenOptions): string[] => {
   const ops = opts.ops.length ? opts.ops : (['+'] as MathOp[]);
   const max = Math.max(1, opts.max);
-  const rnd = (n: number) => Math.floor(Math.random() * (n + 1)); // 0..n
+  const rnd = (n: number) => Math.floor(Math.random() * (Math.max(0, n) + 1)); // 0..n
+  const factorLim = Math.min(max, 12); // kleine Faktoren/Teiler (kleines 1·1)
   const lines: string[] = [];
+
   for (let i = 0; i < opts.count; i++) {
     const op = ops[Math.floor(Math.random() * ops.length)];
-    if (op === '/') {
-      // Ganzzahlige Division aufbauen: Divisor · Quotient = Dividend.
-      const b = Math.floor(Math.random() * max) + 1; // 1..max (kein Teiler 0)
-      const q = rnd(max);
-      lines.push(format(b * q, '/', b));
+    if (op === '+') {
+      const a = rnd(max);
+      const b = rnd(max - a); // Summe a + b <= max
+      lines.push(format(a, '+', b));
+    } else if (op === '-') {
+      const a = rnd(max);
+      const b = rnd(opts.noNegative ? a : max); // kein negatives Ergebnis, wenn verboten
+      lines.push(format(a, '-', b));
     } else if (op === '*') {
-      // Faktoren begrenzen, damit die Ergebnisse handlich bleiben.
-      const lim = Math.min(max, 12);
-      lines.push(format(rnd(lim), '*', rnd(lim)));
+      const a = 1 + rnd(factorLim - 1); // 1..factorLim
+      const b = rnd(Math.min(factorLim, Math.floor(max / a))); // Produkt a · b <= max
+      lines.push(format(a, '*', b));
     } else {
-      let a = rnd(max);
-      let b = rnd(max);
-      if (op === '-' && opts.noNegative && b > a) [a, b] = [b, a];
-      lines.push(format(a, op, b));
+      // Division: Divisor · Quotient = Dividend, alles <= max, ganzzahlig.
+      const b = 1 + rnd(factorLim - 1); // Divisor 1..factorLim
+      const q = rnd(Math.floor(max / b)); // Quotient -> Dividend b·q <= max
+      lines.push(format(b * q, '/', b));
     }
   }
   return lines;
