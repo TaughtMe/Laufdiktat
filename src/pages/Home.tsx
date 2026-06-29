@@ -4,6 +4,7 @@ import { Dices, Camera, LogIn } from 'lucide-react';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { QrScannerOverlay } from '../components/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
+import { VersionBadge } from '../components/VersionBadge';
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -192,6 +193,7 @@ export const Home = () => {
       {scanning && (
         <QrScannerOverlay onResult={handleScanResult} onClose={() => setScanning(false)} />
       )}
+      <VersionBadge />
     </div>
   );
 };

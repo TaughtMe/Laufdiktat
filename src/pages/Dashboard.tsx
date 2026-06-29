@@ -28,6 +28,7 @@ import { AnimalAvatar } from '../components/AnimalAvatar';
 import { NumberStepper } from '../components/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
 import { LegalLink } from '../components/LegalLink';
+import { VersionBadge } from '../components/VersionBadge';
 import type { GameMode, StationStudentState } from '../types/game';
 import { exportResultsToCSV } from '../utils/exportUtils';
 
@@ -82,6 +83,8 @@ export const Dashboard = () => {
   const [mathInput, setMathInput] = useState('');
   const [mathPlus, setMathPlus] = useState(true);
   const [mathMinus, setMathMinus] = useState(true);
+  const [mathMul, setMathMul] = useState(false);
+  const [mathDiv, setMathDiv] = useState(false);
   const [mathMax, setMathMax] = useState(20);
   const [mathCount, setMathCount] = useState(10);
   const [mathNoNeg, setMathNoNeg] = useState(true);
@@ -346,6 +349,8 @@ export const Dashboard = () => {
     const ops: MathOp[] = [];
     if (mathPlus) ops.push('+');
     if (mathMinus) ops.push('-');
+    if (mathMul) ops.push('*');
+    if (mathDiv) ops.push('/');
     if (ops.length === 0) ops.push('+');
     const lines = generateMathLines({ ops, max: mathMax, count: mathCount, noNegative: mathNoNeg });
     const text = lines.join('\n');
@@ -833,6 +838,20 @@ export const Dashboard = () => {
                           >
                             − Minus
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setMathMul((v) => !v)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathMul ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
+                          >
+                            · Mal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMathDiv((v) => !v)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathDiv ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
+                          >
+                            : Geteilt
+                          </button>
                         </div>
                         <div className="flex flex-wrap items-center gap-4">
                           <label className="flex items-center gap-2 text-sm font-semibold text-darkteal-800 dark:text-slate-300">
@@ -864,7 +883,7 @@ export const Dashboard = () => {
                       />
                       <div className="py-2.5 px-4 bg-[#f0f5fa] dark:bg-slate-900/65 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 self-start">
                         <Info className="w-3.5 h-3.5 text-brand-500" />
-                        <span>Eine Aufgabe pro Zeile (+ oder −). Das Ergebnis wird automatisch berechnet.</span>
+                        <span>Eine Aufgabe pro Zeile (+ − · :). Das Ergebnis wird automatisch berechnet.</span>
                       </div>
                     </div>
                   ) : importMode === 'manual' ? (
@@ -1675,6 +1694,7 @@ export const Dashboard = () => {
       <footer className="py-4 text-center">
         <LegalLink />
       </footer>
+      <VersionBadge />
     </div>
   );
 };

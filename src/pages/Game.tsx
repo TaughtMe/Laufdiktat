@@ -400,7 +400,11 @@ export const Game = () => {
     if (!displayPrompt) return;
     // Bei Mathe die Symbole für die Sprachausgabe in Worte umwandeln.
     const spoken = isMath
-      ? displayPrompt.replace(/\+/g, ' plus ').replace(/[−-]/g, ' minus ')
+      ? displayPrompt
+          .replace(/\+/g, ' plus ')
+          .replace(/[−-]/g, ' minus ')
+          .replace(/[·*×]/g, ' mal ')
+          .replace(/[:/÷]/g, ' geteilt durch ')
       : displayPrompt;
     const utterance = new SpeechSynthesisUtterance(spoken);
     utterance.lang = 'de-DE';

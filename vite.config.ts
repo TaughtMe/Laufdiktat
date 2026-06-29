@@ -8,7 +8,10 @@ export default defineConfig({
     react(), 
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Updates werden NICHT automatisch angewendet, sondern optional über
+      // den Versions-Button (Update-Benachrichtigung) bestätigt.
+      registerType: 'prompt',
+      injectRegister: null,
       includeAssets: ['favicon.svg', 'laufdiktat_icon.svg'],
       manifest: {
         name: 'Laufdiktat',
