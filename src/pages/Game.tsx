@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { GameState, GameMetrics, AttackType } from '../types/game';
+import type { GameState, GameMetrics, AttackType, WordItem } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
@@ -22,6 +22,17 @@ interface InkSplat {
 const ATTACK_DURATION_MS = 15000;
 const CHARGE_PER_WORD = 25;        // ~4 Wörter bis voll (schnelle Schüler)
 const CHARGE_PER_WORD_SLOW = 34;   // ~3 Wörter bis voll (Schüler, die hinten liegen)
+
+// Prüft eine Eingabe: bei Mathe (item.prompt gesetzt) numerisch, sonst als Text.
+const checkAnswer = (item: WordItem, input: string): boolean => {
+  const val = input.trim();
+  if (item.prompt) {
+    if (val === '') return false;
+    const n = parseFloat(val.replace(',', '.'));
+    return !Number.isNaN(n) && n === Number(item.targetWord);
+  }
+  return val === item.targetWord;
+};
 
 const generateInkSplat = (): InkSplat => ({
   id: Math.random(),
@@ -142,6 +153,8 @@ export const Game = () => {
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
   const efficiencyIndex = totalLength / (Math.max(1, metrics.peeks) * Math.max(1, metrics.attempts));
   const currentWord = words[currentWordIndex] || { targetWord: '' };
+  const isMath = !!currentWord.prompt;
+  const displayPrompt = currentWord.prompt ?? currentWord.targetWord;
 
   // Kurze Battle-Hinweise ("Angriff geblockt" usw.). Stabil, damit es in
   // Channel-Callbacks und Aktionen gleichermaßen nutzbar ist.
@@ -378,10 +391,14 @@ export const Game = () => {
     showBattleToast('🛡️ Schild aktiviert');
   };
 
-  // Freies Üben: Wort vorlesen. Zählt – wie ein Blick – als Spicker.
+  // Freies Üben: Aufgabe/Wort vorlesen. Zählt – wie ein Blick – als Spicker.
   const speakWord = () => {
-    if (!currentWord.targetWord) return;
-    const utterance = new SpeechSynthesisUtterance(currentWord.targetWord);
+    if (!displayPrompt) return;
+    // Bei Mathe die Symbole für die Sprachausgabe in Worte umwandeln.
+    const spoken = isMath
+      ? displayPrompt.replace(/\+/g, ' plus ').replace(/[−-]/g, ' minus ')
+      : displayPrompt;
+    const utterance = new SpeechSynthesisUtterance(spoken);
     utterance.lang = 'de-DE';
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
@@ -394,7 +411,7 @@ export const Game = () => {
 
     setMetrics((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
 
-    if (inputValue.trim() === currentWord.targetWord) {
+    if (checkAnswer(currentWord, inputValue)) {
       // Mitspielern den neuen Fortschritt mitteilen (für Battle-Zielauswahl).
       const newIndex = currentWordIndex + 1;
       channelRef.current?.send({
@@ -444,7 +461,7 @@ export const Game = () => {
 
   // --- Freies Üben: Hinweis-/Abtipp-Anzeige ---
   const target = currentWord.targetWord;
-  const showHint = gameMode === 'UEBUNG' && !copyMode && wrongCount > 0;
+  const showHint = gameMode === 'UEBUNG' && !copyMode && wrongCount > 0 && !isMath;
   const hintText = showHint ? buildHint(target, wrongCount / uebungMaxAttempts) : '';
   // Länge des korrekt getippten Anfangs (für grünes Karaoke-Feedback).
   let correctPrefixLen = 0;
@@ -698,7 +715,7 @@ export const Game = () => {
             <div className={`text-center transform transition-transform scale-110 pointer-events-none ${isFlickerActive ? 'animate-flicker' : ''} px-6`}>
               <div className="flex items-center justify-center gap-4">
                 <h2 className="text-5xl sm:text-7xl font-black text-brand-500 dark:text-brand-400 tracking-tight drop-shadow-sm font-sans select-none">
-                  {currentWord.targetWord}
+                  {displayPrompt}
                 </h2>
               </div>
               <p className="mt-8 text-xs font-bold tracking-wider uppercase text-slate-400 bg-white/5 px-5 py-2.5 rounded-full inline-block border border-white/10 backdrop-blur-sm">
@@ -750,6 +767,7 @@ export const Game = () => {
                 <input
                   ref={inputRef}
                   type="text"
+                  inputMode={isMath ? 'numeric' : 'text'}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className={`w-full text-center text-4xl font-bold py-6 px-4 bg-white/10 backdrop-blur-sm border-4 ${
@@ -757,7 +775,7 @@ export const Game = () => {
                       ? 'border-red-500 text-red-400'
                       : 'border-brand-500 text-white focus:ring-brand-500/20'
                   } rounded-[1.8rem] shadow-[0_10px_35px_rgba(0,0,0,0.1)] focus:outline-none focus:ring-4 transition-all relative z-10 font-sans tracking-wide placeholder:text-slate-500`}
-                  placeholder={copyMode ? 'Hier abtippen...' : 'Wort eingeben...'}
+                  placeholder={copyMode ? 'Hier abtippen...' : isMath ? 'Ergebnis...' : 'Wort eingeben...'}
                   autoComplete="off"
                   spellCheck="false"
                   autoCorrect="off"

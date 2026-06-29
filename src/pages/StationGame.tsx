@@ -129,7 +129,8 @@ export const StationGame = () => {
     }
   };
 
-  const currentWord = words[currentIndex]?.targetWord || '';
+  const currentItem = words[currentIndex];
+  const currentWord = currentItem?.prompt ?? currentItem?.targetWord ?? '';
 
   // Wort vorlesen – wird wie ein Blick behandelt (erstes Mal frei, dann Spicker)
   // und schaltet das Weiterblättern frei.

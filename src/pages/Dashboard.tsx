@@ -17,11 +17,13 @@ import {
   ChevronLeft,
   Activity,
   XCircle,
-  Download
+  Download,
+  Calculator
 } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { parseCSV } from '../utils/csvParser';
+import { parseMathLine, generateMathLines, type MathOp } from '../utils/mathTasks';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { NumberStepper } from '../components/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
@@ -72,9 +74,17 @@ export const Dashboard = () => {
   }, [currentStep]);
 
   const [manualInput, setManualInput] = useState('');
-  const [importMode, setImportMode] = useState<'lines' | 'sentences' | 'manual'>('lines');
+  const [importMode, setImportMode] = useState<'lines' | 'sentences' | 'manual' | 'math'>('lines');
   const [manualChunks, setManualChunks] = useState<Array<{ id: string; start: number; end: number; text: string }>>([]);
   const highlightContainerRef = useRef<HTMLDivElement>(null);
+
+  // Mathe-Import (Generator + manuelle Eingabe – beides läuft über mathInput)
+  const [mathInput, setMathInput] = useState('');
+  const [mathPlus, setMathPlus] = useState(true);
+  const [mathMinus, setMathMinus] = useState(true);
+  const [mathMax, setMathMax] = useState(20);
+  const [mathCount, setMathCount] = useState(10);
+  const [mathNoNeg, setMathNoNeg] = useState(true);
 
   const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [results, setResults] = useState<StudentResult[]>([]);
@@ -277,7 +287,7 @@ export const Dashboard = () => {
     const value = e.target.value;
     setManualInput(value);
     setManualChunks([]); // Reset manual highlighting when raw text changes
-    const parsed = parseCSV(value, importMode === 'manual' ? 'lines' : importMode);
+    const parsed = parseCSV(value, importMode === 'sentences' ? 'sentences' : 'lines');
     setWords(parsed);
   };
 
@@ -290,15 +300,18 @@ export const Dashboard = () => {
       const text = event.target?.result as string;
       setManualInput(text);
       setManualChunks([]); // Reset manual highlighting when raw text changes
-      const parsed = parseCSV(text, importMode === 'manual' ? 'lines' : importMode);
+      const parsed = parseCSV(text, importMode === 'sentences' ? 'sentences' : 'lines');
       setWords(parsed);
     };
     reader.readAsText(file);
   };
 
-  const handleImportModeChange = (mode: 'lines' | 'sentences' | 'manual') => {
+  const handleImportModeChange = (mode: 'lines' | 'sentences' | 'manual' | 'math') => {
     setImportMode(mode);
-    if (mode === 'manual') {
+    if (mode === 'math') {
+      // Mathe verwaltet seine eigenen Aufgaben über mathInput.
+      applyMathInput(mathInput);
+    } else if (mode === 'manual') {
       const newWords = [...manualChunks]
         .sort((a, b) => a.start - b.start)
         .map(chunk => ({
@@ -311,6 +324,33 @@ export const Dashboard = () => {
       const parsed = parseCSV(manualInput, mode);
       setWords(parsed);
     }
+  };
+
+  // Mathe: jede Zeile sicher parsen -> Aufgaben (ungültige Zeilen ignorieren).
+  const applyMathInput = (text: string) => {
+    const items = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .map(parseMathLine)
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    setWords(items);
+  };
+
+  const handleMathInputChange = (value: string) => {
+    setMathInput(value);
+    applyMathInput(value);
+  };
+
+  const handleGenerateMath = () => {
+    const ops: MathOp[] = [];
+    if (mathPlus) ops.push('+');
+    if (mathMinus) ops.push('-');
+    if (ops.length === 0) ops.push('+');
+    const lines = generateMathLines({ ops, max: mathMax, count: mathCount, noNegative: mathNoNeg });
+    const text = lines.join('\n');
+    setMathInput(text);
+    applyMathInput(text);
   };
 
   const getSegments = () => {
@@ -744,6 +784,19 @@ export const Dashboard = () => {
                   <Highlighter className="w-4 h-4" />
                   <span>Manuell (Highlighting)</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleImportModeChange('math')}
+                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                    importMode === 'math'
+                      ? 'bg-darkteal-800 text-white shadow-sm'
+                      : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
+                  }`}
+                >
+                  <Calculator className="w-4 h-4" />
+                  <span>Mathe</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch flex-1 min-h-0 mb-6">
@@ -752,7 +805,7 @@ export const Dashboard = () => {
                 <div className="md:col-span-7 flex flex-col gap-3 flex-1 min-h-0">
                   <div className="flex items-center justify-between">
                     <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
-                      Highlighter-Feld
+                      {importMode === 'math' ? 'Mathe-Aufgaben' : importMode === 'manual' ? 'Highlighter-Feld' : 'Text-Eingabe'}
                     </span>
                     {importMode === 'manual' && words.length > 0 && (
                       <span className="text-xs font-semibold text-[#00c080]">
@@ -761,7 +814,60 @@ export const Dashboard = () => {
                     )}
                   </div>
 
-                  {importMode === 'manual' ? (
+                  {importMode === 'math' ? (
+                    /* Mathe: Generator + manuelle Eingabe */
+                    <div className="flex flex-col flex-1 min-h-0 gap-3">
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMathPlus((v) => !v)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathPlus ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
+                          >
+                            + Plus
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMathMinus((v) => !v)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathMinus ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
+                          >
+                            − Minus
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 text-sm font-semibold text-darkteal-800 dark:text-slate-300">
+                            <span>Bis</span>
+                            <NumberStepper value={mathMax} onChange={setMathMax} min={1} max={1000} />
+                          </label>
+                          <label className="flex items-center gap-2 text-sm font-semibold text-darkteal-800 dark:text-slate-300">
+                            <span>Anzahl</span>
+                            <NumberStepper value={mathCount} onChange={setMathCount} min={1} max={50} />
+                          </label>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+                          <input type="checkbox" checked={mathNoNeg} onChange={(e) => setMathNoNeg(e.target.checked)} className="w-4 h-4 accent-brand-500" />
+                          Keine negativen Ergebnisse
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleGenerateMath}
+                          className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-sm transition-colors active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <Calculator className="w-4 h-4" /> Aufgaben erzeugen
+                        </button>
+                      </div>
+                      <textarea
+                        value={mathInput}
+                        onChange={(e) => handleMathInputChange(e.target.value)}
+                        className="w-full flex-1 min-h-[10rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-mono leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
+                        placeholder={"4 + 4\n12 − 5\n7 + 8"}
+                      />
+                      <div className="py-2.5 px-4 bg-[#f0f5fa] dark:bg-slate-900/65 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 self-start">
+                        <Info className="w-3.5 h-3.5 text-brand-500" />
+                        <span>Eine Aufgabe pro Zeile (+ oder −). Das Ergebnis wird automatisch berechnet.</span>
+                      </div>
+                    </div>
+                  ) : importMode === 'manual' ? (
                     /* Manual highlighting reader view */
                     manualInput.trim() === '' ? (
                       <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-205 dark:border-slate-800 rounded-xl min-h-[16rem]">
@@ -880,7 +986,7 @@ export const Dashboard = () => {
                               className="flex items-center gap-1.5 bg-[#5efcc2] dark:bg-[#5efcc2]/90 text-[#004730] px-3 py-1.5 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] text-sm font-bold"
                             >
                               <span className="opacity-55 text-xs font-mono">{idx + 1}.</span>
-                              <span className="break-all">{word.targetWord}</span>
+                              <span className="break-all">{word.prompt ? `${word.prompt} = ${word.targetWord}` : word.targetWord}</span>
                               <button 
                                 onClick={() => handleDeleteChunk(word.id)}
                                 className="hover:bg-[#004730]/10 text-[#004730] ml-1 p-0.5 rounded transition-colors cursor-pointer"
