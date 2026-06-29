@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Dices, Camera, LogIn } from 'lucide-react';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { QrScannerOverlay } from '../components/QrScannerOverlay';
+import { useGameStore } from '../store/gameStore';
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -47,9 +48,24 @@ export const Home = () => {
   const [roomCode, setRoomCode] = useState(() => searchParams.get('room') || '');
   const [studentName, setStudentName] = useState(getRandomName);
   const [scanning, setScanning] = useState(false);
+  const resetGameData = useGameStore((s) => s.resetGameData);
 
-  // QR-Code-Ergebnis verarbeiten: Raum-Code aus der URL (?room=) extrahieren,
-  // sonst auf eine Zahlenfolge zurückfallen.
+  // Beim Öffnen der Startseite den Service Worker auf eine neue Version prüfen
+  // lassen (greift mit dem Auto-Reload, damit kein alter Build hängen bleibt).
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => reg?.update()).catch(() => {});
+    }
+  }, []);
+
+  // Sauberer Beitritt: alten Spielzustand verwerfen, dann ins Spiel.
+  const joinGame = useCallback((code: string, name: string) => {
+    resetGameData();
+    navigate('/game', { state: { roomCode: code, studentName: name } });
+  }, [navigate, resetGameData]);
+
+  // QR-Code-Ergebnis: Raum-Code aus der URL (?room=) extrahieren, sonst
+  // Zahlenfolge. Anschließend automatisch beitreten (Warte-auf-Lehrer-Screen).
   const handleScanResult = useCallback((text: string) => {
     let code = '';
     try {
@@ -61,9 +77,12 @@ export const Home = () => {
       const match = text.match(/\d{3,}/);
       code = match ? match[0] : text.trim();
     }
-    if (code) setRoomCode(code);
     setScanning(false);
-  }, []);
+    if (code) {
+      setRoomCode(code);
+      joinGame(code, studentName);
+    }
+  }, [joinGame, studentName]);
 
   const generateName = () => {
     setStudentName(getRandomName());
@@ -71,7 +90,7 @@ export const Home = () => {
 
   const handleStartDictation = () => {
     if (roomCode.trim().length > 0 && studentName.trim().length > 0) {
-      navigate('/game', { state: { roomCode, studentName } });
+      joinGame(roomCode, studentName);
     } else {
       alert("Bitte gib einen Raum-Code ein und wähle einen Namen");
     }

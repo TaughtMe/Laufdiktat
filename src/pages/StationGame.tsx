@@ -53,6 +53,10 @@ export const StationGame = () => {
       if (newTts !== undefined) {
         setTtsEnabled(newTts);
       }
+      // Neue Sitzung -> evtl. "Sitzung beendet"-Hinweis verlassen, frisch zur Auswahl.
+      setSessionEnded(false);
+      setView('GRID');
+      setStudentNumber(null);
     }).on('broadcast', { event: 'session-ended' }, () => {
       setSessionEnded(true);
     });

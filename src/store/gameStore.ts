@@ -22,6 +22,8 @@ interface GameStore {
   toggleTts: () => void;
   setTtsEnabled: (enabled: boolean) => void;
   setUebungMaxAttempts: (count: number) => void;
+  /** Setzt die Spieldaten zurück (sauberer Beitritt – kein altes Spiel im Speicher). */
+  resetGameData: () => void;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -53,4 +55,12 @@ export const useGameStore = create<GameStore>((set) => ({
   toggleTts: () => set((state) => ({ isTtsEnabled: !state.isTtsEnabled })),
   setTtsEnabled: (isTtsEnabled) => set({ isTtsEnabled }),
   setUebungMaxAttempts: (uebungMaxAttempts) => set({ uebungMaxAttempts }),
+  resetGameData: () =>
+    set({
+      words: [],
+      gameMode: 'LAUFDIKTAT',
+      battleOptions: { ink: false, flicker: false },
+      bimanualLocked: false,
+      stationMode: false,
+    }),
 }));

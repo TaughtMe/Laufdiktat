@@ -176,6 +176,10 @@ export const Game = () => {
       { event: 'session-start' },
       (payload) => {
         const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts } = payload.payload;
+        // Neue Sitzung -> evtl. "Sitzung beendet"-Hinweis verlassen und frisch starten.
+        setSessionEnded(false);
+        setCurrentWordIndex(0);
+        setGameState('IDLE');
         setWords(newWords);
         setGameMode(newMode);
         setBattleOptions(newOptions);
