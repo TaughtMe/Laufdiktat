@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { GameState, GameMetrics, AttackType, WordItem } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../utils/supabaseClient';
 import { StationGame } from './StationGame';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 import { useExitGuard } from '../hooks/useExitGuard';
+import { useGameRoom, type SessionStartData } from '../hooks/useGameRoom';
 import { LegalLink } from '../components/LegalLink';
 import { computeStars, computeSpeedPoints } from '../utils/scoring';
 
@@ -122,7 +122,6 @@ export const Game = () => {
   const [metrics, setMetrics] = useState<GameMetrics>({ peeks: 0, attempts: 0 });
   const [finalDurationMs, setFinalDurationMs] = useState(0);
   const [errorShake, setErrorShake] = useState(false);
-  const [connectionWarning, setConnectionWarning] = useState(false);
   // Freies Üben: Fehlversuche beim aktuellen Wort + Abtipp-Phase.
   const [wrongCount, setWrongCount] = useState(0);
   const [copyMode, setCopyMode] = useState(false);
@@ -140,13 +139,10 @@ export const Game = () => {
   const [shieldActive, setShieldActive] = useState(false); // Schild hoch (blockt nächsten Angriff)
   const [activeAttack, setActiveAttack] = useState<{ type: AttackType; until: number } | null>(null);
   const [picker, setPicker] = useState<AttackType | null>(null); // Zielauswahl offen für diesen Angriffstyp
-  const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
   const [battleToast, setBattleToast] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const karaokeRef = useRef<HTMLDivElement>(null);
-  // Abonnierter Channel – wird für das Senden des Ergebnisses wiederverwendet.
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   // Refs für Werte, die in Channel-Callbacks aktuell sein müssen.
   const shieldRef = useRef(false);
   const activeAttackRef = useRef<{ type: AttackType; until: number } | null>(null);
@@ -172,119 +168,65 @@ export const Game = () => {
     toastTimerRef.current = setTimeout(() => setBattleToast(null), 2500);
   }, []);
 
-  useEffect(() => {
-    if (!roomCode) return;
-    
-    const channelName = `room-${roomCode}`;
-    const channel = supabase.channel(channelName);
-    channelRef.current = channel;
+  // Eingehende Sitzung übernehmen (neue Runde -> alles zurücksetzen).
+  const onSessionStart = useCallback((data: SessionStartData) => {
+    const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars } = data;
+    setSessionEnded(false);
+    setCurrentWordIndex(0);
+    setGameState('IDLE');
+    // Auswertung für die neue Runde zurücksetzen.
+    startedAtRef.current = 0;
+    errorsRef.current = 0;
+    wordErrorsRef.current = {};
+    setWords(newWords);
+    setGameMode(newMode);
+    setBattleOptions(newOptions);
+    if (newStationMode !== undefined) setStationMode(newStationMode);
+    if (newStationCount !== undefined) setStationCount(newStationCount);
+    if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
+    if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
+    if (newShowStars !== undefined) setShowStars(newShowStars);
+  }, [setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars]);
 
-    channel.on(
-      'broadcast',
-      { event: 'session-start' },
-      (payload) => {
-        const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars } = payload.payload;
-        // Neue Sitzung -> evtl. "Sitzung beendet"-Hinweis verlassen und frisch starten.
-        setSessionEnded(false);
-        setCurrentWordIndex(0);
-        setGameState('IDLE');
-        // Auswertung für die neue Runde zurücksetzen.
-        startedAtRef.current = 0;
-        errorsRef.current = 0;
-        wordErrorsRef.current = {};
-        setWords(newWords);
-        setGameMode(newMode);
-        setBattleOptions(newOptions);
-        if (newStationMode !== undefined) setStationMode(newStationMode);
-        if (newStationCount !== undefined) setStationCount(newStationCount);
-        if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
-        if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
-        if (newShowStars !== undefined) setShowStars(newShowStars);
-      }
-    ).on(
-      'broadcast',
-      { event: 'session-ended' },
-      () => {
-        setSessionEnded(true);
-      }
-    ).on(
-      'broadcast',
-      { event: 'student-progress' },
-      (payload) => {
-        const { name, index } = payload.payload;
-        if (typeof name === 'string' && name !== studentName) {
-          setRoster((prev) => ({ ...prev, [name]: index }));
-        }
-      }
-    ).on(
-      'broadcast',
-      { event: 'request-progress' },
-      () => {
-        // Neuer Spieler fragt den Stand ab – eigenen Fortschritt erneut senden.
-        if (studentName) {
-          channel.send({
-            type: 'broadcast',
-            event: 'student-progress',
-            payload: { name: studentName, index: currentWordIndexRef.current }
-          });
-        }
-      }
-    ).on(
-      'broadcast',
-      { event: 'attack' },
-      (payload) => {
-        const { to, type } = payload.payload as { to: string; type: AttackType };
-        if (to !== studentName) return;
+  const onSessionEnded = useCallback(() => {
+    setSessionEnded(true);
+  }, []);
 
-        // Schild blockt den Angriff komplett (und wird verbraucht).
-        if (shieldRef.current) {
-          setShieldActive(false);
-          showBattleToast('🛡️ Angriff geblockt!');
-          return;
-        }
-        // Es wirkt immer nur ein Angriff gleichzeitig.
-        if (activeAttackRef.current && activeAttackRef.current.until > Date.now()) return;
+  // Eingehender Angriff (Battle): Schild blockt, sonst 15s wirken; nur einer gleichzeitig.
+  const onAttack = useCallback((type: AttackType) => {
+    if (shieldRef.current) {
+      setShieldActive(false);
+      showBattleToast('🛡️ Angriff geblockt!');
+      return;
+    }
+    if (activeAttackRef.current && activeAttackRef.current.until > Date.now()) return;
 
-        setActiveAttack({ type, until: Date.now() + ATTACK_DURATION_MS });
-        showBattleToast(type === 'ink' ? '🖋️ Tinten-Angriff!' : '✨ Flimmer-Angriff!');
-        if (type === 'ink') {
-          setInkSplats([generateInkSplat(), generateInkSplat(), generateInkSplat()]);
-        }
-        if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
-        attackTimerRef.current = setTimeout(() => {
-          setActiveAttack(null);
-          setInkSplats([]);
-        }, ATTACK_DURATION_MS);
-      }
-    ).subscribe(async (status) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        setConnectionWarning(true);
-      } else if (status === 'SUBSCRIBED') {
-        setConnectionWarning(false);
-        if (studentName) {
-          await channel.send({
-            type: 'broadcast',
-            event: 'student-joined',
-            payload: { name: studentName }
-          });
-          // Eigenen Fortschritt ankündigen und den der anderen abfragen.
-          await channel.send({
-            type: 'broadcast',
-            event: 'student-progress',
-            payload: { name: studentName, index: currentWordIndexRef.current }
-          });
-          await channel.send({ type: 'broadcast', event: 'request-progress', payload: {} });
-        }
-      }
-    });
+    setActiveAttack({ type, until: Date.now() + ATTACK_DURATION_MS });
+    showBattleToast(type === 'ink' ? '🖋️ Tinten-Angriff!' : '✨ Flimmer-Angriff!');
+    if (type === 'ink') {
+      setInkSplats([generateInkSplat(), generateInkSplat(), generateInkSplat()]);
+    }
+    if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+    attackTimerRef.current = setTimeout(() => {
+      setActiveAttack(null);
+      setInkSplats([]);
+    }, ATTACK_DURATION_MS);
+  }, [showBattleToast]);
 
-    return () => {
-      channelRef.current = null;
-      if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      supabase.removeChannel(channel);
-    };
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, navigate, setStationCount, setStationMode, setTtsEnabled, setUebungMaxAttempts, setShowStars, showBattleToast]);
+  const { connectionWarning, roster, sendProgress, sendFinished, sendAttack } = useGameRoom({
+    roomCode,
+    studentName,
+    currentWordIndexRef,
+    onSessionStart,
+    onSessionEnded,
+    onAttack,
+  });
+
+  // Timer (Angriff/Toast) beim Unmount aufräumen.
+  useEffect(() => () => {
+    if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (bimanualLocked) {
@@ -302,25 +244,18 @@ export const Game = () => {
     // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
     const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
     setFinalDurationMs(durationMs);
-    if (roomCode && channelRef.current) {
-      // Auf dem bereits abonnierten Channel senden, sonst kommt das Ergebnis
-      // nicht im Lehrer-Dashboard an.
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'student-finished',
-        payload: {
-          name: studentName,
-          peeks: metrics.peeks,
-          attempts: metrics.attempts,
-          errors: errorsRef.current,
-          durationMs,
-          totalLength,
-          wordCount: words.length,
-          wordErrors: wordErrorsRef.current,
-        }
-      });
-    }
-  }, [gameState, roomCode, studentName, metrics.peeks, metrics.attempts, totalLength, words.length]);
+    // Ergebnis ans Lehrer-Dashboard senden (no-op, falls kein Channel/Raum).
+    sendFinished({
+      name: studentName,
+      peeks: metrics.peeks,
+      attempts: metrics.attempts,
+      errors: errorsRef.current,
+      durationMs,
+      totalLength,
+      wordCount: words.length,
+      wordErrors: wordErrorsRef.current,
+    });
+  }, [gameState, studentName, metrics.peeks, metrics.attempts, totalLength, words.length, sendFinished]);
 
   // Geräte-/Browser-Zurück abfangen, solange das Spiel läuft.
   const requestExit = useCallback(() => setShowExitConfirm(true), []);
@@ -401,12 +336,8 @@ export const Game = () => {
   };
 
   const launchAttack = (targetName: string) => {
-    if (!picker || !channelRef.current) return;
-    channelRef.current.send({
-      type: 'broadcast',
-      event: 'attack',
-      payload: { from: studentName, to: targetName, type: picker }
-    });
+    if (!picker) return;
+    if (!sendAttack(targetName, picker)) return;
     setCharge(0);
     setPicker(null);
     showBattleToast(`Angriff auf ${targetName} gestartet!`);
@@ -446,11 +377,7 @@ export const Game = () => {
     if (checkAnswer(currentWord, inputValue)) {
       // Mitspielern den neuen Fortschritt mitteilen (für Battle-Zielauswahl).
       const newIndex = currentWordIndex + 1;
-      channelRef.current?.send({
-        type: 'broadcast',
-        event: 'student-progress',
-        payload: { name: studentName, index: newIndex }
-      });
+      sendProgress(newIndex);
       // Battle-Modus: Aufladebalken füllen (langsamere Schüler etwas schneller).
       if (gameMode === 'BATTLE') {
         setCharge((c) => Math.min(100, c + chargeGain()));
