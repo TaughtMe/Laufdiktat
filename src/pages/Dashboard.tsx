@@ -22,8 +22,9 @@ import {
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/useDashboardRoom';
 import { useManualHighlighting } from '../hooks/useManualHighlighting';
+import { useMathImport } from '../hooks/useMathImport';
 import { parseCSV } from '../utils/csvParser';
-import { parseMathExpr, generateMathLines, normalMathWord, buildGapTask, type MathOp, type GapSlot } from '../utils/mathTasks';
+import { type GapSlot } from '../utils/mathTasks';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { NumberStepper } from '../components/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
@@ -54,19 +55,6 @@ export const Dashboard = () => {
 
   const [manualInput, setManualInput] = useState('');
   const [importMode, setImportMode] = useState<'lines' | 'sentences' | 'manual' | 'math'>('lines');
-
-  // Mathe-Import (Generator + manuelle Eingabe – beides läuft über mathInput)
-  const [mathInput, setMathInput] = useState('');
-  const [mathPlus, setMathPlus] = useState(true);
-  const [mathMinus, setMathMinus] = useState(true);
-  const [mathMul, setMathMul] = useState(false);
-  const [mathDiv, setMathDiv] = useState(false);
-  const [mathMax, setMathMax] = useState(20);
-  const [mathCount, setMathCount] = useState(10);
-  const [mathNoNeg, setMathNoNeg] = useState(true);
-  // Lückenaufgaben: an/aus + Lücken-Position je Aufgabe (Index -> 'a'|'b'|'result').
-  const [mathGap, setMathGap] = useState(false);
-  const [mathGaps, setMathGaps] = useState<GapSlot[]>([]);
 
   const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const words = useGameStore((state) => state.words);
@@ -116,6 +104,31 @@ export const Dashboard = () => {
     resetChunks,
     applyChunksToWords,
   } = useManualHighlighting({ manualInput, importMode, setWords });
+
+  const {
+    mathInput,
+    mathPlus,
+    setMathPlus,
+    mathMinus,
+    setMathMinus,
+    mathMul,
+    setMathMul,
+    mathDiv,
+    setMathDiv,
+    mathMax,
+    setMathMax,
+    mathCount,
+    setMathCount,
+    mathNoNeg,
+    setMathNoNeg,
+    mathGap,
+    setMathGap,
+    mathGaps,
+    mathExprs,
+    handleMathInputChange,
+    handleGenerateMath,
+    setGapAt,
+  } = useMathImport({ importMode, setWords });
 
   const handleExportCSV = () => {
     if (stationMode) {
@@ -185,51 +198,6 @@ export const Dashboard = () => {
       setWords(parsed);
     }
   };
-
-  // Geparste Mathe-Ausdrücke aus dem Eingabefeld (ungültige Zeilen ignoriert).
-  const mathExprs = mathInput
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .map(parseMathExpr)
-    .filter((e): e is NonNullable<typeof e> => e !== null);
-
-  // Mathe-Wörter im Store aktuell halten (normal oder Lückenaufgaben).
-  useEffect(() => {
-    if (importMode !== 'math') return;
-    const items = mathGap
-      ? mathExprs.map((e, i) => buildGapTask(e, mathGaps[i] ?? 'b'))
-      : mathExprs.map(normalMathWord);
-    setWords(items);
-    // mathExprs ist von mathInput abgeleitet -> mathInput als Dep genügt.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importMode, mathInput, mathGap, mathGaps, setWords]);
-
-  const handleMathInputChange = (value: string) => {
-    setMathInput(value);
-  };
-
-  const handleGenerateMath = () => {
-    const ops: MathOp[] = [];
-    if (mathPlus) ops.push('+');
-    if (mathMinus) ops.push('-');
-    if (mathMul) ops.push('*');
-    if (mathDiv) ops.push('/');
-    if (ops.length === 0) ops.push('+');
-    const lines = generateMathLines({ ops, max: mathMax, count: mathCount, noNegative: mathNoNeg });
-    setMathInput(lines.join('\n'));
-    setMathGaps([]); // neue Aufgaben -> Lücken auf Standard zurücksetzen
-  };
-
-  const setGapAt = (index: number, slot: GapSlot) => {
-    setMathGaps((prev) => {
-      const next = [...prev];
-      while (next.length <= index) next.push('b');
-      next[index] = slot;
-      return next;
-    });
-  };
-
 
   const getStationStatus = (num: number): 'idle' | 'active' | 'done' => {
     const s = stationStates.get(num);
