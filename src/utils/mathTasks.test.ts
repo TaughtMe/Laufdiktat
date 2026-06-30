@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMathLine, generateMathLines, type MathOp } from './mathTasks';
+import { parseMathLine, parseMathExpr, buildGapTask, generateMathLines, type MathOp } from './mathTasks';
 
 describe('parseMathLine', () => {
   it('rechnet Plus und Minus', () => {
@@ -25,6 +25,20 @@ describe('parseMathLine', () => {
     expect(parseMathLine('abc')).toBeNull();
     expect(parseMathLine('4 + ')).toBeNull();
     expect(parseMathLine('')).toBeNull();
+  });
+});
+
+describe('buildGapTask (Lückenaufgaben)', () => {
+  it('versteckt den gewählten Slot und macht ihn zur Antwort', () => {
+    const e = parseMathExpr('4 + 3')!;
+    expect(buildGapTask(e, 'b')).toMatchObject({ prompt: '4 + _ = 7', targetWord: '3' });
+    expect(buildGapTask(e, 'a')).toMatchObject({ prompt: '_ + 3 = 7', targetWord: '4' });
+    expect(buildGapTask(e, 'result')).toMatchObject({ prompt: '4 + 3 = _', targetWord: '7' });
+  });
+
+  it('funktioniert auch mit Mal/Geteilt', () => {
+    expect(buildGapTask(parseMathExpr('6 · 7')!, 'a')).toMatchObject({ prompt: '_ · 7 = 42', targetWord: '6' });
+    expect(buildGapTask(parseMathExpr('20 : 4')!, 'b')).toMatchObject({ prompt: '20 : _ = 5', targetWord: '4' });
   });
 });
 

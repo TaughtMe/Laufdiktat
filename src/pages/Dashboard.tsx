@@ -22,7 +22,7 @@ import {
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
 import { parseCSV } from '../utils/csvParser';
-import { parseMathLine, generateMathLines, type MathOp } from '../utils/mathTasks';
+import { parseMathExpr, generateMathLines, normalMathWord, buildGapTask, type MathOp, type GapSlot } from '../utils/mathTasks';
 import { AnimalAvatar } from '../components/AnimalAvatar';
 import { NumberStepper } from '../components/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
@@ -93,6 +93,9 @@ export const Dashboard = () => {
   const [mathMax, setMathMax] = useState(20);
   const [mathCount, setMathCount] = useState(10);
   const [mathNoNeg, setMathNoNeg] = useState(true);
+  // Lückenaufgaben: an/aus + Lücken-Position je Aufgabe (Index -> 'a'|'b'|'result').
+  const [mathGap, setMathGap] = useState(false);
+  const [mathGaps, setMathGaps] = useState<GapSlot[]>([]);
 
   const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [results, setResults] = useState<StudentResult[]>([]);
@@ -323,8 +326,8 @@ export const Dashboard = () => {
   const handleImportModeChange = (mode: 'lines' | 'sentences' | 'manual' | 'math') => {
     setImportMode(mode);
     if (mode === 'math') {
-      // Mathe verwaltet seine eigenen Aufgaben über mathInput.
-      applyMathInput(mathInput);
+      // Mathe-Aufgaben werden aus mathInput/mathGap/mathGaps per Effekt gebaut.
+      return;
     } else if (mode === 'manual') {
       const newWords = [...manualChunks]
         .sort((a, b) => a.start - b.start)
@@ -340,20 +343,27 @@ export const Dashboard = () => {
     }
   };
 
-  // Mathe: jede Zeile sicher parsen -> Aufgaben (ungültige Zeilen ignorieren).
-  const applyMathInput = (text: string) => {
-    const items = text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .map(parseMathLine)
-      .filter((item): item is NonNullable<typeof item> => item !== null);
+  // Geparste Mathe-Ausdrücke aus dem Eingabefeld (ungültige Zeilen ignoriert).
+  const mathExprs = mathInput
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map(parseMathExpr)
+    .filter((e): e is NonNullable<typeof e> => e !== null);
+
+  // Mathe-Wörter im Store aktuell halten (normal oder Lückenaufgaben).
+  useEffect(() => {
+    if (importMode !== 'math') return;
+    const items = mathGap
+      ? mathExprs.map((e, i) => buildGapTask(e, mathGaps[i] ?? 'b'))
+      : mathExprs.map(normalMathWord);
     setWords(items);
-  };
+    // mathExprs ist von mathInput abgeleitet -> mathInput als Dep genügt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importMode, mathInput, mathGap, mathGaps, setWords]);
 
   const handleMathInputChange = (value: string) => {
     setMathInput(value);
-    applyMathInput(value);
   };
 
   const handleGenerateMath = () => {
@@ -364,9 +374,17 @@ export const Dashboard = () => {
     if (mathDiv) ops.push('/');
     if (ops.length === 0) ops.push('+');
     const lines = generateMathLines({ ops, max: mathMax, count: mathCount, noNegative: mathNoNeg });
-    const text = lines.join('\n');
-    setMathInput(text);
-    applyMathInput(text);
+    setMathInput(lines.join('\n'));
+    setMathGaps([]); // neue Aufgaben -> Lücken auf Standard zurücksetzen
+  };
+
+  const setGapAt = (index: number, slot: GapSlot) => {
+    setMathGaps((prev) => {
+      const next = [...prev];
+      while (next.length <= index) next.push('b');
+      next[index] = slot;
+      return next;
+    });
   };
 
   const getSegments = () => {
@@ -888,6 +906,10 @@ export const Dashboard = () => {
                           <input type="checkbox" checked={mathNoNeg} onChange={(e) => setMathNoNeg(e.target.checked)} className="w-4 h-4 accent-brand-500" />
                           Keine negativen Ergebnisse
                         </label>
+                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+                          <input type="checkbox" checked={mathGap} onChange={(e) => setMathGap(e.target.checked)} className="w-4 h-4 accent-brand-500" />
+                          Lückenaufgaben (fehlende Zahl, z. B. 4 + _ = 7)
+                        </label>
                         <button
                           type="button"
                           onClick={handleGenerateMath}
@@ -1007,7 +1029,48 @@ export const Dashboard = () => {
                   </span>
 
                   <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-5 flex-1 min-h-[16rem] overflow-y-auto flex flex-col justify-between">
-                    {words.length === 0 ? (
+                    {importMode === 'math' && mathGap ? (
+                      mathExprs.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-450 dark:text-slate-500">
+                          <Sparkles className="w-8 h-8 mb-2 text-slate-350 dark:text-slate-750" />
+                          <p className="text-xs font-semibold">Keine Aufgaben</p>
+                          <p className="text-[10px] mt-0.5">Aufgaben links eingeben oder erzeugen.</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 overflow-y-auto">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                            Tippe die Zahl an, die zur Lücke (_) werden soll:
+                          </p>
+                          {mathExprs.map((e, i) => {
+                            const gap = mathGaps[i] ?? 'b';
+                            const opSym = e.op === '+' ? '+' : e.op === '-' ? '−' : e.op === '*' ? '·' : ':';
+                            const numBtn = (slot: GapSlot, val: number) => (
+                              <button
+                                type="button"
+                                onClick={() => setGapAt(i, slot)}
+                                className={`min-w-[2rem] px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
+                                  gap === slot
+                                    ? 'bg-amber-400 text-amber-950'
+                                    : 'bg-white dark:bg-slate-800 text-darkteal-800 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                {gap === slot ? '_' : val}
+                              </button>
+                            );
+                            return (
+                              <div key={i} className="flex items-center gap-1.5 text-sm font-mono">
+                                <span className="opacity-55 text-xs w-5 shrink-0">{i + 1}.</span>
+                                {numBtn('a', e.a)}
+                                <span className="text-slate-500">{opSym}</span>
+                                {numBtn('b', e.b)}
+                                <span className="text-slate-500">=</span>
+                                {numBtn('result', e.result)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                    ) : words.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-450 dark:text-slate-500">
                         <Sparkles className="w-8 h-8 mb-2 text-slate-350 dark:text-slate-750" />
                         <p className="text-xs font-semibold">Keine Chunks geladen</p>

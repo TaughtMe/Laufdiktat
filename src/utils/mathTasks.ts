@@ -18,11 +18,22 @@ const compute = (a: number, op: MathOp, b: number): number | null => {
   }
 };
 
+export interface MathExpr {
+  a: number;
+  op: MathOp;
+  b: number;
+  result: number;
+}
+
+/** Wo die Lücke sitzt: erster Operand, zweiter Operand oder Ergebnis. */
+export type GapSlot = 'a' | 'b' | 'result';
+
 /**
- * Parst eine Zeile wie "4+4", "12 − 5", "6·7" oder "20:4" sicher (kein eval).
- * Akzeptiert +, -, −, *, ×, ·, /, :, ÷. Division nur mit ganzzahligem Ergebnis.
+ * Parst eine Zeile wie "4+4", "12 − 5", "6·7" oder "20:4" sicher (kein eval)
+ * in ihre Bestandteile. Akzeptiert +, -, −, *, ×, ·, /, :, ÷.
+ * Division nur mit ganzzahligem Ergebnis, sonst null.
  */
-export const parseMathLine = (line: string): WordItem | null => {
+export const parseMathExpr = (line: string): MathExpr | null => {
   const m = line.trim().match(/^(-?\d+)\s*([+\-−*×·/:÷])\s*(-?\d+)$/);
   if (!m) return null;
   const a = parseInt(m[1], 10);
@@ -34,9 +45,37 @@ export const parseMathLine = (line: string): WordItem | null => {
     : '/';
   const b = parseInt(m[3], 10);
   if (Number.isNaN(a) || Number.isNaN(b)) return null;
-  const answer = compute(a, op, b);
-  if (answer === null) return null;
-  return { id: uid(), prompt: format(a, op, b), targetWord: String(answer), isCompleted: false };
+  const result = compute(a, op, b);
+  if (result === null) return null;
+  return { a, op, b, result };
+};
+
+/** Normale Aufgabe aus einem geparsten Ausdruck (Aufgabe zeigen, Ergebnis = Antwort). */
+export const normalMathWord = (e: MathExpr): WordItem => ({
+  id: uid(),
+  prompt: format(e.a, e.op, e.b),
+  targetWord: String(e.result),
+  isCompleted: false,
+});
+
+/** Normale Aufgabe: Aufgabe anzeigen, Ergebnis ist die Antwort. */
+export const parseMathLine = (line: string): WordItem | null => {
+  const e = parseMathExpr(line);
+  if (!e) return null;
+  return normalMathWord(e);
+};
+
+/**
+ * Lückenaufgabe: eine Zahl der Gleichung wird durch "_" ersetzt, die gesuchte
+ * Zahl ist die Antwort. Beispiel: gap 'b' -> "4 + _ = 7", Antwort "3".
+ */
+export const buildGapTask = (e: MathExpr, gap: GapSlot): WordItem => {
+  const aS = gap === 'a' ? '_' : String(e.a);
+  const bS = gap === 'b' ? '_' : String(e.b);
+  const rS = gap === 'result' ? '_' : String(e.result);
+  const prompt = `${aS} ${sym(e.op)} ${bS} = ${rS}`;
+  const answer = gap === 'a' ? e.a : gap === 'b' ? e.b : e.result;
+  return { id: uid(), prompt, targetWord: String(answer), isCompleted: false };
 };
 
 export interface GenOptions {
