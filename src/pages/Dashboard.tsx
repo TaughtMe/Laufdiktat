@@ -19,8 +19,8 @@ import {
   Download,
   Calculator
 } from 'lucide-react';
-import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
+import { useDashboardRoom } from '../hooks/useDashboardRoom';
 import { parseCSV } from '../utils/csvParser';
 import { parseMathExpr, generateMathLines, normalMathWord, buildGapTask, type MathOp, type GapSlot } from '../utils/mathTasks';
 import { AnimalAvatar } from '../components/AnimalAvatar';
@@ -28,39 +28,11 @@ import { NumberStepper } from '../components/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
 import { LegalLink } from '../components/LegalLink';
 import { VersionBadge } from '../components/VersionBadge';
-import type { GameMode, StationStudentState } from '../types/game';
+import type { GameMode } from '../types/game';
 import { exportResultsToCSV } from '../utils/exportUtils';
 import { computeStars } from '../utils/scoring';
 
 type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
-
-interface StudentResult {
-  name?: string;
-  peeks: number;
-  attempts: number;
-  errors?: number;
-  durationMs?: number;
-  totalLength?: number;
-  wordCount?: number;
-  wordErrors?: Record<string, number>;
-}
-
-// Liest beim Senden immer den AKTUELLEN Store-Stand – so kommen z. B. ein
-// deaktivierter Ton oder geänderte Optionen garantiert frisch beim Schüler an
-// (keine veralteten Werte aus alten Closures).
-const buildSessionPayload = () => {
-  const s = useGameStore.getState();
-  return {
-    words: s.words,
-    gameMode: s.gameMode,
-    battleOptions: s.battleOptions,
-    stationMode: s.stationMode,
-    stationCount: s.stationCount,
-    isTtsEnabled: s.isTtsEnabled,
-    uebungMaxAttempts: s.uebungMaxAttempts,
-    showStars: s.showStars,
-  };
-};
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -98,26 +70,6 @@ export const Dashboard = () => {
   const [mathGaps, setMathGaps] = useState<GapSlot[]>([]);
 
   const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
-  const [results, setResults] = useState<StudentResult[]>([]);
-  const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
-  const [hadTwoConnections, setHadTwoConnections] = useState(false);
-  const [connectionWarning, setConnectionWarning] = useState(false);
-  // Live-Fortschritt pro Schüler: Name -> Index des aktuellen Wortes.
-  const [liveProgress, setLiveProgress] = useState<Record<string, number>>({});
-
-  // Der abonnierte Realtime-Channel. Broadcasts (send) funktionieren nur auf
-  // einem bereits abonnierten Channel, daher halten wir genau diese Instanz fest
-  // und verwenden sie für alle Sende-Aktionen wieder.
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  // Station mode RAM state
-  const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
-  const stationStatesRef = useRef<Map<number, StationStudentState>>(new Map());
-
-  useEffect(() => {
-    stationStatesRef.current = stationStates;
-  }, [stationStates]);
-  
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
   const gameMode = useGameStore((state) => state.gameMode);
@@ -135,137 +87,24 @@ export const Dashboard = () => {
   const showStars = useGameStore((state) => state.showStars);
   const setShowStars = useGameStore((state) => state.setShowStars);
 
-  const handleOpenLobby = async () => {
-    if (words.length === 0) {
-      alert("Bitte füge zuerst Wörter hinzu!");
-      return;
-    }
-    setHadTwoConnections(false);
-
-    // Falls bereits ein Channel offen ist (z. B. erneuter Klick auf "Lobby"),
-    // diesen zuerst sauber entfernen, um doppelte Abos zu vermeiden.
-    if (channelRef.current) {
-      await supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    const channel = supabase.channel(`room-${roomCode}`);
-    channelRef.current = channel;
-
-    channel.on(
-      'broadcast',
-      { event: 'student-joined' },
-      (payload) => {
-        if (payload.payload?.name) {
-          setStudentsInLobby((prev) => {
-            if (!prev.includes(payload.payload.name)) {
-              const next = [...prev, payload.payload.name];
-              if (next.length >= 1) {
-                setHadTwoConnections(true);
-              }
-              return next;
-            }
-            return prev;
-          });
-          
-          if (stepRef.current === 'LIVE') {
-            channel.send({
-              type: 'broadcast',
-              event: 'session-start',
-              payload: buildSessionPayload()
-            });
-          }
-        }
-      }
-    );
-
-    channel.on(
-      'broadcast',
-      { event: 'student-finished' },
-      (payload) => {
-        setResults((prev) => [...prev, payload.payload as StudentResult]);
-      }
-    );
-
-    // Live-Fortschritt der Schüler mitschreiben (für die Schüler-Übersicht).
-    channel.on(
-      'broadcast',
-      { event: 'student-progress' },
-      (payload) => {
-        const { name, index } = payload.payload;
-        if (typeof name === 'string' && typeof index === 'number') {
-          setLiveProgress((prev) => ({ ...prev, [name]: index }));
-        }
-      }
-    );
-
-    // Station mode listeners
-    channel.on(
-      'broadcast',
-      { event: 'request-station-state' },
-      (payload) => {
-        const { studentNumber } = payload.payload;
-        const current = stationStatesRef.current.get(studentNumber) || { currentIndex: 0, peeks: 0 };
-        channel.send({
-          type: 'broadcast',
-          event: 'sync-station-state',
-          payload: { studentNumber, ...current }
-        });
-      }
-    );
-
-    channel.on(
-      'broadcast',
-      { event: 'update-station-state' },
-      (payload) => {
-        const { studentNumber, currentIndex, peeks } = payload.payload;
-        setStationStates((prev) => {
-          const next = new Map(prev);
-          next.set(studentNumber, { currentIndex, peeks });
-          return next;
-        });
-      }
-    );
-
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        setConnectionWarning(false);
-        setCurrentStep('LOBBY');
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        setConnectionWarning(true);
-      }
-    });
-  };
-
-  const handleStartSession = async () => {
-    // Auf dem bereits abonnierten Lobby-Channel senden – sonst kommt die
-    // Nachricht bei den Schülern nicht an.
-    if (!channelRef.current) {
-      await handleOpenLobby();
-    }
-    await channelRef.current?.send({
-      type: 'broadcast',
-      event: 'session-start',
-      payload: buildSessionPayload()
-    });
-    setCurrentStep('LIVE');
-  };
-
-  const handleEndSession = async () => {
-    if (channelRef.current) {
-      await channelRef.current.send({ type: 'broadcast', event: 'session-ended' });
-      await supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-    setCurrentStep('IMPORT');
-    setWords([]);
-    setResults([]);
-    setStudentsInLobby([]);
-    setLiveProgress({});
-    setHadTwoConnections(false);
-    setStationStates(new Map());
-    setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
-  };
+  const {
+    results,
+    studentsInLobby,
+    hadTwoConnections,
+    connectionWarning,
+    liveProgress,
+    stationStates,
+    handleOpenLobby,
+    handleStartSession,
+    handleEndSession,
+  } = useDashboardRoom({
+    roomCode,
+    setRoomCode,
+    stepRef,
+    setCurrentStep,
+    wordsLength: words.length,
+    clearWords: () => setWords([]),
+  });
 
   const handleExportCSV = () => {
     if (stationMode) {
