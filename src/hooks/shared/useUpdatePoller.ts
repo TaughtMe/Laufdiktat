@@ -27,12 +27,21 @@ export const useUpdatePoller = ({
     if (!enabled) return;
 
     let cancelled = false;
+    // Verhindert überlappende Prüfungen, falls Intervall und visibilitychange
+    // (fast) gleichzeitig feuern – checkForUpdateReady() dauert bis zu 2s.
+    let inFlight = false;
 
     const check = async () => {
-      const ready = await checkForUpdateReady();
-      if (cancelled) return;
-      if (ready && autoApply) {
-        applyUpdate();
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const ready = await checkForUpdateReady();
+        if (cancelled) return;
+        if (ready && autoApply) {
+          applyUpdate();
+        }
+      } finally {
+        inFlight = false;
       }
     };
 
