@@ -115,6 +115,7 @@ export const Game = () => {
   const startedAtRef = useRef(0);
   const errorsRef = useRef(0);
   const wordErrorsRef = useRef<Record<string, number>>({});
+  const hasSentFinishedRef = useRef(false); // Ergebnis nur einmal pro Runde senden
 
   const [gameState, setGameState] = useState<GameState>('IDLE');
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -178,6 +179,7 @@ export const Game = () => {
     startedAtRef.current = 0;
     errorsRef.current = 0;
     wordErrorsRef.current = {};
+    hasSentFinishedRef.current = false;
     setWords(newWords);
     setGameMode(newMode);
     setBattleOptions(newOptions);
@@ -241,6 +243,8 @@ export const Game = () => {
 
   useEffect(() => {
     if (gameState !== 'FINISHED') return;
+    if (hasSentFinishedRef.current) return; // garantiert nur einmal pro Runde
+    hasSentFinishedRef.current = true;
     // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
     const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
     setFinalDurationMs(durationMs);
