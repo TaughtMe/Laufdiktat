@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { useGameStore } from '../../store/gameStore';
+import { APP_VERSION } from '../../pwa';
 import type { StationStudentState } from '../../types/game';
 
 export interface StudentResult {
@@ -30,6 +31,7 @@ const buildSessionPayload = () => {
     isTtsEnabled: s.isTtsEnabled,
     uebungMaxAttempts: s.uebungMaxAttempts,
     showStars: s.showStars,
+    appVersion: APP_VERSION,
   };
 };
 
@@ -57,6 +59,8 @@ export const useDashboardRoom = ({
 }: UseDashboardRoomArgs) => {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
+  // App-Version je Schüler (aus student-joined), fürs Lobby-Kompatibilitäts-Badge.
+  const [studentVersions, setStudentVersions] = useState<Record<string, string>>({});
   const [hadTwoConnections, setHadTwoConnections] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
   // Live-Fortschritt pro Schüler: Name -> Index des aktuellen Wortes.
@@ -94,6 +98,10 @@ export const useDashboardRoom = ({
 
     channel.on('broadcast', { event: 'student-joined' }, (payload) => {
       if (payload.payload?.name) {
+        const { version } = payload.payload as { name: string; version?: string };
+        if (typeof version === 'string') {
+          setStudentVersions((prev) => ({ ...prev, [payload.payload.name]: version }));
+        }
         setStudentsInLobby((prev) => {
           if (!prev.includes(payload.payload.name)) {
             const next = [...prev, payload.payload.name];
@@ -181,6 +189,7 @@ export const useDashboardRoom = ({
     clearWords();
     setResults([]);
     setStudentsInLobby([]);
+    setStudentVersions({});
     setLiveProgress({});
     setHadTwoConnections(false);
     setStationStates(new Map());
@@ -190,6 +199,7 @@ export const useDashboardRoom = ({
   return {
     results,
     studentsInLobby,
+    studentVersions,
     hadTwoConnections,
     connectionWarning,
     liveProgress,

@@ -32,6 +32,8 @@ export const checkForUpdate = async (): Promise<void> => {
 
 export const getNeedRefresh = () => needRefresh;
 
+export { compareVersions } from './utils/shared/compareVersions';
+
 export const subscribeNeedRefresh = (l: Listener) => {
   listeners.add(l);
   l(needRefresh);

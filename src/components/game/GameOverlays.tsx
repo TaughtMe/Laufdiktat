@@ -80,3 +80,45 @@ export const SessionEndedOverlay = ({ onBack }: { onBack: () => void }) => (
     </div>
   </div>
 );
+
+/**
+ * Vollbild-Hinweis, wenn die App-Version des Geräts nicht zur laufenden
+ * Sitzung passt. Bei "newer" wird nichts automatisch versucht (ein
+ * zuverlässiges Downgrade ist über eine PWA nicht möglich); bei "older"
+ * läuft im Hintergrund bereits ein Update-Versuch (siehe Game.tsx).
+ */
+export const VersionMismatchOverlay = ({
+  current,
+  required,
+  newer,
+  onBack,
+}: {
+  current: string;
+  required: string;
+  newer: boolean;
+  onBack: () => void;
+}) => (
+  <div className="fixed inset-0 z-[100] bg-gradient-to-b from-[#0a2a3c] via-[#0d3349] to-[#0a2a3c] flex items-center justify-center p-6">
+    <div className="bg-white/10 backdrop-blur-sm p-8 rounded-2xl shadow-xl border border-white/10 text-center max-w-md w-full animate-in fade-in zoom-in-95 duration-300">
+      <span className="text-6xl mb-4 block">{newer ? '⏳' : '🔄'}</span>
+      <h2 className="text-2xl font-bold text-white mb-2">Version stimmt nicht überein</h2>
+      <p className="text-slate-400 mb-6">
+        Diese Sitzung läuft mit Version {required}.<br />
+        Dein Gerät nutzt Version {current}.<br />
+        {newer
+          ? 'Bitte die Lehrkraft bitten, die Sitzung neu zu öffnen oder die neue Version zu laden.'
+          : 'Dein Gerät wird im Hintergrund aktualisiert. Tut sich nichts, bitte die Seite neu laden.'}
+      </p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="w-full px-6 py-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer text-sm"
+      >
+        Zur Startseite
+      </button>
+    </div>
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+      <LegalLink dark />
+    </div>
+  </div>
+);

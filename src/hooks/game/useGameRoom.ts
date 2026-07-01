@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
+import { APP_VERSION } from '../../pwa';
 import type { WordItem, GameMode, BattleOptions, AttackType } from '../../types/game';
 
 export interface SessionStartData {
@@ -11,6 +12,8 @@ export interface SessionStartData {
   isTtsEnabled?: boolean;
   uebungMaxAttempts?: number;
   showStars?: boolean;
+  /** App-Version der Lehrkraft zum Zeitpunkt des Sendens (Kompatibilitäts-Check). */
+  appVersion?: string;
 }
 
 interface UseGameRoomArgs {
@@ -82,7 +85,7 @@ export const useGameRoom = ({
             await channel.send({
               type: 'broadcast',
               event: 'student-joined',
-              payload: { name: studentName },
+              payload: { name: studentName, version: APP_VERSION },
             });
             // Eigenen Fortschritt ankündigen und den der anderen abfragen.
             await channel.send({

@@ -3,7 +3,7 @@ import type { GameState, GameMetrics, AttackType } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { StationGame } from './StationGame';
-import { ExitConfirm, SessionEndedOverlay } from '../components/game/GameOverlays';
+import { ExitConfirm, SessionEndedOverlay, VersionMismatchOverlay } from '../components/game/GameOverlays';
 import { useExitGuard } from '../hooks/game/useExitGuard';
 import { useGameRoom, type SessionStartData } from '../hooks/game/useGameRoom';
 import { useBattleMode } from '../hooks/battle/useBattleMode';
@@ -11,6 +11,7 @@ import { LegalLink } from '../components/shared/LegalLink';
 import { computeStars, computeSpeedPoints } from '../utils/game/scoring';
 import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
+import { APP_VERSION, checkForUpdate, applyUpdate, getNeedRefresh, compareVersions } from '../pwa';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -58,6 +59,8 @@ export const Game = () => {
   const [sessionEnded, setSessionEnded] = useState(false);
   // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
   const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
+  // Version der Sitzung passt nicht zur eigenen App-Version (siehe onSessionStart).
+  const [versionMismatch, setVersionMismatch] = useState<{ required: string; newer: boolean } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const karaokeRef = useRef<HTMLDivElement>(null);
@@ -73,6 +76,21 @@ export const Game = () => {
 
   // Eingehende Sitzung übernehmen (neue Runde -> alles zurücksetzen).
   const onSessionStart = useCallback((data: SessionStartData) => {
+    // Passt die eigene App-Version nicht zur Sitzung, Übernahme abbrechen und
+    // stattdessen einen Hinweis zeigen (siehe VersionMismatchOverlay unten).
+    if (data.appVersion && data.appVersion !== APP_VERSION) {
+      const isOlder = compareVersions(APP_VERSION, data.appVersion) < 0;
+      setVersionMismatch({ required: data.appVersion, newer: !isOlder });
+      if (isOlder) {
+        // Eigenes Gerät ist älter -> Update versuchen, danach automatisch neu laden.
+        checkForUpdate().then(() => {
+          if (getNeedRefresh()) applyUpdate();
+        });
+      }
+      return;
+    }
+    setVersionMismatch(null);
+
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars } = data;
     setSessionEnded(false);
     setCurrentWordIndex(0);
@@ -172,6 +190,18 @@ export const Game = () => {
     const el = karaokeRef.current?.querySelector('[data-active="true"]');
     el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [inputValue, copyMode]);
+
+  // Version passt nicht zur Sitzung → Hinweis statt Spielstart.
+  if (versionMismatch) {
+    return (
+      <VersionMismatchOverlay
+        current={APP_VERSION}
+        required={versionMismatch.required}
+        newer={versionMismatch.newer}
+        onBack={() => navigate('/')}
+      />
+    );
+  }
 
   // Station mode: delegate to separate component (AFTER all hooks)
   if (stationMode) return <StationGame />;
