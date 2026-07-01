@@ -1,7 +1,7 @@
 import { registerSW } from 'virtual:pwa-register';
 
-/** Aktuelle App-Version (mit dem Mathe-Teil: 2.0.0). */
-export const APP_VERSION = '2.0.0';
+/** Aktuelle App-Version, synchron mit package.json. */
+export const APP_VERSION = '2.1.0';
 
 type Listener = (needRefresh: boolean) => void;
 const listeners = new Set<Listener>();
