@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildCsvContent } from './exportUtils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { buildCsvContent, exportResultsToCSV } from './exportUtils';
 
 describe('buildCsvContent (Stationen-Format, ohne Details)', () => {
   it('nutzt die einfachen Header ohne Fehler/Versuche', () => {
@@ -75,5 +75,44 @@ describe('buildCsvContent (BOM)', () => {
   it('beginnt mit einem UTF-8-BOM', () => {
     const csv = buildCsvContent([{ name: 'Igel', reachedStation: 1, progressPercent: 50 }]);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
+  });
+});
+
+describe('exportResultsToCSV (Download-Trigger)', () => {
+  const fakeLink = { href: '', download: '', click: vi.fn(), setAttribute: vi.fn() };
+  const createObjectURL = vi.fn(() => 'blob:fake-url');
+  const revokeObjectURL = vi.fn();
+  const createElement = vi.fn(() => fakeLink);
+  const appendChild = vi.fn();
+  const removeChild = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal('document', { createElement, body: { appendChild, removeChild } });
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    fakeLink.click.mockClear();
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    createElement.mockClear();
+    appendChild.mockClear();
+    removeChild.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('erzeugt einen Download-Link, klickt ihn und räumt danach auf', () => {
+    exportResultsToCSV([{ name: 'Igel', reachedStation: 1, progressPercent: 50 }]);
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(createElement).toHaveBeenCalledWith('a');
+    expect(fakeLink.setAttribute).toHaveBeenCalledWith(
+      'download',
+      expect.stringMatching(/^laufdiktat_ergebnisse_\d{4}-\d{2}-\d{2}\.csv$/)
+    );
+    expect(appendChild).toHaveBeenCalledWith(fakeLink);
+    expect(fakeLink.click).toHaveBeenCalledTimes(1);
+    expect(removeChild).toHaveBeenCalledWith(fakeLink);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
   });
 });
