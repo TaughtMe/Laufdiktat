@@ -30,6 +30,7 @@ import { NumberStepper } from '../components/shared/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { LegalLink } from '../components/shared/LegalLink';
 import { VersionBadge } from '../components/shared/VersionBadge';
+import { APP_VERSION } from '../pwa';
 import type { GameMode } from '../types/game';
 import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
 import { computeStars } from '../utils/game/scoring';
@@ -77,6 +78,7 @@ export const Dashboard = () => {
   const {
     results,
     studentsInLobby,
+    studentVersions,
     hadTwoConnections,
     connectionWarning,
     liveProgress,
@@ -1046,23 +1048,39 @@ export const Dashboard = () => {
                       </span>
                     </h3>
                     <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto w-full animate-in zoom-in-95 duration-300">
-                      {studentsInLobby.map((name, i) => (
-                        <div 
-                          key={i}
-                          className="rounded-2xl border p-4 flex flex-col items-center text-center transition-all border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm"
-                        >
-                          <AnimalAvatar studentName={name} className="w-14 h-14 mb-2" />
-                          <span className="text-sm font-bold text-darkteal-800 dark:text-white truncate w-full">
-                            {name}
-                          </span>
-                          <div className="flex items-center gap-1.5 mt-2 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1 rounded-full border border-emerald-100/30 dark:border-emerald-800/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span className="text-[10px] text-emerald-700 dark:text-emerald-450 font-bold uppercase tracking-wider">
-                              Online
+                      {studentsInLobby.map((name, i) => {
+                        const studentVersion = studentVersions[name];
+                        const versionOk = !studentVersion || studentVersion === APP_VERSION;
+                        return (
+                          <div
+                            key={i}
+                            className="rounded-2xl border p-4 flex flex-col items-center text-center transition-all border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm"
+                          >
+                            <AnimalAvatar studentName={name} className="w-14 h-14 mb-2" />
+                            <span className="text-sm font-bold text-darkteal-800 dark:text-white truncate w-full">
+                              {name}
                             </span>
+                            {studentVersion && (
+                              <span
+                                className={`text-[10px] font-bold mt-0.5 ${
+                                  versionOk
+                                    ? 'text-slate-350 dark:text-slate-550'
+                                    : 'text-amber-600 dark:text-amber-400'
+                                }`}
+                                title={versionOk ? undefined : `Erwartet: v${APP_VERSION}`}
+                              >
+                                v{studentVersion} {versionOk ? '✓' : '⚠ Update nötig'}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-2 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1 rounded-full border border-emerald-100/30 dark:border-emerald-800/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span className="text-[10px] text-emerald-700 dark:text-emerald-450 font-bold uppercase tracking-wider">
+                                Online
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
