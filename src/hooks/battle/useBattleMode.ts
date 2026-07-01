@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AttackType, BattleOptions } from '../types/game';
+import type { AttackType, BattleOptions } from '../../types/game';
 
 // Wie lange ein Angriff wirkt (ms) und wie schnell sich die Ladung füllt.
 const ATTACK_DURATION_MS = 15000;

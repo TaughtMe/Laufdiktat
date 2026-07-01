@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { supabase } from '../utils/supabaseClient';
-import type { WordItem, GameMode, BattleOptions, AttackType } from '../types/game';
+import { supabase } from '../../utils/supabaseClient';
+import type { WordItem, GameMode, BattleOptions, AttackType } from '../../types/game';
 
 export interface SessionStartData {
   words: WordItem[];

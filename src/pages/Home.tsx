@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Dices, Camera, LogIn } from 'lucide-react';
-import { AnimalAvatar } from '../components/AnimalAvatar';
-import { QrScannerOverlay } from '../components/QrScannerOverlay';
+import { AnimalAvatar } from '../components/shared/AnimalAvatar';
+import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
-import { VersionBadge } from '../components/VersionBadge';
+import { VersionBadge } from '../components/shared/VersionBadge';
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [

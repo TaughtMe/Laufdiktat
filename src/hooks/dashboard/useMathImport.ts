@@ -6,8 +6,8 @@ import {
   buildGapTask,
   type MathOp,
   type GapSlot,
-} from '../utils/mathTasks';
-import type { WordItem } from '../types/game';
+} from '../../utils/dashboard/mathTasks';
+import type { WordItem } from '../../types/game';
 
 type ImportMode = 'lines' | 'sentences' | 'manual' | 'math';
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { supabase } from '../utils/supabaseClient';
-import { useGameStore } from '../store/gameStore';
-import type { StationStudentState } from '../types/game';
+import { supabase } from '../../utils/supabaseClient';
+import { useGameStore } from '../../store/gameStore';
+import type { StationStudentState } from '../../types/game';
 
 export interface StudentResult {
   name?: string;

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import { useGameStore } from '../store/gameStore';
-import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
-import { useExitGuard } from '../hooks/useExitGuard';
-import { LegalLink } from '../components/LegalLink';
+import { ExitConfirm, SessionEndedOverlay } from '../components/game/GameOverlays';
+import { useExitGuard } from '../hooks/game/useExitGuard';
+import { LegalLink } from '../components/shared/LegalLink';
 
 type StationView = 'GRID' | 'ACTIVE';
 

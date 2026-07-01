@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { WordItem } from '../types/game';
+import type { WordItem } from '../../types/game';
 
 interface Chunk {
   id: string;

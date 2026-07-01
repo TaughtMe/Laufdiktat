@@ -3,12 +3,12 @@ import type { GameState, GameMetrics, AttackType } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { StationGame } from './StationGame';
-import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
-import { useExitGuard } from '../hooks/useExitGuard';
-import { useGameRoom, type SessionStartData } from '../hooks/useGameRoom';
-import { useBattleMode } from '../hooks/useBattleMode';
-import { LegalLink } from '../components/LegalLink';
-import { computeStars, computeSpeedPoints } from '../utils/scoring';
+import { ExitConfirm, SessionEndedOverlay } from '../components/game/GameOverlays';
+import { useExitGuard } from '../hooks/game/useExitGuard';
+import { useGameRoom, type SessionStartData } from '../hooks/game/useGameRoom';
+import { useBattleMode } from '../hooks/battle/useBattleMode';
+import { LegalLink } from '../components/shared/LegalLink';
+import { computeStars, computeSpeedPoints } from '../utils/game/scoring';
 import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
 

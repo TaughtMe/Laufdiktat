@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LegalLink } from './LegalLink';
+import { LegalLink } from '../shared/LegalLink';
 
 /**
  * Bestätigung beim Verlassen des Spiels. Der "Verlassen"-Button ist die ersten

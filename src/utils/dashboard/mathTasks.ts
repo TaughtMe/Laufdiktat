@@ -1,4 +1,4 @@
-import type { WordItem } from '../types/game';
+import type { WordItem } from '../../types/game';
 
 export type MathOp = '+' | '-' | '*' | '/';
 

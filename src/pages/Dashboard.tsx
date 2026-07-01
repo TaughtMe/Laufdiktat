@@ -20,19 +20,19 @@ import {
   Calculator
 } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
-import { useDashboardRoom } from '../hooks/useDashboardRoom';
-import { useManualHighlighting } from '../hooks/useManualHighlighting';
-import { useMathImport } from '../hooks/useMathImport';
-import { parseCSV } from '../utils/csvParser';
-import { type GapSlot } from '../utils/mathTasks';
-import { AnimalAvatar } from '../components/AnimalAvatar';
-import { NumberStepper } from '../components/NumberStepper';
-import { DashboardOnboarding, ONBOARDING_KEY } from '../components/DashboardOnboarding';
-import { LegalLink } from '../components/LegalLink';
-import { VersionBadge } from '../components/VersionBadge';
+import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
+import { useManualHighlighting } from '../hooks/dashboard/useManualHighlighting';
+import { useMathImport } from '../hooks/dashboard/useMathImport';
+import { parseCSV } from '../utils/dashboard/csvParser';
+import { type GapSlot } from '../utils/dashboard/mathTasks';
+import { AnimalAvatar } from '../components/shared/AnimalAvatar';
+import { NumberStepper } from '../components/shared/NumberStepper';
+import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
+import { LegalLink } from '../components/shared/LegalLink';
+import { VersionBadge } from '../components/shared/VersionBadge';
 import type { GameMode } from '../types/game';
-import { exportResultsToCSV } from '../utils/exportUtils';
-import { computeStars } from '../utils/scoring';
+import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
+import { computeStars } from '../utils/game/scoring';
 
 type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 

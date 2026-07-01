@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { APP_VERSION, applyUpdate, checkForUpdate, getNeedRefresh, subscribeNeedRefresh } from '../pwa';
+import { APP_VERSION, applyUpdate, checkForUpdate, getNeedRefresh, subscribeNeedRefresh } from '../../pwa';
 
 /**
  * Kleiner Versions-Button unten rechts.
