@@ -70,6 +70,47 @@
   }
 }
 
+/* Minimalistische Scrollbars: dünner grauer Balken statt der wuchtigen
+   weißen Standard-Box des Browsers. Track bleibt unsichtbar, der Balken
+   wird beim Hover über den jeweiligen Scrollbereich etwas breiter
+   ("wachsend") statt seine Größe abrupt zu ändern. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.45) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+  transition: width 0.15s ease, height 0.15s ease;
+}
+
+*:hover::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(148 163 184 / 0.45);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184 / 0.7);
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background-color: rgb(100 116 139 / 0.5);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184 / 0.65);
+}
+
 /* Background Animation for Home */
 .bg-anim-container {
   position: absolute;
