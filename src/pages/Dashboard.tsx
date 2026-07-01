@@ -277,7 +277,7 @@ export const Dashboard = () => {
         {/* Navigation Tabs – scrollt intern, statt die ganze Seite zu verbreitern */}
         <nav className="flex items-center gap-5 sm:gap-8 flex-1 min-w-0 overflow-x-auto">
           {(['IMPORT', 'SETTINGS', 'LOBBY', 'LIVE'] as DashboardStep[]).map((step) => {
-            const label = step === 'IMPORT' ? 'Import' : step === 'SETTINGS' ? 'Settings' : step === 'LOBBY' ? 'Lobby' : 'Live';
+            const label = step === 'IMPORT' ? 'Import' : step === 'SETTINGS' ? 'Einstellungen' : step === 'LOBBY' ? 'Lobby' : 'Live';
             const isActive = currentStep === step;
             const isSelectable = step === 'IMPORT' || words.length > 0;
 
