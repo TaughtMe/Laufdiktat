@@ -5,6 +5,32 @@ import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
+import { checkForUpdate, applyUpdate, getNeedRefresh } from '../pwa';
+
+// Merkt sich einen angestoßenen Beitritt über einen Update-bedingten Reload
+// hinweg, damit der Schüler nach dem Aktualisieren automatisch weiterkommt.
+const PENDING_JOIN_KEY = 'pendingJoin';
+const PENDING_ROOM_KEY = 'pendingJoinRoomCode';
+const PENDING_NAME_KEY = 'pendingJoinStudentName';
+
+const readPendingJoin = (): { code: string; name: string } | null => {
+  try {
+    if (sessionStorage.getItem(PENDING_JOIN_KEY) !== '1') return null;
+    const code = sessionStorage.getItem(PENDING_ROOM_KEY);
+    const name = sessionStorage.getItem(PENDING_NAME_KEY);
+    return code && name ? { code, name } : null;
+  } catch {
+    return null;
+  }
+};
+
+const clearPendingJoin = () => {
+  try {
+    sessionStorage.removeItem(PENDING_JOIN_KEY);
+    sessionStorage.removeItem(PENDING_ROOM_KEY);
+    sessionStorage.removeItem(PENDING_NAME_KEY);
+  } catch { /* Privater Modus o.ä. – kein Beinbruch */ }
+};
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -49,21 +75,52 @@ export const Home = () => {
   const [roomCode, setRoomCode] = useState(() => searchParams.get('room') || '');
   const [studentName, setStudentName] = useState(getRandomName);
   const [scanning, setScanning] = useState(false);
+  const [joining, setJoining] = useState(false);
   const resetGameData = useGameStore((s) => s.resetGameData);
 
-  // Beim Öffnen der Startseite den Service Worker auf eine neue Version prüfen
-  // lassen (greift mit dem Auto-Reload, damit kein alter Build hängen bleibt).
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => reg?.update()).catch(() => {});
-    }
-  }, []);
-
   // Sauberer Beitritt: alten Spielzustand verwerfen, dann ins Spiel.
-  const joinGame = useCallback((code: string, name: string) => {
+  const enterGame = useCallback((code: string, name: string) => {
+    clearPendingJoin();
     resetGameData();
     navigate('/game', { state: { roomCode: code, studentName: name } });
   }, [navigate, resetGameData]);
+
+  // Beim Öffnen der Startseite prüfen, ob ein Beitritt über einen
+  // Update-Reload hinweg fortgesetzt werden muss (siehe joinGame unten).
+  useEffect(() => {
+    const pending = readPendingJoin();
+    if (pending) {
+      enterGame(pending.code, pending.name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Zusätzlich generell auf eine neue Version prüfen (lässt z. B. den
+  // VersionBadge-Punkt aufleuchten), auch wenn gerade kein Beitritt läuft.
+  useEffect(() => {
+    checkForUpdate();
+  }, []);
+
+  // Beitritt: zuerst auf eine neue Version prüfen und sie ggf. anwenden, damit
+  // Schülergeräte nicht mit einer veralteten PWA-Version ins Spiel starten.
+  // Der Beitrittswunsch wird dafür in sessionStorage gemerkt und nach einem
+  // Update-Reload oben automatisch fortgesetzt.
+  const joinGame = useCallback(async (code: string, name: string) => {
+    try {
+      sessionStorage.setItem(PENDING_JOIN_KEY, '1');
+      sessionStorage.setItem(PENDING_ROOM_KEY, code);
+      sessionStorage.setItem(PENDING_NAME_KEY, name);
+    } catch { /* Privater Modus o.ä. – Update-Check trotzdem versuchen */ }
+
+    setJoining(true);
+    await checkForUpdate();
+    if (getNeedRefresh()) {
+      applyUpdate(); // lädt neu; der Beitritt wird oben automatisch fortgesetzt
+      return;
+    }
+    setJoining(false);
+    enterGame(code, name);
+  }, [enterGame]);
 
   // QR-Code-Ergebnis: Raum-Code aus der URL (?room=) extrahieren, sonst
   // Zahlenfolge. Anschließend automatisch beitreten (Warte-auf-Lehrer-Screen).
@@ -162,11 +219,12 @@ export const Home = () => {
             </button>
           </div>
           
-          <button 
+          <button
             onClick={handleStartDictation}
-            className="w-full bg-brand-500 hover:bg-brand-600 text-white text-base font-bold py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-4"
+            disabled={joining}
+            className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-bold py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-4"
           >
-            Beitreten
+            {joining ? 'Suche nach Update…' : 'Beitreten'}
           </button>
         </div>
       </div>
