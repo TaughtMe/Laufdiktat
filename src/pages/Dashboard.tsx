@@ -31,6 +31,7 @@ import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/Das
 import { LegalLink } from '../components/shared/LegalLink';
 import { VersionBadge } from '../components/shared/VersionBadge';
 import { APP_VERSION } from '../pwa';
+import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import type { GameMode } from '../types/game';
 import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
 import { computeStars } from '../utils/game/scoring';
@@ -39,6 +40,12 @@ type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
+
+  // Regelmäßig auf ein neues Update prüfen, aber nie automatisch anwenden –
+  // ein Reload während Lobby/Live-Session würde den Raum kappen. Der Lehrkraft
+  // bleibt die Entscheidung (VersionBadge leuchtet, Klick wendet an).
+  useUpdatePoller({ enabled: true, intervalMs: 5 * 60 * 1000, autoApply: false });
+
   const [currentStep, setCurrentStep] = useState<DashboardStep>('IMPORT');
   const stepRef = useRef<DashboardStep>('IMPORT');
   // Funktionsübersicht nur beim ersten Öffnen des Dashboards zeigen.

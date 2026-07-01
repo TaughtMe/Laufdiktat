@@ -5,8 +5,9 @@ import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
-import { checkForUpdate, checkForUpdateReady, applyUpdate } from '../pwa';
+import { checkForUpdateReady, applyUpdate } from '../pwa';
 import { savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
+import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -73,11 +74,11 @@ export const Home = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Zusätzlich generell auf eine neue Version prüfen (lässt z. B. den
-  // VersionBadge-Punkt aufleuchten), auch wenn gerade kein Beitritt läuft.
-  useEffect(() => {
-    checkForUpdate();
-  }, []);
+  // Regelmäßig auf ein neues Update prüfen. Auf der Startseite ist Auto-Apply
+  // unbedenklich (kein Spielstand, der verloren gehen könnte) – das fängt den
+  // häufigsten Fall ab ("Lehrer frisch deployed, Schülergerät noch veraltet"),
+  // ohne dass der Schüler erst einen Raum betreten muss.
+  useUpdatePoller({ enabled: true, intervalMs: 3 * 60 * 1000, autoApply: true });
 
   // Beitritt: zuerst zuverlässig auf ein fertig installiertes Update warten
   // (checkForUpdateReady wartet – anders als ein reines reg.update() – auch

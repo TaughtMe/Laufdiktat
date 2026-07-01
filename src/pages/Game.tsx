@@ -13,6 +13,7 @@ import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
 import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
 import { clearPendingJoin } from '../utils/game/pendingJoin';
+import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -203,6 +204,10 @@ export const Game = () => {
     clearPendingJoin();
     navigate('/');
   }, [navigate]);
+
+  // Nur prüfen, nie automatisch anwenden – ein Reload mitten im Tippen/Aufdecken
+  // würde Fortschritt kosten. Nur während IDLE (zwischen den Wörtern) aktiv.
+  useUpdatePoller({ enabled: gameState === 'IDLE', intervalMs: 5 * 60 * 1000, autoApply: false });
 
   // Abtipp-Phase: aktiven Buchstaben mittig in den Blick scrollen (Karaoke).
   useEffect(() => {
