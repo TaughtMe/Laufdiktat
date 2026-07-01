@@ -30,6 +30,35 @@ export const checkForUpdate = async (): Promise<void> => {
   await reg?.update();
 };
 
+/**
+ * Wie checkForUpdate, wartet aber zusätzlich bis zu timeoutMs darauf, dass ein
+ * gefundenes Update tatsächlich fertig installiert ist (needRefresh wird erst
+ * asynchron true, NACHDEM reg.update() zurückkehrt – reines Prüfen auf
+ * reg.update() sagt nur "Suche gestartet", nicht "Update ist bereit").
+ * Gibt true zurück, sobald applyUpdate() sicher etwas zum Anwenden hat.
+ */
+export const checkForUpdateReady = async (timeoutMs = 2000): Promise<boolean> => {
+  if (!('serviceWorker' in navigator)) return false;
+  const reg = await navigator.serviceWorker.getRegistration();
+  await reg?.update();
+
+  if (getNeedRefresh()) return true;
+
+  return new Promise<boolean>((resolve) => {
+    let unsubscribe = () => {};
+    const timeout = window.setTimeout(() => {
+      unsubscribe();
+      resolve(getNeedRefresh());
+    }, timeoutMs);
+    unsubscribe = subscribeNeedRefresh((need) => {
+      if (!need) return;
+      window.clearTimeout(timeout);
+      unsubscribe();
+      resolve(true);
+    });
+  });
+};
+
 export const getNeedRefresh = () => needRefresh;
 
 export { compareVersions } from './utils/shared/compareVersions';

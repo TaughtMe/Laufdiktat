@@ -5,32 +5,8 @@ import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
-import { checkForUpdate, applyUpdate, getNeedRefresh } from '../pwa';
-
-// Merkt sich einen angestoßenen Beitritt über einen Update-bedingten Reload
-// hinweg, damit der Schüler nach dem Aktualisieren automatisch weiterkommt.
-const PENDING_JOIN_KEY = 'pendingJoin';
-const PENDING_ROOM_KEY = 'pendingJoinRoomCode';
-const PENDING_NAME_KEY = 'pendingJoinStudentName';
-
-const readPendingJoin = (): { code: string; name: string } | null => {
-  try {
-    if (sessionStorage.getItem(PENDING_JOIN_KEY) !== '1') return null;
-    const code = sessionStorage.getItem(PENDING_ROOM_KEY);
-    const name = sessionStorage.getItem(PENDING_NAME_KEY);
-    return code && name ? { code, name } : null;
-  } catch {
-    return null;
-  }
-};
-
-const clearPendingJoin = () => {
-  try {
-    sessionStorage.removeItem(PENDING_JOIN_KEY);
-    sessionStorage.removeItem(PENDING_ROOM_KEY);
-    sessionStorage.removeItem(PENDING_NAME_KEY);
-  } catch { /* Privater Modus o.ä. – kein Beinbruch */ }
-};
+import { checkForUpdate, checkForUpdateReady, applyUpdate } from '../pwa';
+import { savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -79,8 +55,10 @@ export const Home = () => {
   const resetGameData = useGameStore((s) => s.resetGameData);
 
   // Sauberer Beitritt: alten Spielzustand verwerfen, dann ins Spiel.
+  // Räumt pendingJoin bewusst NICHT auf – das übernimmt erst Game.tsx, sobald
+  // die Version passt und die Sitzung wirklich übernommen wurde. Sonst ginge
+  // der Raumcode verloren, falls ein Versions-Mismatch noch einen Reload auslöst.
   const enterGame = useCallback((code: string, name: string) => {
-    clearPendingJoin();
     resetGameData();
     navigate('/game', { state: { roomCode: code, studentName: name } });
   }, [navigate, resetGameData]);
@@ -101,20 +79,18 @@ export const Home = () => {
     checkForUpdate();
   }, []);
 
-  // Beitritt: zuerst auf eine neue Version prüfen und sie ggf. anwenden, damit
-  // Schülergeräte nicht mit einer veralteten PWA-Version ins Spiel starten.
-  // Der Beitrittswunsch wird dafür in sessionStorage gemerkt und nach einem
+  // Beitritt: zuerst zuverlässig auf ein fertig installiertes Update warten
+  // (checkForUpdateReady wartet – anders als ein reines reg.update() – auch
+  // auf das asynchrone "needRefresh") und es ggf. anwenden, damit Schülergeräte
+  // nicht mit einer veralteten PWA-Version ins Spiel starten. Der
+  // Beitrittswunsch wird dafür in sessionStorage gemerkt und nach einem
   // Update-Reload oben automatisch fortgesetzt.
   const joinGame = useCallback(async (code: string, name: string) => {
-    try {
-      sessionStorage.setItem(PENDING_JOIN_KEY, '1');
-      sessionStorage.setItem(PENDING_ROOM_KEY, code);
-      sessionStorage.setItem(PENDING_NAME_KEY, name);
-    } catch { /* Privater Modus o.ä. – Update-Check trotzdem versuchen */ }
+    savePendingJoin(code, name);
 
     setJoining(true);
-    await checkForUpdate();
-    if (getNeedRefresh()) {
+    const updateReady = await checkForUpdateReady();
+    if (updateReady) {
       applyUpdate(); // lädt neu; der Beitritt wird oben automatisch fortgesetzt
       return;
     }

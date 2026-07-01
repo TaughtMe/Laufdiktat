@@ -11,7 +11,8 @@ import { LegalLink } from '../components/shared/LegalLink';
 import { computeStars, computeSpeedPoints } from '../utils/game/scoring';
 import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
-import { APP_VERSION, checkForUpdate, applyUpdate, getNeedRefresh, compareVersions } from '../pwa';
+import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
+import { clearPendingJoin } from '../utils/game/pendingJoin';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -60,7 +61,8 @@ export const Game = () => {
   // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
   const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
   // Version der Sitzung passt nicht zur eigenen App-Version (siehe onSessionStart).
-  const [versionMismatch, setVersionMismatch] = useState<{ required: string; newer: boolean } | null>(null);
+  // updating: eigenes Gerät ist älter, Update-Versuch läuft noch im Hintergrund.
+  const [versionMismatch, setVersionMismatch] = useState<{ required: string; newer: boolean; updating: boolean } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const karaokeRef = useRef<HTMLDivElement>(null);
@@ -78,18 +80,28 @@ export const Game = () => {
   const onSessionStart = useCallback((data: SessionStartData) => {
     // Passt die eigene App-Version nicht zur Sitzung, Übernahme abbrechen und
     // stattdessen einen Hinweis zeigen (siehe VersionMismatchOverlay unten).
+    // pendingJoin bleibt dabei bewusst erhalten, bis die Version passt – siehe
+    // Home.tsx/pendingJoin.ts: sonst ginge der Raumcode bei einem durch den
+    // Mismatch ausgelösten Reload verloren.
     if (data.appVersion && data.appVersion !== APP_VERSION) {
       const isOlder = compareVersions(APP_VERSION, data.appVersion) < 0;
-      setVersionMismatch({ required: data.appVersion, newer: !isOlder });
+      setVersionMismatch({ required: data.appVersion, newer: !isOlder, updating: isOlder });
       if (isOlder) {
-        // Eigenes Gerät ist älter -> Update versuchen, danach automatisch neu laden.
-        checkForUpdate().then(() => {
-          if (getNeedRefresh()) applyUpdate();
+        // Eigenes Gerät ist älter -> zuverlässig auf ein fertiges Update warten
+        // (checkForUpdateReady), dann automatisch neu laden.
+        checkForUpdateReady().then((ready) => {
+          if (ready) {
+            applyUpdate();
+          } else {
+            setVersionMismatch((prev) => (prev ? { ...prev, updating: false } : prev));
+          }
         });
       }
       return;
     }
     setVersionMismatch(null);
+    // Version passt: der Beitritt ist jetzt wirklich abgeschlossen.
+    clearPendingJoin();
 
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars } = data;
     setSessionEnded(false);
@@ -184,6 +196,14 @@ export const Game = () => {
   const requestExit = useCallback(() => setShowExitConfirm(true), []);
   useExitGuard(!sessionEnded && gameState !== 'FINISHED' && !!roomCode, requestExit);
 
+  // Bewusstes Verlassen zurück zur Startseite: räumt einen noch offenen
+  // pendingJoin (z. B. bei einem Versions-Mismatch), damit Home.tsx beim
+  // nächsten Öffnen nicht versucht, denselben Beitritt erneut fortzusetzen.
+  const leaveToHome = useCallback(() => {
+    clearPendingJoin();
+    navigate('/');
+  }, [navigate]);
+
   // Abtipp-Phase: aktiven Buchstaben mittig in den Blick scrollen (Karaoke).
   useEffect(() => {
     if (!copyMode) return;
@@ -198,7 +218,8 @@ export const Game = () => {
         current={APP_VERSION}
         required={versionMismatch.required}
         newer={versionMismatch.newer}
-        onBack={() => navigate('/')}
+        updating={versionMismatch.updating}
+        onBack={leaveToHome}
       />
     );
   }
@@ -207,7 +228,7 @@ export const Game = () => {
   if (stationMode) return <StationGame />;
 
   // Lehrkraft hat die Sitzung beendet → Hinweis mit Zurück-Button.
-  if (sessionEnded) return <SessionEndedOverlay onBack={() => navigate('/')} />;
+  if (sessionEnded) return <SessionEndedOverlay onBack={leaveToHome} />;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameState === 'FINISHED' || words.length === 0) return;
@@ -337,7 +358,7 @@ export const Game = () => {
             </p>
           </div>
           {showExitConfirm && (
-            <ExitConfirm onConfirm={() => navigate('/')} onCancel={() => setShowExitConfirm(false)} />
+            <ExitConfirm onConfirm={leaveToHome} onCancel={() => setShowExitConfirm(false)} />
           )}
           <LegalLink dark className="absolute bottom-4 left-1/2 -translate-x-1/2" />
         </div>
@@ -378,7 +399,7 @@ export const Game = () => {
       <header className="py-4 px-6 flex justify-between items-center z-10">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { if (gameState === 'FINISHED') { navigate('/'); } else { setShowExitConfirm(true); } }}
+            onClick={() => { if (gameState === 'FINISHED') { leaveToHome(); } else { setShowExitConfirm(true); } }}
             className="p-2 -ml-2 rounded-full hover:bg-white/10 text-slate-400 transition-colors cursor-pointer"
             title="Spiel abbrechen und zur Startseite"
           >
@@ -692,7 +713,7 @@ export const Game = () => {
 
               <div className="mt-8 w-full">
                 <button
-                  onClick={() => navigate('/')}
+                  onClick={leaveToHome}
                   className="w-full px-6 py-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer text-sm"
                 >
                   Fertig
@@ -705,7 +726,7 @@ export const Game = () => {
 
       {showExitConfirm && (
         <ExitConfirm
-          onConfirm={() => navigate('/')}
+          onConfirm={leaveToHome}
           onCancel={() => setShowExitConfirm(false)}
         />
       )}
