@@ -2,7 +2,7 @@
 
 Eine interaktive Web-App für das **Laufdiktat** im Unterricht: Schülerinnen und Schüler holen sich Wörter oder Sätze an einem Gerät ab, laufen zurück an ihren Platz und schreiben sie aus dem Gedächtnis. Die Lehrkraft steuert alles über ein Dashboard und sieht den Fortschritt der Klasse in Echtzeit.
 
-Die App läuft als **PWA** (installierbar, offline-fähig) und ist als [Cloudflare Pages](https://pages.cloudflare.com/)-Seite deploybar. Es werden **keine Daten dauerhaft gespeichert** – die Live-Synchronisation läuft über flüchtige Supabase-Broadcasts (siehe [Datenschutz](#datenschutz)).
+Die App ist als **PWA installierbar**; Grundfunktionen können offline geladen werden, **Live-Räume benötigen aber eine Internetverbindung und Supabase Realtime**. Deploybar als [Cloudflare Pages](https://pages.cloudflare.com/)-Seite. Es werden **keine Daten dauerhaft gespeichert** – die Live-Synchronisation läuft über flüchtige Supabase-Broadcasts (siehe [Datenschutz](#datenschutz)).
 
 ## Ablauf in Kürze
 

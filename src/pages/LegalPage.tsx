@@ -32,7 +32,7 @@ export const LegalPage: React.FC = () => {
         {/* Impressum */}
         <section className="space-y-3">
           <h2 className="text-xl font-black text-darkteal-800 dark:text-white">Impressum</h2>
-          <p>Angaben gemäß § 5 TMG / § 18 MStV:</p>
+          <p>Angaben gemäß § 5 DDG / § 18 MStV:</p>
           <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 space-y-1">
             <p><span className="font-semibold">Verantwortlich:</span> Toby Bryson</p>
             <p>
