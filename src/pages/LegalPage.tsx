@@ -108,8 +108,11 @@ export const LegalPage: React.FC = () => {
           <div className="space-y-1">
             <h3 className="font-bold text-darkteal-800 dark:text-white">7. Cookies &amp; Tracking</h3>
             <p>
-              Keine Tracking-Cookies und kein Analyse-Tool. Lokal im Browser wird lediglich gespeichert,
-              ob die Funktionsübersicht bereits gezeigt wurde.
+              Keine Tracking-Cookies und kein Analyse-Tool. Lokal im Browser wird gespeichert, ob die
+              Funktionsübersicht bereits gezeigt wurde (bleibt dauerhaft erhalten). Beim Beitritt eines
+              Schülers werden Raum-Code und Tiername zusätzlich kurzzeitig im Sitzungsspeicher (sessionStorage)
+              abgelegt, um den Beitritt nach einem automatischen App-Update fortzusetzen – das wird spätestens
+              beim Schließen des Tabs automatisch gelöscht.
             </p>
           </div>
 
