@@ -17,13 +17,14 @@ const escape = (val: unknown): string => {
 };
 
 /**
- * Exportiert Schülerergebnisse als CSV (Semikolon-getrennt für deutsches Excel,
- * mit UTF-8-BOM). Optional wird ein "Häufigste Fehler"-Ranking angehängt.
+ * Baut den CSV-Inhalt (Semikolon-getrennt für deutsches Excel, mit UTF-8-BOM).
+ * Optional wird ein "Häufigste Fehler"-Ranking angehängt. Reine Funktion, damit
+ * sie ohne DOM/Blob testbar ist.
  */
-export const exportResultsToCSV = (
+export const buildCsvContent = (
   students: Student[],
   wordErrors?: Array<[string, number]>
-) => {
+): string => {
   const hasDetails = students.some((s) => s.attempts !== undefined || s.errors !== undefined);
   const headers = hasDetails
     ? ['Name', 'Status', 'Fortschritt_Prozent', 'Fehler', 'Versuche', 'Spicker', 'Sterne']
@@ -46,7 +47,17 @@ export const exportResultsToCSV = (
     }
   }
 
-  const csvContent = '﻿' + csvRows.join('\n');
+  return '﻿' + csvRows.join('\n');
+};
+
+/**
+ * Exportiert Schülerergebnisse als CSV-Datei (Download-Dialog im Browser).
+ */
+export const exportResultsToCSV = (
+  students: Student[],
+  wordErrors?: Array<[string, number]>
+) => {
+  const csvContent = buildCsvContent(students, wordErrors);
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
 
