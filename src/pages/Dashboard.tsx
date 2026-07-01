@@ -28,10 +28,12 @@ import { type GapSlot } from '../utils/dashboard/mathTasks';
 import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { NumberStepper } from '../components/shared/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
+import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { LegalLink } from '../components/shared/LegalLink';
 import { VersionBadge } from '../components/shared/VersionBadge';
 import { APP_VERSION } from '../pwa';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
+import { useIsSmallScreen } from '../hooks/shared/useIsSmallScreen';
 import type { GameMode } from '../types/game';
 import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
 import { computeStars } from '../utils/game/scoring';
@@ -45,6 +47,13 @@ export const Dashboard = () => {
   // ein Reload während Lobby/Live-Session würde den Raum kappen. Der Lehrkraft
   // bleibt die Entscheidung (VersionBadge leuchtet, Klick wendet an).
   useUpdatePoller({ enabled: true, intervalMs: 5 * 60 * 1000, autoApply: false });
+
+  // Das Dashboard ist auf Tablet/Laptop ausgelegt; auf schmalen Bildschirmen
+  // zeigen wir statt eines kaputt gequetschten Layouts einen Hinweis (siehe
+  // Render-Ende unten). "Trotzdem öffnen" merkt sich die Entscheidung nur für
+  // diese Sitzung (kein persistenter Zustand nötig).
+  const isSmallScreen = useIsSmallScreen();
+  const [forceMobileDashboard, setForceMobileDashboard] = useState(false);
 
   const [currentStep, setCurrentStep] = useState<DashboardStep>('IMPORT');
   const stepRef = useRef<DashboardStep>('IMPORT');
@@ -241,33 +250,37 @@ export const Dashboard = () => {
     return Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 10);
   })();
 
+  if (isSmallScreen && !forceMobileDashboard) {
+    return <DashboardMobileWarning onContinueAnyway={() => setForceMobileDashboard(true)} />;
+  }
+
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
+    <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900 overflow-x-hidden">
       {showOnboarding && <DashboardOnboarding onClose={dismissOnboarding} />}
       {connectionWarning && (
         <div className="bg-red-500 text-white text-center py-2 text-sm font-medium z-50">
           Verbindung zum Server verloren. Echtzeit-Updates sind derzeit nicht möglich.
         </div>
       )}
-      <header className="py-4 px-8 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-950 flex items-center justify-between z-10">
-        <div className="flex items-center">
-          <button 
+      <header className="py-3 sm:py-4 px-4 sm:px-8 gap-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-950 flex items-center justify-between z-10">
+        <div className="flex items-center shrink-0">
+          <button
             onClick={() => navigate('/')}
             className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex items-center justify-center cursor-pointer"
             title="Zurück zur Startseite"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-xl sm:text-2xl font-bold text-darkteal-800 dark:text-white">Lehrer-Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-darkteal-800 dark:text-white hidden sm:block">Lehrer-Dashboard</h1>
         </div>
-        
-        {/* Navigation Tabs */}
-        <nav className="flex items-center space-x-8">
+
+        {/* Navigation Tabs – scrollt intern, statt die ganze Seite zu verbreitern */}
+        <nav className="flex items-center gap-5 sm:gap-8 flex-1 min-w-0 overflow-x-auto">
           {(['IMPORT', 'SETTINGS', 'LOBBY', 'LIVE'] as DashboardStep[]).map((step) => {
             const label = step === 'IMPORT' ? 'Import' : step === 'SETTINGS' ? 'Settings' : step === 'LOBBY' ? 'Lobby' : 'Live';
             const isActive = currentStep === step;
             const isSelectable = step === 'IMPORT' || words.length > 0;
-            
+
             return (
               <button
                 key={step}
@@ -285,9 +298,9 @@ export const Dashboard = () => {
                   }
                 }}
                 disabled={!isSelectable}
-                className={`relative py-4 px-1 text-sm font-semibold transition-all border-b-2 cursor-pointer disabled:cursor-not-allowed ${
-                  isActive 
-                    ? 'border-brand-500 text-darkteal-800 dark:text-white' 
+                className={`relative py-4 px-1 text-sm font-semibold transition-all border-b-2 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap shrink-0 ${
+                  isActive
+                    ? 'border-brand-500 text-darkteal-800 dark:text-white'
                     : 'border-transparent text-slate-400 dark:text-slate-650 hover:text-slate-600 dark:hover:text-slate-400 disabled:opacity-50'
                 }`}
               >
@@ -298,7 +311,7 @@ export const Dashboard = () => {
         </nav>
 
         {/* User profile icon */}
-        <div className="flex items-center">
+        <div className="flex items-center shrink-0">
           <div className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-600 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
             <User className="w-4 h-4" />
           </div>
@@ -307,7 +320,7 @@ export const Dashboard = () => {
          <main className="flex-1 p-4 sm:p-8">
          <div className="max-w-5xl mx-auto w-full flex flex-col gap-6 sm:gap-8 transition-all duration-300">
           {currentStep === 'IMPORT' && (
-            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 md:h-[950px] min-h-[800px] flex flex-col justify-between">
+            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[auto] md:min-h-[800px] md:h-[950px] flex flex-col justify-between">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-850">
                 <div>
                   <h2 className="text-2xl font-bold text-darkteal-800 dark:text-white">
@@ -333,12 +346,13 @@ export const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Toolbar - Mode Toggles */}
-              <div className="flex p-1 bg-[#e1edf9] dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 mb-6 max-w-fit">
+              {/* Toolbar - Mode Toggles. Scrollt intern (statt abgeschnitten zu
+                  werden), falls die vier Optionen nicht nebeneinander passen. */}
+              <div className="flex p-1 bg-[#e1edf9] dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 mb-6 max-w-full overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => handleImportModeChange('sentences')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
                     importMode === 'sentences'
                       ? 'bg-darkteal-800 text-white shadow-sm'
                       : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
@@ -347,11 +361,11 @@ export const Dashboard = () => {
                   <Type className="w-4 h-4" />
                   <span>Automatisch (Sätze)</span>
                 </button>
-                
+
                 <button
                   type="button"
                   onClick={() => handleImportModeChange('lines')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
                     importMode === 'lines'
                       ? 'bg-darkteal-800 text-white shadow-sm'
                       : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
@@ -364,7 +378,7 @@ export const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => handleImportModeChange('manual')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
                     importMode === 'manual'
                       ? 'bg-darkteal-800 text-white shadow-sm'
                       : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
@@ -377,7 +391,7 @@ export const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => handleImportModeChange('math')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
                     importMode === 'math'
                       ? 'bg-darkteal-800 text-white shadow-sm'
                       : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
@@ -466,7 +480,7 @@ export const Dashboard = () => {
                       <textarea
                         value={mathInput}
                         onChange={(e) => handleMathInputChange(e.target.value)}
-                        className="w-full flex-1 min-h-[10rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-mono leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
+                        className="w-full flex-1 min-h-[7rem] sm:min-h-[10rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-mono leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
                         placeholder={"4 + 4\n12 − 5\n7 + 8"}
                       />
                       <div className="py-2.5 px-4 bg-[#f0f5fa] dark:bg-slate-900/65 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 self-start">
@@ -477,7 +491,7 @@ export const Dashboard = () => {
                   ) : importMode === 'manual' ? (
                     /* Manual highlighting reader view */
                     manualInput.trim() === '' ? (
-                      <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-205 dark:border-slate-800 rounded-xl min-h-[16rem]">
+                      <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-205 dark:border-slate-800 rounded-xl min-h-[11rem] sm:min-h-[16rem]">
                         <span className="text-3xl mb-2">✍️</span>
                         <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Kein Text vorhanden</p>
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-[280px]">
@@ -496,7 +510,7 @@ export const Dashboard = () => {
                         <div 
                           ref={highlightContainerRef}
                           onMouseUp={handleMouseUp}
-                          className="w-full flex-1 min-h-[16rem] overflow-y-auto p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 font-sans leading-relaxed text-lg select-text break-words whitespace-pre-wrap border-l-4 border-l-brand-500"
+                          className="w-full flex-1 min-h-[11rem] sm:min-h-[16rem] overflow-y-auto p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 font-sans leading-relaxed text-lg select-text break-words whitespace-pre-wrap border-l-4 border-l-brand-500"
                         >
                           {getSegments().map((seg, idx) => {
                             if (seg.isHighlighted) {
@@ -549,7 +563,7 @@ export const Dashboard = () => {
                       <textarea
                         value={manualInput}
                         onChange={handleManualInputChange}
-                        className="w-full flex-1 min-h-[16rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-sans leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
+                        className="w-full flex-1 min-h-[11rem] sm:min-h-[16rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-sans leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
                         placeholder={
                           importMode === 'sentences' 
                             ? "Der schnelle Fuchs springt. Der Hund schläft." 
@@ -573,7 +587,7 @@ export const Dashboard = () => {
                     Generierte Chunks
                   </span>
 
-                  <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-5 flex-1 min-h-[16rem] overflow-y-auto flex flex-col justify-between">
+                  <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-5 flex-1 min-h-[11rem] sm:min-h-[16rem] overflow-y-auto flex flex-col justify-between">
                     {importMode === 'math' && mathGap ? (
                       mathExprs.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-450 dark:text-slate-500">
@@ -694,7 +708,7 @@ export const Dashboard = () => {
 
           {/* Schritt 2: SETTINGS */}
           {currentStep === 'SETTINGS' && (
-            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 md:h-[950px] min-h-[800px] flex flex-col justify-between">
+            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[auto] md:min-h-[800px] md:h-[950px] flex flex-col justify-between">
               <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-850">
                 <h2 className="text-2xl font-bold text-darkteal-800 dark:text-white">
                   2. Spielmodus &amp; Optionen
@@ -927,7 +941,7 @@ export const Dashboard = () => {
 
           {/* Schritt 3: LOBBY */}
           {currentStep === 'LOBBY' && (
-            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 text-center flex flex-col justify-between items-center md:h-[950px] min-h-[800px]">
+            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 text-center flex flex-col justify-between items-center min-h-[auto] md:min-h-[800px] md:h-[950px]">
               
               {/* Top part: Header, QR Code & Room Code */}
               <div className="flex flex-col items-center w-full">

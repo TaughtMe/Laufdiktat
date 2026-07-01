@@ -132,20 +132,20 @@ export const Home = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-brand-bg dark:bg-slate-950 transition-colors duration-300 relative overflow-hidden">
-      
+    <div className="min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center px-4 py-6 sm:py-8 [@media(max-height:700px)]:py-3 bg-brand-bg dark:bg-slate-950 transition-colors duration-300 relative overflow-x-hidden">
+
       {/* Main Card */}
-      <div className="z-10 bg-white dark:bg-slate-900 rounded-[1.8rem] p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.03)] border border-slate-100/50 dark:border-slate-800 flex flex-col items-center text-center space-y-6 w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-500">
-        <div className="space-y-1.5">
-          <h1 className="text-3.5xl font-black text-slate-900 dark:text-white tracking-tight">
+      <div className="z-10 bg-white dark:bg-slate-900 rounded-[1.5rem] sm:rounded-[1.8rem] p-5 sm:p-8 md:p-10 [@media(max-height:700px)]:p-4 shadow-[0_10px_35px_rgba(0,0,0,0.03)] border border-slate-100/50 dark:border-slate-800 flex flex-col items-center text-center space-y-4 sm:space-y-6 [@media(max-height:700px)]:space-y-2 w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-500">
+        <div className="space-y-1 sm:space-y-1.5">
+          <h1 className="text-2.5xl sm:text-3.5xl font-black text-slate-900 dark:text-white tracking-tight">
             Laufdiktat
           </h1>
-          <p className="text-[0.85rem] text-slate-400 dark:text-slate-500 max-w-[280px] leading-relaxed mx-auto">
+          <p className="text-[0.8rem] sm:text-[0.85rem] text-slate-400 dark:text-slate-500 max-w-[280px] leading-relaxed mx-auto">
             Gib den Raumcode deines Lehrers ein, um zu starten.
           </p>
         </div>
-        
-        <div className="w-full flex flex-col items-center space-y-4">
+
+        <div className="w-full flex flex-col items-center space-y-3 sm:space-y-4">
           <div className="relative w-full">
             <input
               type="text"
@@ -158,7 +158,7 @@ export const Home = () => {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleStartDictation();
               }}
-              className="w-full text-center text-lg font-semibold py-3.5 pl-12 pr-12 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none transition-all placeholder:text-[#a0aec0] dark:placeholder:text-slate-700 tracking-wide font-sans"
+              className="w-full text-center text-lg font-semibold py-3 sm:py-3.5 pl-12 pr-12 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none transition-all placeholder:text-[#a0aec0] dark:placeholder:text-slate-700 tracking-wide font-sans"
             />
             <button
               type="button"
@@ -170,56 +170,57 @@ export const Home = () => {
               <Camera className="w-5 h-5" />
             </button>
           </div>
-          
+
           {/* Animal Avatar */}
           {studentName && (
             <div className="flex flex-col items-center gap-2 animate-in fade-in zoom-in-95 duration-300">
-              <AnimalAvatar studentName={studentName} className="w-32 h-32 mx-auto" />
+              <AnimalAvatar studentName={studentName} className="w-24 h-24 sm:w-32 sm:h-32 [@media(max-height:700px)]:w-16 [@media(max-height:700px)]:h-16 mx-auto" />
             </div>
           )}
 
           <div className="w-full flex flex-col">
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Dein Name"
               value={studentName}
               readOnly
-              className="w-full text-center text-lg font-semibold py-3.5 px-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:outline-none transition-all"
+              className="w-full text-center text-lg font-semibold py-3 sm:py-3.5 px-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:outline-none transition-all"
             />
-            <button 
+            <button
               type="button"
               onClick={generateName}
-              className="mt-3 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350 flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full"
+              className="mt-2.5 sm:mt-3 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350 flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full"
             >
               <Dices className="w-3.5 h-3.5 text-slate-400" />
               <span>Zufälligen Namen generieren</span>
             </button>
           </div>
-          
+
           <button
             onClick={handleStartDictation}
             disabled={joining}
-            className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-bold py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-4"
+            className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-bold py-3 sm:py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-3 sm:mt-4"
           >
             {joining ? 'Suche nach Update…' : 'Beitreten'}
           </button>
         </div>
       </div>
 
-      {/* Lehrer-Login – direkt unter der Schüler-Karte, gut sichtbar */}
-      <Link
-        to="/dashboard"
-        className="z-10 mt-5 inline-flex items-center gap-2 text-sm font-bold text-darkteal-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-500 hover:text-brand-600 dark:hover:text-brand-400 px-6 py-2.5 rounded-xl shadow-sm hover:shadow transition-all active:scale-[0.98]"
-      >
-        <LogIn className="w-4 h-4" />
-        Lehrer-Login
-      </Link>
+      {/* Lehrer-Login + Impressum – bewusst im normalen Fluss (nicht absolut
+          positioniert), damit auf kleinen Höhen nichts überlappt, sondern die
+          Seite notfalls scrollt. */}
+      <div className="z-10 w-full flex flex-col items-center gap-3 mt-4 sm:mt-5 [@media(max-height:700px)]:mt-2 pb-10 [@media(max-height:700px)]:pb-4">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-2 text-sm font-bold text-darkteal-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-500 hover:text-brand-600 dark:hover:text-brand-400 px-6 py-2.5 rounded-xl shadow-sm hover:shadow transition-all active:scale-[0.98]"
+        >
+          <LogIn className="w-4 h-4" />
+          Lehrer-Login
+        </Link>
 
-      {/* Footer: Impressum/Datenschutz */}
-      <div className="z-10 absolute bottom-8 text-sm">
         <Link
           to="/legal"
-          className="text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
+          className="text-sm text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
         >
           Impressum &amp; Datenschutz
         </Link>
