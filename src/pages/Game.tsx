@@ -6,23 +6,9 @@ import { StationGame } from './StationGame';
 import { ExitConfirm, SessionEndedOverlay } from '../components/GameOverlays';
 import { useExitGuard } from '../hooks/useExitGuard';
 import { useGameRoom, type SessionStartData } from '../hooks/useGameRoom';
+import { useBattleMode } from '../hooks/useBattleMode';
 import { LegalLink } from '../components/LegalLink';
 import { computeStars, computeSpeedPoints } from '../utils/scoring';
-
-interface InkSplat {
-  id: number;
-  top: string;
-  left: string;
-  width: string;
-  height: string;
-  borderRadius: string;
-  rotation: number;
-}
-
-// Wie lange ein Angriff wirkt (ms) und wie schnell sich die Ladung füllt.
-const ATTACK_DURATION_MS = 15000;
-const CHARGE_PER_WORD = 25;        // ~4 Wörter bis voll (schnelle Schüler)
-const CHARGE_PER_WORD_SLOW = 34;   // ~3 Wörter bis voll (Schüler, die hinten liegen)
 
 // Prüft eine Eingabe: bei Mathe (item.prompt gesetzt) numerisch, sonst als Text.
 const checkAnswer = (item: WordItem, input: string): boolean => {
@@ -34,16 +20,6 @@ const checkAnswer = (item: WordItem, input: string): boolean => {
   }
   return val === item.targetWord;
 };
-
-const generateInkSplat = (): InkSplat => ({
-  id: Math.random(),
-  top: `${Math.random() * 40 + 30}%`,
-  left: `${Math.random() * 60 + 20}%`,
-  width: `${Math.random() * 80 + 80}px`,
-  height: `${Math.random() * 60 + 60}px`,
-  borderRadius: `${Math.random() * 30 + 40}% ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 30}% / ${Math.random() * 30 + 40}% ${Math.random() * 30 + 50}% ${Math.random() * 30 + 60}% ${Math.random() * 30 + 40}%`,
-  rotation: Math.random() * 360,
-});
 
 // Stabiler Hash + deterministische "Zufalls"-Reihenfolge, damit ein Hinweis
 // bei jedem Render gleich aussieht (kein Flackern).
@@ -132,27 +108,10 @@ export const Game = () => {
   // Das erste Aufdecken eines Wortes ist erlaubt und zählt nicht als Spicker.
   const [revealedCurrentWord, setRevealedCurrentWord] = useState(false);
 
-  // Lokale Interferenz-States (durch eingehende Angriffe ausgelöst)
-  const [inkSplats, setInkSplats] = useState<InkSplat[]>([]);
-
-  // --- Battle-Modus: Mehrspieler-Mechanik ---
-  const [charge, setCharge] = useState(0);                 // Aufladebalken 0..100
-  const [shieldActive, setShieldActive] = useState(false); // Schild hoch (blockt nächsten Angriff)
-  const [activeAttack, setActiveAttack] = useState<{ type: AttackType; until: number } | null>(null);
-  const [picker, setPicker] = useState<AttackType | null>(null); // Zielauswahl offen für diesen Angriffstyp
-  const [battleToast, setBattleToast] = useState<string | null>(null);
-
   const inputRef = useRef<HTMLInputElement>(null);
   const karaokeRef = useRef<HTMLDivElement>(null);
-  // Refs für Werte, die in Channel-Callbacks aktuell sein müssen.
-  const shieldRef = useRef(false);
-  const activeAttackRef = useRef<{ type: AttackType; until: number } | null>(null);
   const currentWordIndexRef = useRef(0);
-  const attackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { shieldRef.current = shieldActive; }, [shieldActive]);
-  useEffect(() => { activeAttackRef.current = activeAttack; }, [activeAttack]);
   useEffect(() => { currentWordIndexRef.current = currentWordIndex; }, [currentWordIndex]);
 
   // Derived state that needs to be calculated before effects
@@ -160,14 +119,6 @@ export const Game = () => {
   const currentWord = words[currentWordIndex] || { targetWord: '' };
   const isMath = !!currentWord.prompt;
   const displayPrompt = currentWord.prompt ?? currentWord.targetWord;
-
-  // Kurze Battle-Hinweise ("Angriff geblockt" usw.). Stabil, damit es in
-  // Channel-Callbacks und Aktionen gleichermaßen nutzbar ist.
-  const showBattleToast = useCallback((msg: string) => {
-    setBattleToast(msg);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setBattleToast(null), 2500);
-  }, []);
 
   // Eingehende Sitzung übernehmen (neue Runde -> alles zurücksetzen).
   const onSessionStart = useCallback((data: SessionStartData) => {
@@ -194,26 +145,11 @@ export const Game = () => {
     setSessionEnded(true);
   }, []);
 
-  // Eingehender Angriff (Battle): Schild blockt, sonst 15s wirken; nur einer gleichzeitig.
-  const onAttack = useCallback((type: AttackType) => {
-    if (shieldRef.current) {
-      setShieldActive(false);
-      showBattleToast('🛡️ Angriff geblockt!');
-      return;
-    }
-    if (activeAttackRef.current && activeAttackRef.current.until > Date.now()) return;
-
-    setActiveAttack({ type, until: Date.now() + ATTACK_DURATION_MS });
-    showBattleToast(type === 'ink' ? '🖋️ Tinten-Angriff!' : '✨ Flimmer-Angriff!');
-    if (type === 'ink') {
-      setInkSplats([generateInkSplat(), generateInkSplat(), generateInkSplat()]);
-    }
-    if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
-    attackTimerRef.current = setTimeout(() => {
-      setActiveAttack(null);
-      setInkSplats([]);
-    }, ATTACK_DURATION_MS);
-  }, [showBattleToast]);
+  // Stabiler Weiterleiter für eingehende Angriffe – bricht die Zyklus-
+  // Abhängigkeit zwischen useGameRoom (braucht onAttack) und useBattleMode
+  // (braucht roster/sendAttack aus useGameRoom).
+  const onAttackRef = useRef<(type: AttackType) => void>(() => {});
+  const dispatchAttack = useCallback((type: AttackType) => onAttackRef.current(type), []);
 
   const { connectionWarning, roster, sendProgress, sendFinished, sendAttack } = useGameRoom({
     roomCode,
@@ -221,14 +157,28 @@ export const Game = () => {
     currentWordIndexRef,
     onSessionStart,
     onSessionEnded,
-    onAttack,
+    onAttack: dispatchAttack,
   });
 
-  // Timer (Angriff/Toast) beim Unmount aufräumen.
-  useEffect(() => () => {
-    if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-  }, []);
+  const {
+    charge,
+    chargeReady,
+    shieldActive,
+    activeAttack,
+    picker,
+    setPicker,
+    inkSplats,
+    battleToast,
+    availableAttacks,
+    attackCandidates,
+    isFlickerActive,
+    fillCharge,
+    launchAttack,
+    raiseShield,
+    onAttack,
+  } = useBattleMode({ studentName, currentWordIndex, battleOptions, bimanualLocked, roster, sendAttack });
+
+  useEffect(() => { onAttackRef.current = onAttack; }, [onAttack]);
 
   useEffect(() => {
     if (bimanualLocked) {
@@ -309,51 +259,6 @@ export const Game = () => {
     }
   };
 
-  // Ladegewinn pro Wort: Schüler, die (mind. zur Hälfte) hinter den anderen
-  // liegen, laden etwas schneller – für Fairness, Fokus bleibt die Belohnung.
-  const chargeGain = () => {
-    const others = Object.entries(roster).filter(([n]) => n !== studentName);
-    const total = others.length + 1;
-    const ahead = others.filter(([, i]) => i > currentWordIndex).length;
-    const isBehind = total > 1 && ahead >= total / 2;
-    return isBehind ? CHARGE_PER_WORD_SLOW : CHARGE_PER_WORD;
-  };
-
-  // Bis zu 3 Angriffsziele: Mitspieler, die weiter oder gleich weit sind
-  // (nächste zuerst). Wer selbst führt, sieht die 3 direkt dahinter.
-  const getAttackCandidates = (): Array<{ name: string; index: number }> => {
-    const others = Object.entries(roster)
-      .filter(([n]) => n !== studentName)
-      .map(([name, index]) => ({ name, index }));
-    if (others.length === 0) return [];
-    const maxIndex = Math.max(currentWordIndex, ...others.map((o) => o.index));
-    if (currentWordIndex >= maxIndex) {
-      return others
-        .filter((o) => o.index < currentWordIndex)
-        .sort((a, b) => b.index - a.index)
-        .slice(0, 3);
-    }
-    return others
-      .filter((o) => o.index >= currentWordIndex)
-      .sort((a, b) => a.index - b.index)
-      .slice(0, 3);
-  };
-
-  const launchAttack = (targetName: string) => {
-    if (!picker) return;
-    if (!sendAttack(targetName, picker)) return;
-    setCharge(0);
-    setPicker(null);
-    showBattleToast(`Angriff auf ${targetName} gestartet!`);
-  };
-
-  const raiseShield = () => {
-    if (charge < 100) return;
-    setShieldActive(true);
-    setCharge(0);
-    showBattleToast('🛡️ Schild aktiviert');
-  };
-
   // Freies Üben: Aufgabe/Wort vorlesen. Zählt – wie ein Blick – als Spicker.
   const speakWord = () => {
     if (!displayPrompt) return;
@@ -384,7 +289,7 @@ export const Game = () => {
       sendProgress(newIndex);
       // Battle-Modus: Aufladebalken füllen (langsamere Schüler etwas schneller).
       if (gameMode === 'BATTLE') {
-        setCharge((c) => Math.min(100, c + chargeGain()));
+        fillCharge();
       }
 
       if (currentWordIndex + 1 < words.length) {
@@ -424,9 +329,6 @@ export const Game = () => {
     }
   };
 
-  // Flimmern nur, wenn gerade ein Flimmer-Angriff aktiv ist und das Wort gezeigt wird.
-  const isFlickerActive = activeAttack?.type === 'flicker' && bimanualLocked;
-
   // --- Freies Üben: Hinweis-/Abtipp-Anzeige ---
   const target = currentWord.targetWord;
   const showHint = gameMode === 'UEBUNG' && !copyMode && wrongCount > 0 && !isMath;
@@ -440,15 +342,6 @@ export const Game = () => {
   ) {
     correctPrefixLen++;
   }
-
-  // Welche Angriffsarten der Lehrer freigeschaltet hat (Fallback: beide).
-  const availableAttacks: AttackType[] = [];
-  if (battleOptions.ink) availableAttacks.push('ink');
-  if (battleOptions.flicker) availableAttacks.push('flicker');
-  if (availableAttacks.length === 0) availableAttacks.push('ink', 'flicker');
-
-  const chargeReady = charge >= 100;
-  const attackCandidates = picker ? getAttackCandidates() : [];
 
   // Fallback: Empty State
   if (words.length === 0) {
