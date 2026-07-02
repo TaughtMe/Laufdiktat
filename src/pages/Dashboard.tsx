@@ -1,34 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import {
-  Sparkles,
-  ArrowRight,
-  Check,
-  ChevronLeft,
-  Activity,
-  XCircle,
-  Download,
-} from 'lucide-react';
+import { Activity, XCircle, Download } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
 import { useManualHighlighting } from '../hooks/dashboard/useManualHighlighting';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
 import { parseCSV } from '../utils/dashboard/csvParser';
 import { AnimalAvatar } from '../components/shared/AnimalAvatar';
-import { NumberStepper } from '../components/shared/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { WizardFooter } from '../components/dashboard/WizardFooter';
 import { ImportStep } from '../components/dashboard/ImportStep';
+import { SettingsStep } from '../components/dashboard/SettingsStep';
 import { type DashboardStep } from '../components/dashboard/stepMeta';
 import { LegalLink } from '../components/shared/LegalLink';
 import { VersionBadge } from '../components/shared/VersionBadge';
 import { APP_VERSION } from '../pwa';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useIsSmallScreen } from '../hooks/shared/useIsSmallScreen';
-import type { GameMode } from '../types/game';
 import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
 import { computeStars } from '../utils/game/scoring';
 
@@ -289,237 +280,29 @@ export const Dashboard = () => {
             />
           )}
 
-          {/* Schritt 2: SETTINGS */}
           {currentStep === 'SETTINGS' && (
-            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[auto] md:min-h-[800px] md:h-[950px] flex flex-col justify-between">
-              <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-850">
-                <h2 className="text-2xl font-bold text-darkteal-800 dark:text-white">
-                  2. Spielmodus &amp; Optionen
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Diktat für die Klasse einrichten.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch flex-1 min-h-0 mb-6">
-                
-                {/* Left Column (Col span 7) */}
-                <div className="md:col-span-7 flex flex-col gap-6 md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2">
-                  {/* Mode Selector */}
-                  <div className="flex flex-col gap-3">
-                    <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
-                      Modus wählen
-                    </span>
-                    
-                    <div className="space-y-3">
-                      {([
-                        {
-                          id: 'LAUFDIKTAT',
-                          name: 'Klassisches Laufdiktat',
-                          desc: '2-Finger-Touch zum Einprägen, danach Wort tippen.',
-                          icon: '🏃‍♂️'
-                        },
-                        {
-                          id: 'UEBUNG',
-                          name: 'Freie Übung',
-                          desc: 'Ohne Stress – mit Vorlesen und Buchstaben-Hilfen.',
-                          icon: '📖'
-                        },
-                        {
-                          id: 'BATTLE',
-                          name: 'Battle-Modus',
-                          desc: 'Gegeneinander – mit Störangriffen (Tinte, Flimmern).',
-                          icon: '⚔️'
-                        },
-                        {
-                          id: 'STATION',
-                          name: 'Stations-Modus',
-                          desc: 'Auf Papier schreiben, Tablet zeigt nur die Wörter.',
-                          icon: '📋'
-                        }
-                      ] as Array<{ id: string; name: string; desc: string; icon: string }>).map((mode) => {
-                        const isSelected = (stationMode ? 'STATION' : gameMode) === mode.id;
-                        return (
-                          <div
-                            key={mode.id}
-                            onClick={() => {
-                              if (mode.id === 'STATION') {
-                                setStationMode(true);
-                              } else {
-                                setStationMode(false);
-                                setGameMode(mode.id as GameMode);
-                              }
-                            }}
-                            className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 ${
-                              isSelected
-                                ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/10 shadow-sm'
-                                : 'border-slate-150 dark:border-slate-850 bg-white dark:bg-slate-900'
-                            }`}
-                          >
-                            {/* Checkbox / Radio Circle */}
-                            <div className="mt-1 flex items-center justify-center">
-                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
-                                isSelected 
-                                  ? 'border-brand-500 bg-brand-500 text-white font-bold' 
-                                  : 'border-slate-350 dark:border-slate-700'
-                              }`}>
-                                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              </div>
-                            </div>
-                            
-                            <div className="flex-1">
-                              <span className="font-bold text-darkteal-800 dark:text-white flex items-center gap-2">
-                                <span className="text-lg">{mode.icon}</span>
-                                {mode.name}
-                              </span>
-                              <span className="text-xs text-slate-500 dark:text-slate-450 block mt-1 leading-relaxed">
-                                {mode.desc}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Right Column (Col span 5) */}
-                <div className="md:col-span-5 flex flex-col md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2">
-                  <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 mb-3 block">
-                    Modus-Optionen
-                  </span>
-                  
-                  {(() => {
-                    const sel: string = stationMode ? 'STATION' : gameMode;
-                    const panelClass = "bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 flex flex-col gap-3.5 h-full animate-in fade-in duration-300 shadow-sm";
-
-                    // Einheitlicher Schalter (wie der Ton-Schalter), für alle Optionen.
-                    const toggleRow = (
-                      icon: string,
-                      label: string,
-                      desc: string | null,
-                      checked: boolean,
-                      onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-                    ) => (
-                      <label className="flex items-center justify-between gap-3 cursor-pointer p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
-                        <span className="flex-1 min-w-0">
-                          <span className="flex items-center gap-2.5 text-sm font-bold text-darkteal-800 dark:text-white">
-                            <span className="text-lg">{icon}</span> {label}
-                          </span>
-                          {desc ? (
-                            <span className="block text-[11px] text-slate-500 dark:text-slate-450 mt-0.5 leading-relaxed">{desc}</span>
-                          ) : null}
-                        </span>
-                        <div className="relative shrink-0">
-                          <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
-                          <div className="w-12 h-7 bg-slate-250 dark:bg-slate-800 peer-checked:bg-brand-500 rounded-full transition-colors duration-250"></div>
-                          <div className="absolute left-1 top-1 w-5 h-5 bg-white dark:bg-slate-100 rounded-full shadow-md transition-transform duration-250 peer-checked:translate-x-5"></div>
-                        </div>
-                      </label>
-                    );
-
-                    const header = (color: string, title: string) => (
-                      <div className="flex items-center gap-2.5 text-darkteal-800 dark:text-white">
-                        <Sparkles className={`w-5 h-5 ${color}`} />
-                        <h3 className="font-bold text-sm uppercase tracking-wide">{title}</h3>
-                      </div>
-                    );
-
-                    const tonRow = toggleRow('🔊', 'Vorlesen (Ton)', 'Wort vorlesen lassen – zählt als Spicker.', isTtsEnabled, toggleTts);
-                    const starsRow = toggleRow('⭐', 'Sterne für Schüler', 'Bewertung (Sterne + Tempo) am Ende anzeigen.', showStars, (e) => setShowStars(e.target.checked));
-
-                    if (sel === 'BATTLE') {
-                      return (
-                        <div className={panelClass}>
-                          {header('text-amber-500', 'Battle-Optionen')}
-                          {toggleRow('🖋️', 'Tintenfleck-Angriff', 'Zufällige Tintenflecke verdecken die Sicht.', battleOptions.ink, (e) => setBattleOptions({ ink: e.target.checked }))}
-                          {toggleRow('✨', 'Flimmern-Angriff', 'Bildschirm flimmert beim Einprägen.', battleOptions.flicker, (e) => setBattleOptions({ flicker: e.target.checked }))}
-                          {starsRow}
-                        </div>
-                      );
-                    }
-
-                    if (sel === 'UEBUNG') {
-                      return (
-                        <div className={panelClass}>
-                          {header('text-brand-500', 'Übungs-Optionen')}
-                          {tonRow}
-                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
-                            <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
-                              Fehlversuche bis zur Lösung
-                            </label>
-                            <div className="flex items-center gap-3">
-                              <NumberStepper value={uebungMaxAttempts} onChange={setUebungMaxAttempts} min={1} max={10} />
-                              <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                                So viele Fehlversuche, dann erscheint das ganze Wort. Davor schrittweise Buchstaben-Hinweise.
-                              </span>
-                            </div>
-                          </div>
-                          {starsRow}
-                        </div>
-                      );
-                    }
-
-                    if (sel === 'STATION') {
-                      return (
-                        <div className={panelClass}>
-                          {header('text-emerald-500', 'Stations-Optionen')}
-                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800">
-                            <label className="block text-xs font-bold text-darkteal-800 dark:text-slate-300 mb-2 uppercase tracking-wider">
-                              Anzahl der Schüler / Stationen
-                            </label>
-                            <div className="flex items-center gap-3">
-                              <NumberStepper value={stationCount} onChange={setStationCount} min={1} max={100} />
-                              <span className="text-xs text-slate-400 dark:text-slate-500">
-                                (Erstellt Nummernfelder für die Schüler)
-                              </span>
-                            </div>
-                          </div>
-                          {tonRow}
-                        </div>
-                      );
-                    }
-
-                    // LAUFDIKTAT
-                    return (
-                      <div className={panelClass}>
-                        {header('text-brand-500', 'Optionen')}
-                        {starsRow}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-              </div>
-
-              {/* Step 2 Bottom Actions */}
-              <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-850 flex items-center justify-between">
-                <button 
-                  onClick={() => setCurrentStep('IMPORT')}
-                  className="flex items-center gap-1 text-darkteal-800 hover:text-brand-500 dark:text-slate-400 dark:hover:text-white font-bold text-sm transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Zurück</span>
-                </button>
-                
-                {/* Stepper Dots (Schritt 2 von 3) */}
-                <div className="bg-[#e6effa] dark:bg-slate-900 rounded-full py-1.5 px-4 flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 shadow-[inset_0_1px_3px_rgba(0,0,0,0.02)]">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1] dark:bg-slate-750" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-darkteal-800 dark:bg-white" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1] dark:bg-slate-750" />
-                  <span className="ml-1 text-[11px]">Schritt 2 von 3</span>
-                </div>
-                
-                <button 
-                  onClick={handleOpenLobby}
-                  className="px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <span>Lobby öffnen</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </section>
+            <SettingsStep
+              gameMode={gameMode}
+              stationMode={stationMode}
+              onSelectMode={(id) => {
+                if (id === 'STATION') {
+                  setStationMode(true);
+                } else {
+                  setStationMode(false);
+                  setGameMode(id);
+                }
+              }}
+              isTtsEnabled={isTtsEnabled}
+              onToggleTts={toggleTts}
+              uebungMaxAttempts={uebungMaxAttempts}
+              onChangeAttempts={setUebungMaxAttempts}
+              battleOptions={battleOptions}
+              onSetBattleOptions={setBattleOptions}
+              stationCount={stationCount}
+              onChangeStationCount={setStationCount}
+              showStars={showStars}
+              onToggleStars={setShowStars}
+            />
           )}
 
           {/* Schritt 3: LOBBY */}
