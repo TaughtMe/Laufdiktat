@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Trash2, Sparkles, Pencil, RefreshCw, X, Plus } from 'lucide-react';
+import { Upload, Trash2, Sparkles, RefreshCw, X, Plus } from 'lucide-react';
 import type { useManualHighlighting } from '../../hooks/dashboard/useManualHighlighting';
 import type { useMathImport } from '../../hooks/dashboard/useMathImport';
 import type { WordItem } from '../../types/game';
@@ -259,11 +259,15 @@ export const ImportStep = ({
                           key={`${line}-${i}`}
                           className="flex items-center justify-between gap-2 bg-surface-2 rounded-[10px] pl-3.5 pr-1.5 py-1.5"
                         >
-                          <span className={`font-mono text-[13.5px] font-bold ${expr ? 'text-ink' : 'text-danger'}`}>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(i)}
+                            title="Zum Bearbeiten klicken"
+                            className={`font-mono text-[13.5px] font-bold text-left cursor-text rounded px-1 -mx-1 hover:bg-line/40 transition-colors ${expr ? 'text-ink' : 'text-danger'}`}
+                          >
                             {expr ? `${expr.a} ${OP_SYM[expr.op]} ${expr.b} = ${expr.result}` : `${line} (ungültig)`}
-                          </span>
+                          </button>
                           <div className="flex items-center">
-                            {rowActionBtn('Aufgabe bearbeiten', () => startEdit(i), <Pencil className="w-3.5 h-3.5" />)}
                             {rowActionBtn('Neu würfeln', () => rerollRow(i), <RefreshCw className="w-3.5 h-3.5" />)}
                             {rowActionBtn('Löschen', () => deleteRow(i), <X className="w-4 h-4" />)}
                           </div>
