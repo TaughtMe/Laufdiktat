@@ -1,34 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { 
-  FileText, 
-  Type, 
-  Highlighter,
+import {
   Sparkles,
   ArrowRight,
-  ListRestart,
-  User,
-  Trash2,
   Check,
-  Info,
-  X,
   ChevronLeft,
   Activity,
   XCircle,
   Download,
-  Calculator
 } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
 import { useManualHighlighting } from '../hooks/dashboard/useManualHighlighting';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
 import { parseCSV } from '../utils/dashboard/csvParser';
-import { type GapSlot } from '../utils/dashboard/mathTasks';
 import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { NumberStepper } from '../components/shared/NumberStepper';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
+import { DashboardHeader } from '../components/dashboard/DashboardHeader';
+import { WizardFooter } from '../components/dashboard/WizardFooter';
+import { ImportStep } from '../components/dashboard/ImportStep';
+import { type DashboardStep } from '../components/dashboard/stepMeta';
 import { LegalLink } from '../components/shared/LegalLink';
 import { VersionBadge } from '../components/shared/VersionBadge';
 import { APP_VERSION } from '../pwa';
@@ -37,8 +31,6 @@ import { useIsSmallScreen } from '../hooks/shared/useIsSmallScreen';
 import type { GameMode } from '../types/game';
 import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
 import { computeStars } from '../utils/game/scoring';
-
-type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -111,42 +103,12 @@ export const Dashboard = () => {
     clearWords: () => setWords([]),
   });
 
-  const {
-    highlightContainerRef,
-    getSegments,
-    tokenizeText,
-    handleWordClick,
-    handleMouseUp,
-    handleDeleteChunk,
-    handleResetChunks,
-    resetChunks,
-    applyChunksToWords,
-  } = useManualHighlighting({ manualInput, importMode, setWords });
+  // Ganze Hook-Rückgaben werden an die Step-Komponenten durchgereicht
+  // (reine Präsentation); hier nur destrukturieren, was Handler brauchen.
+  const highlighting = useManualHighlighting({ manualInput, importMode, setWords });
+  const { resetChunks, applyChunksToWords, handleResetChunks } = highlighting;
 
-  const {
-    mathInput,
-    mathPlus,
-    setMathPlus,
-    mathMinus,
-    setMathMinus,
-    mathMul,
-    setMathMul,
-    mathDiv,
-    setMathDiv,
-    mathMax,
-    setMathMax,
-    mathCount,
-    setMathCount,
-    mathNoNeg,
-    setMathNoNeg,
-    mathGap,
-    setMathGap,
-    mathGaps,
-    mathExprs,
-    handleMathInputChange,
-    handleGenerateMath,
-    setGapAt,
-  } = useMathImport({ importMode, setWords });
+  const math = useMathImport({ importMode, setWords });
 
   const handleExportCSV = () => {
     if (stationMode) {
@@ -250,460 +212,81 @@ export const Dashboard = () => {
     return Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 10);
   })();
 
+  // Schritt-Navigation über den Pill-Stepper – identische Guards wie zuvor:
+  // Schritte 2–4 nur mit Wortliste, Lobby-Klick öffnet den Realtime-Channel.
+  const handleStepSelect = (step: DashboardStep) => {
+    if (step !== 'IMPORT' && words.length === 0) return;
+    if (step === 'LOBBY') {
+      handleOpenLobby();
+    } else {
+      setCurrentStep(step);
+    }
+  };
+
+  // Wizard-Footer: kontextabhängiger Primär-Button + Zurück je Schritt.
+  const footerByStep: Record<DashboardStep, React.ComponentProps<typeof WizardFooter>> = {
+    IMPORT: {
+      canBack: false,
+      onBack: () => {},
+      nextLabel: 'Weiter zur Konfiguration',
+      nextDisabled: words.length === 0,
+      onNext: () => setCurrentStep('SETTINGS'),
+    },
+    SETTINGS: {
+      canBack: true,
+      onBack: () => setCurrentStep('IMPORT'),
+      nextLabel: 'Lobby öffnen',
+      onNext: handleOpenLobby,
+    },
+    LOBBY: {
+      canBack: true,
+      onBack: () => setCurrentStep('SETTINGS'),
+      nextLabel: stationMode ? 'Stationen starten' : 'Diktat jetzt starten',
+      nextVariant: 'ok',
+      nextDisabled: !stationMode && studentsInLobby.length < 1,
+      onNext: handleStartSession,
+    },
+    LIVE: {
+      canBack: true,
+      onBack: () => setCurrentStep('LOBBY'),
+      nextLabel: 'Sitzung beenden',
+      nextVariant: 'danger',
+      onNext: handleEndSession,
+    },
+  };
+
   if (isSmallScreen && !forceMobileDashboard) {
     return <DashboardMobileWarning onContinueAnyway={() => setForceMobileDashboard(true)} />;
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-slate-50 dark:bg-slate-900 overflow-x-hidden">
+    <div className="flex flex-col h-[100dvh] bg-page text-ink overflow-x-hidden">
       {showOnboarding && <DashboardOnboarding onClose={dismissOnboarding} />}
       {connectionWarning && (
-        <div className="bg-red-500 text-white text-center py-2 text-sm font-medium z-50">
+        <div className="bg-danger text-white text-center py-2 text-sm font-medium z-50 shrink-0">
           Verbindung zum Server verloren. Echtzeit-Updates sind derzeit nicht möglich.
         </div>
       )}
-      <header className="py-3 sm:py-4 px-4 sm:px-8 gap-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-950 flex items-center justify-between z-10">
-        <div className="flex items-center shrink-0">
-          <button
-            onClick={() => navigate('/')}
-            className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex items-center justify-center cursor-pointer"
-            title="Zurück zur Startseite"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-xl sm:text-2xl font-bold text-darkteal-800 dark:text-white hidden sm:block">Lehrer-Dashboard</h1>
-        </div>
-
-        {/* Navigation Tabs – scrollt intern, statt die ganze Seite zu verbreitern */}
-        <nav className="flex items-center gap-5 sm:gap-8 flex-1 min-w-0 overflow-x-auto">
-          {(['IMPORT', 'SETTINGS', 'LOBBY', 'LIVE'] as DashboardStep[]).map((step) => {
-            const label = step === 'IMPORT' ? 'Import' : step === 'SETTINGS' ? 'Einstellungen' : step === 'LOBBY' ? 'Lobby' : 'Live';
-            const isActive = currentStep === step;
-            const isSelectable = step === 'IMPORT' || words.length > 0;
-
-            return (
-              <button
-                key={step}
-                onClick={() => {
-                  if (isSelectable) {
-                    if (step === 'IMPORT') {
-                      setCurrentStep('IMPORT');
-                    } else if (step === 'SETTINGS') {
-                      setCurrentStep('SETTINGS');
-                    } else if (step === 'LOBBY') {
-                      handleOpenLobby();
-                    } else if (step === 'LIVE') {
-                      setCurrentStep('LIVE');
-                    }
-                  }
-                }}
-                disabled={!isSelectable}
-                className={`relative py-4 px-1 text-sm font-semibold transition-all border-b-2 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap shrink-0 ${
-                  isActive
-                    ? 'border-brand-500 text-darkteal-800 dark:text-white'
-                    : 'border-transparent text-slate-400 dark:text-slate-650 hover:text-slate-600 dark:hover:text-slate-400 disabled:opacity-50'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* User profile icon */}
-        <div className="flex items-center shrink-0">
-          <div className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-600 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-            <User className="w-4 h-4" />
-          </div>
-        </div>
-      </header>
-         <main className="flex-1 p-4 sm:p-8">
-         <div className="max-w-5xl mx-auto w-full flex flex-col gap-6 sm:gap-8 transition-all duration-300">
+      <DashboardHeader
+        currentStep={currentStep}
+        stepsUnlocked={words.length > 0}
+        onStepSelect={handleStepSelect}
+        onBackToHome={() => navigate('/')}
+      />
+      <main className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-9 pt-2 pb-6">
+        <div className="max-w-6xl mx-auto w-full min-h-full flex flex-col">
           {currentStep === 'IMPORT' && (
-            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[auto] md:min-h-[800px] md:h-[950px] flex flex-col justify-between">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-850">
-                <div>
-                  <h2 className="text-2xl font-bold text-darkteal-800 dark:text-white">
-                    1. Wortliste &amp; Text vorbereiten
-                  </h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Text eingeben und Aufteilung wählen – oder Chunks manuell markieren.
-                  </p>
-                </div>
-                
-                {/* File Upload Button */}
-                <div className="relative">
-                  <label className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-900 border border-darkteal-800 dark:border-brand-500 text-darkteal-800 dark:text-brand-400 rounded-xl text-sm font-semibold cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                    <FileText className="w-4 h-4" />
-                    Datei hochladen (.csv, .txt)
-                    <input 
-                      type="file" 
-                      accept=".csv, .txt" 
-                      onChange={handleFileUpload}
-                      className="sr-only"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Toolbar - Mode Toggles. Scrollt intern (statt abgeschnitten zu
-                  werden), falls die vier Optionen nicht nebeneinander passen. */}
-              <div className="flex p-1 bg-[#e1edf9] dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 mb-6 max-w-full overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => handleImportModeChange('sentences')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
-                    importMode === 'sentences'
-                      ? 'bg-darkteal-800 text-white shadow-sm'
-                      : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
-                  }`}
-                >
-                  <Type className="w-4 h-4" />
-                  <span>Automatisch (Sätze)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleImportModeChange('lines')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
-                    importMode === 'lines'
-                      ? 'bg-darkteal-800 text-white shadow-sm'
-                      : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
-                  }`}
-                >
-                  <ListRestart className="w-4 h-4" />
-                  <span>Automatisch (Zeilen)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleImportModeChange('manual')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
-                    importMode === 'manual'
-                      ? 'bg-darkteal-800 text-white shadow-sm'
-                      : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
-                  }`}
-                >
-                  <Highlighter className="w-4 h-4" />
-                  <span>Manuell (Highlighting)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleImportModeChange('math')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
-                    importMode === 'math'
-                      ? 'bg-darkteal-800 text-white shadow-sm'
-                      : 'text-darkteal-800 dark:text-slate-400 hover:text-[#053040]'
-                  }`}
-                >
-                  <Calculator className="w-4 h-4" />
-                  <span>Mathe</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch flex-1 min-h-0 mb-6">
-                
-                {/* Left Column - Input / Highlighter (Col span 7) */}
-                <div className="md:col-span-7 flex flex-col gap-3 flex-1 min-h-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
-                      {importMode === 'math' ? 'Mathe-Aufgaben' : importMode === 'manual' ? 'Highlighter-Feld' : 'Text-Eingabe'}
-                    </span>
-                    {importMode === 'manual' && words.length > 0 && (
-                      <span className="text-xs font-semibold text-[#00c080]">
-                        {words.length} {words.length === 1 ? 'Segment' : 'Segmente'} markiert
-                      </span>
-                    )}
-                  </div>
-
-                  {importMode === 'math' ? (
-                    /* Mathe: Generator + manuelle Eingabe */
-                    <div className="flex flex-col flex-1 min-h-0 gap-3">
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setMathPlus((v) => !v)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathPlus ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
-                          >
-                            + Plus
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMathMinus((v) => !v)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathMinus ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
-                          >
-                            − Minus
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMathMul((v) => !v)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathMul ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
-                          >
-                            · Mal
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMathDiv((v) => !v)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${mathDiv ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
-                          >
-                            : Geteilt
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4">
-                          <label className="flex items-center gap-2 text-sm font-semibold text-darkteal-800 dark:text-slate-300">
-                            <span>Bis</span>
-                            <NumberStepper value={mathMax} onChange={setMathMax} min={1} max={1000} />
-                          </label>
-                          <label className="flex items-center gap-2 text-sm font-semibold text-darkteal-800 dark:text-slate-300">
-                            <span>Anzahl</span>
-                            <NumberStepper value={mathCount} onChange={setMathCount} min={1} max={50} />
-                          </label>
-                        </div>
-                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
-                          <input type="checkbox" checked={mathNoNeg} onChange={(e) => setMathNoNeg(e.target.checked)} className="w-4 h-4 accent-brand-500" />
-                          Keine negativen Ergebnisse
-                        </label>
-                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
-                          <input type="checkbox" checked={mathGap} onChange={(e) => setMathGap(e.target.checked)} className="w-4 h-4 accent-brand-500" />
-                          Lückenaufgaben (fehlende Zahl, z. B. 4 + _ = 7)
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleGenerateMath}
-                          className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-sm transition-colors active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <Calculator className="w-4 h-4" /> Aufgaben erzeugen
-                        </button>
-                      </div>
-                      <textarea
-                        value={mathInput}
-                        onChange={(e) => handleMathInputChange(e.target.value)}
-                        className="w-full flex-1 min-h-[7rem] sm:min-h-[10rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-mono leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
-                        placeholder={"4 + 4\n12 − 5\n7 + 8"}
-                      />
-                      <div className="py-2.5 px-4 bg-[#f0f5fa] dark:bg-slate-900/65 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 self-start">
-                        <Info className="w-3.5 h-3.5 text-brand-500" />
-                        <span>Eine Aufgabe pro Zeile (+ − · :). Das Ergebnis wird automatisch berechnet.</span>
-                      </div>
-                    </div>
-                  ) : importMode === 'manual' ? (
-                    /* Manual highlighting reader view */
-                    manualInput.trim() === '' ? (
-                      <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-205 dark:border-slate-800 rounded-xl min-h-[11rem] sm:min-h-[16rem]">
-                        <span className="text-3xl mb-2">✍️</span>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Kein Text vorhanden</p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-[280px]">
-                          Wechsle zu Sätze oder Zeilen, um Text einzugeben, bevor du markierst.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => handleImportModeChange('sentences')}
-                          className="mt-3 px-3 py-1.5 bg-brand-100 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 rounded-lg text-xs font-bold hover:bg-brand-200 cursor-pointer transition-colors"
-                        >
-                          Modus wechseln
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="relative flex flex-col flex-1 min-h-0">
-                        <div 
-                          ref={highlightContainerRef}
-                          onMouseUp={handleMouseUp}
-                          className="w-full flex-1 min-h-[11rem] sm:min-h-[16rem] overflow-y-auto p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 font-sans leading-relaxed text-lg select-text break-words whitespace-pre-wrap border-l-4 border-l-brand-500"
-                        >
-                          {getSegments().map((seg, idx) => {
-                            if (seg.isHighlighted) {
-                              return (
-                                <span
-                                  key={seg.chunkId}
-                                  onClick={() => handleDeleteChunk(seg.chunkId!)}
-                                  className="inline-block bg-[#5efcc2] dark:bg-[#5efcc2]/90 text-[#004730] rounded-lg px-2 py-0.5 mx-0.5 font-bold cursor-pointer hover:bg-red-100 hover:text-red-800 transition-colors group relative"
-                                  title="Klicken zum Löschen"
-                                >
-                                  {seg.text}
-                                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                                    ×
-                                  </span>
-                                </span>
-                              );
-                            } else {
-                              return (
-                                <React.Fragment key={idx}>
-                                  {tokenizeText(seg.text, seg.start).map((tok, tIdx) => {
-                                    if (tok.isWord) {
-                                      return (
-                                        <span
-                                          key={tIdx}
-                                          onClick={() => handleWordClick(tok.start, tok.end, tok.text)}
-                                          className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 px-0.5 rounded transition-all duration-100 text-slate-800 dark:text-slate-200"
-                                        >
-                                          {tok.text}
-                                        </span>
-                                      );
-                                    } else {
-                                      return <span key={tIdx} className="text-slate-800 dark:text-slate-200">{tok.text}</span>;
-                                    }
-                                  })}
-                                </React.Fragment>
-                              );
-                            }
-                          })}
-                        </div>
-                        
-                        {/* Info Banner at the bottom */}
-                        <div className="mt-3 py-2.5 px-4 bg-[#f0f5fa] dark:bg-slate-900/65 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 self-start">
-                          <Info className="w-3.5 h-3.5 text-brand-500" />
-                          <span>Klicke auf Wörter, um sie zu Chunks zu verbinden.</span>
-                        </div>
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex flex-col flex-1 min-h-0">
-                      <textarea
-                        value={manualInput}
-                        onChange={handleManualInputChange}
-                        className="w-full flex-1 min-h-[11rem] sm:min-h-[16rem] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:text-white resize-none font-sans leading-relaxed text-lg outline-none border-l-4 border-l-brand-500"
-                        placeholder={
-                          importMode === 'sentences' 
-                            ? "Der schnelle Fuchs springt. Der Hund schläft." 
-                            : "Elefant\nGiraffe\nNashorn"
-                        }
-                      />
-                      <div className="mt-3 py-2.5 px-4 bg-[#f0f5fa] dark:bg-slate-900/65 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 self-start">
-                        <Info className="w-3.5 h-3.5 text-brand-500" />
-                        <span>
-                          {importMode === 'sentences'
-                            ? "Text wird automatisch bei Sätzen (. ! ?) in Chunks aufgeteilt."
-                            : "Jede Zeile wird als eigener Chunk interpretiert (optional mit Semikolon für Hinweise: Wort;Hinweis)."}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="md:col-span-5 flex flex-col gap-3 flex-1 min-h-0">
-                  <span className="text-xs uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
-                    Generierte Chunks
-                  </span>
-
-                  <div className="bg-[#f0f4f9] dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl p-5 flex-1 min-h-[11rem] sm:min-h-[16rem] overflow-y-auto flex flex-col justify-between">
-                    {importMode === 'math' && mathGap ? (
-                      mathExprs.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-450 dark:text-slate-500">
-                          <Sparkles className="w-8 h-8 mb-2 text-slate-350 dark:text-slate-750" />
-                          <p className="text-xs font-semibold">Keine Aufgaben</p>
-                          <p className="text-[10px] mt-0.5">Aufgaben links eingeben oder erzeugen.</p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-1.5 overflow-y-auto">
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-                            Tippe die Zahl an, die zur Lücke (_) werden soll:
-                          </p>
-                          {mathExprs.map((e, i) => {
-                            const gap = mathGaps[i] ?? 'b';
-                            const opSym = e.op === '+' ? '+' : e.op === '-' ? '−' : e.op === '*' ? '·' : ':';
-                            const numBtn = (slot: GapSlot, val: number) => (
-                              <button
-                                type="button"
-                                onClick={() => setGapAt(i, slot)}
-                                className={`min-w-[2rem] px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
-                                  gap === slot
-                                    ? 'bg-amber-400 text-amber-950'
-                                    : 'bg-white dark:bg-slate-800 text-darkteal-800 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700'
-                                }`}
-                              >
-                                {gap === slot ? '_' : val}
-                              </button>
-                            );
-                            return (
-                              <div key={i} className="flex items-center gap-1.5 text-sm font-mono">
-                                <span className="opacity-55 text-xs w-5 shrink-0">{i + 1}.</span>
-                                {numBtn('a', e.a)}
-                                <span className="text-slate-500">{opSym}</span>
-                                {numBtn('b', e.b)}
-                                <span className="text-slate-500">=</span>
-                                {numBtn('result', e.result)}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )
-                    ) : words.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-450 dark:text-slate-500">
-                        <Sparkles className="w-8 h-8 mb-2 text-slate-350 dark:text-slate-750" />
-                        <p className="text-xs font-semibold">Keine Chunks geladen</p>
-                        <p className="text-[10px] mt-0.5">
-                          {importMode === 'manual' 
-                            ? "Klicke auf Wörter im Textfeld links." 
-                            : "Gib Text im linken Feld ein."}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap gap-2 content-start overflow-y-auto mb-4">
-                          {words.map((word, idx) => (
-                            <div 
-                              key={word.id} 
-                              className="flex items-center gap-1.5 bg-[#5efcc2] dark:bg-[#5efcc2]/90 text-[#004730] px-3 py-1.5 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] text-sm font-bold"
-                            >
-                              <span className="opacity-55 text-xs font-mono">{idx + 1}.</span>
-                              <span className="break-all">{word.prompt ? `${word.prompt} = ${word.targetWord}` : word.targetWord}</span>
-                              <button 
-                                onClick={() => handleDeleteChunk(word.id)}
-                                className="hover:bg-[#004730]/10 text-[#004730] ml-1 p-0.5 rounded transition-colors cursor-pointer"
-                                title="Chunk löschen"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Clear all chunks button */}
-                        <button
-                          type="button"
-                          onClick={handleResetChunks}
-                          className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-400 hover:text-red-500 transition-colors w-full border-t border-slate-200/50 dark:border-slate-800/50 pt-3 mt-auto cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Alle löschen</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-              
-              {/* Footer navigation */}
-              <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-850 flex items-center justify-between">
-                <button 
-                  onClick={() => navigate('/')}
-                  className="flex items-center gap-1 text-darkteal-800 hover:text-brand-500 dark:text-slate-400 dark:hover:text-white font-bold text-sm transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Zurück</span>
-                </button>
-                
-                {/* Stepper Dots (Schritt 1 von 3) */}
-                <div className="bg-[#e6effa] dark:bg-slate-900 rounded-full py-1.5 px-4 flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 shadow-[inset_0_1px_3px_rgba(0,0,0,0.02)]">
-                  <span className="w-2.5 h-2.5 rounded-full bg-darkteal-800 dark:bg-white" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1] dark:bg-slate-750" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1] dark:bg-slate-750" />
-                  <span className="ml-1 text-[11px]">Schritt 1 von 3</span>
-                </div>
-                
-                <button 
-                  onClick={() => setCurrentStep('SETTINGS')}
-                  disabled={words.length === 0}
-                  className="px-6 py-3 bg-brand-500 hover:bg-brand-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-450 text-white rounded-xl font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] disabled:scale-100"
-                >
-                  <span>Weiter zur Konfiguration</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </section>
+            <ImportStep
+              importMode={importMode}
+              onImportModeChange={handleImportModeChange}
+              manualInput={manualInput}
+              onManualInputChange={handleManualInputChange}
+              onFileUpload={handleFileUpload}
+              words={words}
+              onResetChunks={handleResetChunks}
+              highlighting={highlighting}
+              math={math}
+            />
           )}
 
           {/* Schritt 2: SETTINGS */}
@@ -1392,11 +975,12 @@ export const Dashboard = () => {
             </section>
           )}
 
+          <div className="mt-auto pt-4 text-center">
+            <LegalLink />
+          </div>
         </div>
       </main>
-      <footer className="py-4 text-center">
-        <LegalLink />
-      </footer>
+      <WizardFooter {...footerByStep[currentStep]} />
       <VersionBadge />
     </div>
   );
