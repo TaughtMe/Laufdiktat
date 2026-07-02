@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import { Activity, XCircle, Download } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
@@ -14,6 +13,7 @@ import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { WizardFooter } from '../components/dashboard/WizardFooter';
 import { ImportStep } from '../components/dashboard/ImportStep';
 import { SettingsStep } from '../components/dashboard/SettingsStep';
+import { LobbyStep } from '../components/dashboard/LobbyStep';
 import { type DashboardStep } from '../components/dashboard/stepMeta';
 import { LegalLink } from '../components/shared/LegalLink';
 import { VersionBadge } from '../components/shared/VersionBadge';
@@ -305,192 +305,17 @@ export const Dashboard = () => {
             />
           )}
 
-          {/* Schritt 3: LOBBY */}
           {currentStep === 'LOBBY' && (
-            <section className="bg-white dark:bg-slate-950 p-6 sm:p-8 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-slate-100 dark:border-slate-850 animate-in fade-in slide-in-from-bottom-4 duration-500 text-center flex flex-col justify-between items-center min-h-[auto] md:min-h-[800px] md:h-[950px]">
-              
-              {/* Top part: Header, QR Code & Room Code */}
-              <div className="flex flex-col items-center w-full">
-                <h2 className="text-2xl font-bold text-darkteal-800 dark:text-white">
-                  3. Lobby (Warten auf Schüler)
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-455 mt-1 mb-6 max-w-md">
-                  Lass deine Schüler diesen QR-Code scannen oder den Code eingeben, um beizutreten.
-                </p>
-                
-                {stationMode && (
-                  <span className="inline-flex items-center gap-1.5 bg-[#e5fff5] dark:bg-emerald-950/30 text-[#004730] dark:text-[#5efcc2] text-xs font-bold px-3 py-1.5 rounded-full mb-6 border border-emerald-200/30">
-                    <span>📋</span> Stations-Modus aktiv
-                  </span>
-                )}
-                
-                <div className="bg-white dark:bg-white p-4 rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.03)] border border-slate-100 mb-6">
-                  <QRCodeSVG 
-                    value={`${window.location.origin}/?room=${roomCode}`} 
-                    size={160}
-                    level="H"
-                    includeMargin={true}
-                  />
-                </div>
-                
-                {/* Premium Room Code Card */}
-                <div className="bg-[#f0f5fa] dark:bg-slate-900 border border-slate-150/40 dark:border-slate-850 px-8 py-2 rounded-2xl mb-6 flex flex-col items-center">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 mb-1">
-                    Raum-Code
-                  </span>
-                  <p className="text-4xl font-mono font-black tracking-[0.2em] text-brand-500 pl-[0.2em]">
-                    {roomCode}
-                  </p>
-                </div>
-              </div>
-
-              {/* Middle part: Waiting Participants / Connection Status (flex-grow + scrollable) */}
-              <div className="w-full bg-[#f4f6fa] dark:bg-slate-900/60 rounded-2xl p-6 border border-slate-100 dark:border-slate-850/80 flex-1 min-h-0 overflow-y-auto mb-6 flex flex-col justify-center">
-                {connectionWarning ? (
-                  /* Verbindung abgebrochen zum Server */
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 text-red-650 dark:text-red-450 flex items-center justify-center mb-4">
-                      <XCircle className="w-6 h-6 animate-pulse" />
-                    </div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                      Server-Verbindung verloren
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-[280px] leading-relaxed">
-                      Die Echtzeit-Verbindung zum Server wurde unterbrochen. Bitte versuche es erneut.
-                    </p>
-                    
-                    <button
-                      type="button"
-                      onClick={handleOpenLobby}
-                      className="mt-5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
-                    >
-                      Verbindung wiederherstellen
-                    </button>
-                  </div>
-                ) : (hadTwoConnections && studentsInLobby.length < 1) ? (
-                  /* Verbindung abgebrochen Zustand */
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center mb-4">
-                      <XCircle className="w-6 h-6 animate-bounce" />
-                    </div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                      Verbindung abgebrochen
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-[280px] leading-relaxed">
-                      Ein zuvor verbundenes Gerät hat die Verbindung verloren.
-                    </p>
-                    
-                    <button
-                      type="button"
-                      onClick={handleOpenLobby}
-                      className="mt-5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
-                    >
-                      Verbindung wiederherstellen
-                    </button>
-                  </div>
-                ) : studentsInLobby.length < 1 ? (
-                  /* Welle 1: "Warte auf Verbindung"-Panel */
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-6 border border-slate-100 dark:border-slate-800 max-w-md w-full mx-auto flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 animate-pulse">
-                      <Activity className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                      Warte auf Verbindung...
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-[280px] leading-relaxed">
-                      Sobald mindestens ein Gerät verbunden ist, kannst du das Diktat starten.
-                    </p>
-                    
-                    <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-1.5 rounded-full">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                      </span>
-                      <span>Verbunden: {studentsInLobby.length}</span>
-                    </div>
-
-                    {/* Single device connected feedback */}
-                    {studentsInLobby.length === 1 && (
-                      <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 w-full animate-in slide-in-from-bottom-2 duration-300">
-                        <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-                          Bereits verbunden:
-                        </p>
-                        <div className="bg-slate-50 dark:bg-slate-900 border border-slate-150/50 dark:border-slate-800 p-3 rounded-xl flex items-center gap-3">
-                          <AnimalAvatar studentName={studentsInLobby[0]} className="w-9 h-9" />
-                          <span className="text-xs font-bold text-darkteal-800 dark:text-white truncate flex-1 text-left">
-                            {studentsInLobby[0]}
-                          </span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Welle 2: Peer-Karten mit AnimalAvataren */
-                  <div className="w-full flex flex-col h-full justify-start">
-                    <h3 className="font-bold text-base text-darkteal-800 dark:text-white mb-6 flex items-center justify-center gap-2">
-                      <span>Verbundene Geräte</span>
-                      <span className="bg-brand-100 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 py-0.5 px-3 rounded-full text-xs font-extrabold">
-                        {studentsInLobby.length}
-                      </span>
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto w-full animate-in zoom-in-95 duration-300">
-                      {studentsInLobby.map((name, i) => {
-                        const studentVersion = studentVersions[name];
-                        const versionOk = !studentVersion || studentVersion === APP_VERSION;
-                        return (
-                          <div
-                            key={i}
-                            className="rounded-2xl border p-4 flex flex-col items-center text-center transition-all border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shadow-sm"
-                          >
-                            <AnimalAvatar studentName={name} className="w-14 h-14 mb-2" />
-                            <span className="text-sm font-bold text-darkteal-800 dark:text-white truncate w-full">
-                              {name}
-                            </span>
-                            {studentVersion && (
-                              <span
-                                className={`text-[10px] font-bold mt-0.5 ${
-                                  versionOk
-                                    ? 'text-slate-350 dark:text-slate-550'
-                                    : 'text-amber-600 dark:text-amber-400'
-                                }`}
-                                title={versionOk ? undefined : `Erwartet: v${APP_VERSION}`}
-                              >
-                                v{studentVersion} {versionOk ? '✓' : '⚠ Update nötig'}
-                              </span>
-                            )}
-                            <div className="flex items-center gap-1.5 mt-2 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1 rounded-full border border-emerald-100/30 dark:border-emerald-800/30">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <span className="text-[10px] text-emerald-700 dark:text-emerald-450 font-bold uppercase tracking-wider">
-                                Online
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom part: Footer Buttons */}
-              <div className="w-full flex flex-col sm:flex-row gap-4">
-                <button 
-                  onClick={handleEndSession}
-                  className="px-6 py-3.5 bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-white rounded-xl font-bold text-sm transition-all w-full sm:w-auto cursor-pointer"
-                >
-                  Abbrechen
-                </button>
-                <button 
-                  onClick={handleStartSession}
-                  disabled={!stationMode && studentsInLobby.length < 1}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 dark:disabled:bg-slate-850 disabled:text-slate-450 disabled:shadow-none text-white text-base py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <span>{stationMode ? 'Stationen starten' : 'Diktat jetzt starten'}</span>
-                  <span className="text-xl">🚀</span>
-                </button>
-              </div>
-            </section>
+            <LobbyStep
+              roomCode={roomCode}
+              stationMode={stationMode}
+              studentsInLobby={studentsInLobby}
+              studentVersions={studentVersions}
+              appVersion={APP_VERSION}
+              connectionWarning={connectionWarning}
+              hadTwoConnections={hadTwoConnections}
+              onRetry={handleOpenLobby}
+            />
           )}
 
           {/* Schritt 4: LIVE */}
