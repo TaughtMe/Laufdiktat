@@ -15,7 +15,6 @@ import { LobbyStep } from '../components/dashboard/LobbyStep';
 import { LiveStep } from '../components/dashboard/LiveStep';
 import { type DashboardStep } from '../components/dashboard/stepMeta';
 import { LegalLink } from '../components/shared/LegalLink';
-import { VersionBadge } from '../components/shared/VersionBadge';
 import { APP_VERSION } from '../pwa';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useIsSmallScreen } from '../hooks/shared/useIsSmallScreen';
@@ -343,7 +342,6 @@ export const Dashboard = () => {
         </div>
       </main>
       <WizardFooter {...footerByStep[currentStep]} />
-      <VersionBadge />
     </div>
   );
 };

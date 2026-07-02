@@ -1,3 +1,5 @@
+import { VersionBadge } from '../shared/VersionBadge';
+
 interface WizardFooterProps {
   canBack: boolean;
   onBack: () => void;
@@ -41,6 +43,7 @@ export const WizardFooter = ({
     >
       ← Zurück
     </button>
+    <VersionBadge fixed={false} />
     <button
       type="button"
       onClick={onNext}
