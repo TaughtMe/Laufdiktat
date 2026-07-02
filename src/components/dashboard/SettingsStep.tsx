@@ -1,4 +1,5 @@
-import { Check, PersonStanding, Headphones, Swords, MapPin, Minus, Plus } from 'lucide-react';
+import { Check, PersonStanding, Headphones, Swords, MapPin } from 'lucide-react';
+import { MiniStepper } from './MiniStepper';
 import type { BattleOptions, GameMode } from '../../types/game';
 
 type ModeId = GameMode | 'STATION';
@@ -48,31 +49,6 @@ const Toggle = ({ on, onClick, onColor = 'bg-accent' }: { on: boolean; onClick: 
       className={`absolute top-0.5 w-[19px] h-[19px] rounded-full bg-white shadow-sm transition-all ${on ? 'left-[19px]' : 'left-0.5'}`}
     />
   </button>
-);
-
-/** Kleiner −/+-Stepper im Design-Stil (26-px-Quadrate). */
-const MiniStepper = ({ value, onChange, min, max }: { value: number; onChange: (n: number) => void; min: number; max: number }) => (
-  <div className="flex items-center gap-2.5 shrink-0">
-    <button
-      type="button"
-      onClick={() => onChange(Math.max(min, value - 1))}
-      disabled={value <= min}
-      className="w-[26px] h-[26px] flex items-center justify-center bg-surface border border-line rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-ink"
-      aria-label="Weniger"
-    >
-      <Minus className="w-3.5 h-3.5" />
-    </button>
-    <span className="text-[13px] font-extrabold min-w-[24px] text-center text-ink">{value}</span>
-    <button
-      type="button"
-      onClick={() => onChange(Math.min(max, value + 1))}
-      disabled={value >= max}
-      className="w-[26px] h-[26px] flex items-center justify-center bg-surface border border-line rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-ink"
-      aria-label="Mehr"
-    >
-      <Plus className="w-3.5 h-3.5" />
-    </button>
-  </div>
 );
 
 /** Options-Zeile: Titel + Beschreibung links, Steuerung rechts. */
