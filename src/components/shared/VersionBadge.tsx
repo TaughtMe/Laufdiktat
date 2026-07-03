@@ -48,8 +48,8 @@ export const VersionBadge = ({ className = '', fixed = true }: { className?: str
       title={needRefresh ? 'Update verfügbar – klicken zum Aktualisieren' : 'Version – klicken, um nach Updates zu suchen'}
       className={`${fixed ? 'fixed bottom-2 right-2 z-[60]' : ''} text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border transition-colors cursor-pointer ${
         needRefresh
-          ? 'bg-red-500 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-pulse'
-          : 'bg-white/70 dark:bg-slate-900/70 text-slate-400 dark:text-slate-500 border-slate-200/70 dark:border-slate-700/70 hover:text-slate-600 dark:hover:text-slate-300'
+          ? 'bg-danger text-white border-danger shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-pulse'
+          : 'bg-surface-2 text-ink-faint border-line hover:text-ink-muted'
       } ${className}`}
     >
       {needRefresh ? `🔴 ${label}` : label}
