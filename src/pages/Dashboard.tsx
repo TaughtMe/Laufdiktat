@@ -71,6 +71,8 @@ export const Dashboard = () => {
   const setUebungMaxAttempts = useGameStore((state) => state.setUebungMaxAttempts);
   const showStars = useGameStore((state) => state.showStars);
   const setShowStars = useGameStore((state) => state.setShowStars);
+  const shuffleWords = useGameStore((state) => state.shuffleWords);
+  const setShuffleWords = useGameStore((state) => state.setShuffleWords);
 
   const {
     results,
@@ -300,6 +302,8 @@ export const Dashboard = () => {
               onChangeStationCount={setStationCount}
               showStars={showStars}
               onToggleStars={setShowStars}
+              shuffleWords={shuffleWords}
+              onToggleShuffle={setShuffleWords}
             />
           )}
 

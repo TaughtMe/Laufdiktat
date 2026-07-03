@@ -14,6 +14,7 @@ import { buildHint } from '../utils/game/buildHint';
 import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
 import { clearPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
+import { seededShuffle } from '../utils/shared/seededShuffle';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -113,7 +114,15 @@ export const Game = () => {
     errorsRef.current = 0;
     wordErrorsRef.current = {};
     hasSentFinishedRef.current = false;
-    setWords(newWords);
+    // Reihenfolge pro Schüler mischen, aber stabil über Reload/Reconnect
+    // hinweg: Seed aus Raum + Name + Sitzungs-ID, nicht aus Math.random().
+    // Der Lehrer erzwingt shuffleWords=false im Stationsmodus (siehe
+    // useDashboardRoom), die Prüfung hier ist zusätzliche Absicherung.
+    const orderedWords =
+      data.shuffleWords && !newStationMode && data.sessionId
+        ? seededShuffle(newWords, `${roomCode}:${studentName}:${data.sessionId}`)
+        : newWords;
+    setWords(orderedWords);
     setGameMode(newMode);
     setBattleOptions(newOptions);
     if (newStationMode !== undefined) setStationMode(newStationMode);
@@ -121,7 +130,7 @@ export const Game = () => {
     if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
     if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
     if (newShowStars !== undefined) setShowStars(newShowStars);
-  }, [setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars]);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars]);
 
   const onSessionEnded = useCallback(() => {
     setSessionEnded(true);

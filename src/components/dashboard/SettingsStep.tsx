@@ -18,6 +18,8 @@ interface SettingsStepProps {
   onChangeStationCount: (n: number) => void;
   showStars: boolean;
   onToggleStars: (checked: boolean) => void;
+  shuffleWords: boolean;
+  onToggleShuffle: (checked: boolean) => void;
 }
 
 const MODES: Array<{
@@ -165,6 +167,8 @@ export const SettingsStep = ({
   onChangeStationCount,
   showStars,
   onToggleStars,
+  shuffleWords,
+  onToggleShuffle,
 }: SettingsStepProps) => {
   const selected: ModeId = stationMode ? 'STATION' : gameMode;
   const activeMode = MODES.find((m) => m.id === selected)!;
@@ -172,6 +176,21 @@ export const SettingsStep = ({
   const starsRow = (
     <CheckboxRow label="Sterne für Schüler anzeigen" checked={showStars} onClick={() => onToggleStars(!showStars)} />
   );
+
+  // Im Stationsmodus nicht anbieten: Stationsnummern haben eine feste
+  // räumliche Zuordnung zum Wort an der jeweiligen Station.
+  const shuffleRow =
+    selected === 'STATION' ? (
+      <p className="text-xs text-ink-faint italic px-0.5">
+        Reihenfolge mischen ist im Stationsmodus nicht verfügbar.
+      </p>
+    ) : (
+      <CheckboxRow
+        label="Reihenfolge pro Schüler mischen"
+        checked={shuffleWords}
+        onClick={() => onToggleShuffle(!shuffleWords)}
+      />
+    );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1.15fr_1fr] gap-7 flex-1 min-h-0">
@@ -275,6 +294,7 @@ export const SettingsStep = ({
               <StepperRow label="Anzahl Stationen" value={stationCount} onChange={onChangeStationCount} min={1} max={100} />
             )}
 
+            {shuffleRow}
             {starsRow}
           </div>
         </div>

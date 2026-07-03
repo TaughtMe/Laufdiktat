@@ -14,6 +14,10 @@ export interface SessionStartData {
   showStars?: boolean;
   /** App-Version der Lehrkraft zum Zeitpunkt des Sendens (Kompatibilitäts-Check). */
   appVersion?: string;
+  /** Reihenfolge pro Schüler mischen (siehe Game.tsx: onSessionStart). */
+  shuffleWords?: boolean;
+  /** Kennung der laufenden Sitzung – Teil des Shuffle-Seeds. */
+  sessionId?: string;
 }
 
 interface UseGameRoomArgs {

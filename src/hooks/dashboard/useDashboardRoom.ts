@@ -20,7 +20,11 @@ type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 // Liest beim Senden immer den AKTUELLEN Store-Stand – so kommen z. B. ein
 // deaktivierter Ton oder geänderte Optionen garantiert frisch beim Schüler an
 // (keine veralteten Werte aus alten Closures).
-const buildSessionPayload = () => {
+// sessionId identifiziert die aktuelle Sitzung (siehe sessionIdRef unten) –
+// wird für den deterministischen Pro-Schüler-Shuffle gebraucht: derselbe
+// Schüler bekommt beim Reconnect innerhalb derselben Sitzung dieselbe
+// Reihenfolge, eine neue Sitzung (erneutes "Diktat starten") mischt neu.
+const buildSessionPayload = (sessionId: string) => {
   const s = useGameStore.getState();
   return {
     words: s.words,
@@ -32,6 +36,10 @@ const buildSessionPayload = () => {
     uebungMaxAttempts: s.uebungMaxAttempts,
     showStars: s.showStars,
     appVersion: APP_VERSION,
+    // Im Stationsmodus nie mischen: Stationsnummern haben eine feste
+    // räumliche Zuordnung zum Wort an der jeweiligen Station.
+    shuffleWords: s.stationMode ? false : s.shuffleWords,
+    sessionId,
   };
 };
 
@@ -70,6 +78,9 @@ export const useDashboardRoom = ({
   // einem bereits abonnierten Channel, daher halten wir genau diese Instanz fest
   // und verwenden sie für alle Sende-Aktionen wieder.
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Identifiziert die laufende Sitzung (siehe buildSessionPayload oben); wird
+  // in handleStartSession neu erzeugt, in handleEndSession wieder geräumt.
+  const sessionIdRef = useRef<string>('');
 
   // Station mode RAM state
   const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
@@ -114,10 +125,12 @@ export const useDashboardRoom = ({
         });
 
         if (stepRef.current === 'LIVE') {
+          // Späterer Beitritt/Reconnect innerhalb derselben Sitzung -> dieselbe
+          // sessionId, damit der Schüler dieselbe gemischte Reihenfolge bekommt.
           channel.send({
             type: 'broadcast',
             event: 'session-start',
-            payload: buildSessionPayload(),
+            payload: buildSessionPayload(sessionIdRef.current),
           });
         }
       }
@@ -171,10 +184,13 @@ export const useDashboardRoom = ({
     if (!channelRef.current) {
       await handleOpenLobby();
     }
+    // Neue Sitzung -> neue sessionId, damit ein frischer Shuffle-Seed entsteht
+    // (bei erneutem "Diktat starten" bekommen Schüler eine neue Reihenfolge).
+    sessionIdRef.current = crypto.randomUUID();
     await channelRef.current?.send({
       type: 'broadcast',
       event: 'session-start',
-      payload: buildSessionPayload(),
+      payload: buildSessionPayload(sessionIdRef.current),
     });
     setCurrentStep('LIVE');
   };
@@ -194,6 +210,7 @@ export const useDashboardRoom = ({
     setHadTwoConnections(false);
     setStationStates(new Map());
     setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
+    sessionIdRef.current = '';
   };
 
   return {
