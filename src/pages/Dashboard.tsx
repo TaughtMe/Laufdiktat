@@ -75,6 +75,8 @@ export const Dashboard = () => {
   const setShuffleWords = useGameStore((state) => state.setShuffleWords);
   const strictTypingMode = useGameStore((state) => state.strictTypingMode);
   const setStrictTypingMode = useGameStore((state) => state.setStrictTypingMode);
+  const stationShuffle = useGameStore((state) => state.stationShuffle);
+  const setStationShuffle = useGameStore((state) => state.setStationShuffle);
 
   const {
     results,
@@ -308,6 +310,8 @@ export const Dashboard = () => {
               onToggleShuffle={setShuffleWords}
               strictTypingMode={strictTypingMode}
               onToggleStrictTyping={setStrictTypingMode}
+              stationShuffle={stationShuffle}
+              onToggleStationShuffle={setStationShuffle}
             />
           )}
 

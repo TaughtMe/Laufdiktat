@@ -14,6 +14,7 @@ interface GameStore {
   showStars: boolean;
   shuffleWords: boolean;
   strictTypingMode: boolean;
+  stationShuffle: boolean;
 
   // Actions
   setWords: (words: WordItem[]) => void;
@@ -28,6 +29,7 @@ interface GameStore {
   setShowStars: (show: boolean) => void;
   setShuffleWords: (shuffle: boolean) => void;
   setStrictTypingMode: (strict: boolean) => void;
+  setStationShuffle: (shuffle: boolean) => void;
   /** Setzt die Spieldaten zurück (sauberer Beitritt – kein altes Spiel im Speicher). */
   resetGameData: () => void;
 }
@@ -48,6 +50,7 @@ export const useGameStore = create<GameStore>((set) => ({
   showStars: true,
   shuffleWords: false,
   strictTypingMode: true,
+  stationShuffle: false,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -67,6 +70,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setShowStars: (showStars) => set({ showStars }),
   setShuffleWords: (shuffleWords) => set({ shuffleWords }),
   setStrictTypingMode: (strictTypingMode) => set({ strictTypingMode }),
+  setStationShuffle: (stationShuffle) => set({ stationShuffle }),
   resetGameData: () =>
     set({
       words: [],

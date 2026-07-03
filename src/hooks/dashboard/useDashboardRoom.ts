@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { useGameStore } from '../../store/gameStore';
 import { APP_VERSION } from '../../pwa';
+import { setStationProgress } from '../../utils/dashboard/stationProgress';
 import type { StationStudentState } from '../../types/game';
 
 export interface StudentResult {
@@ -41,6 +42,9 @@ const buildSessionPayload = (sessionId: string) => {
     shuffleWords: s.stationMode ? false : s.shuffleWords,
     sessionId,
     strictTypingMode: s.strictTypingMode,
+    // Stations-Variante: pro Schülernummer gemischt (siehe utils/game/stationShuffle.ts),
+    // nur relevant und aktivierbar im Stationsmodus.
+    stationShuffle: s.stationMode ? s.stationShuffle : false,
   };
 };
 
@@ -162,11 +166,7 @@ export const useDashboardRoom = ({
 
     channel.on('broadcast', { event: 'update-station-state' }, (payload) => {
       const { studentNumber, currentIndex, peeks } = payload.payload;
-      setStationStates((prev) => {
-        const next = new Map(prev);
-        next.set(studentNumber, { currentIndex, peeks });
-        return next;
-      });
+      setStationStates((prev) => setStationProgress(prev, studentNumber, { currentIndex, peeks }));
     });
 
     channel.subscribe((status) => {

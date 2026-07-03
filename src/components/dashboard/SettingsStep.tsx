@@ -22,6 +22,8 @@ interface SettingsStepProps {
   onToggleShuffle: (checked: boolean) => void;
   strictTypingMode: boolean;
   onToggleStrictTyping: (checked: boolean) => void;
+  stationShuffle: boolean;
+  onToggleStationShuffle: (checked: boolean) => void;
 }
 
 const MODES: Array<{
@@ -181,6 +183,8 @@ export const SettingsStep = ({
   onToggleShuffle,
   strictTypingMode,
   onToggleStrictTyping,
+  stationShuffle,
+  onToggleStationShuffle,
 }: SettingsStepProps) => {
   const selected: ModeId = stationMode ? 'STATION' : gameMode;
   const activeMode = MODES.find((m) => m.id === selected)!;
@@ -189,13 +193,17 @@ export const SettingsStep = ({
     <CheckboxRow label="Sterne für Schüler anzeigen" checked={showStars} onClick={() => onToggleStars(!showStars)} />
   );
 
-  // Im Stationsmodus nicht anbieten: Stationsnummern haben eine feste
-  // räumliche Zuordnung zum Wort an der jeweiligen Station.
+  // Im Stationsmodus eine eigene Variante: Stationen sind geteilte Geräte, daher
+  // wird nicht pro Gerät, sondern pro Schülernummer gemischt (stabil über alle
+  // Stations-iPads hinweg, siehe utils/game/stationShuffle.ts).
   const shuffleRow =
     selected === 'STATION' ? (
-      <p className="text-xs text-ink-faint italic px-0.5">
-        Reihenfolge mischen ist im Stationsmodus nicht verfügbar.
-      </p>
+      <CheckboxRow
+        label="Reihenfolge je Schülernummer mischen"
+        hint="Jede Schülernummer erhält eine eigene feste Reihenfolge. Sie bleibt auf allen Stations-iPads gleich."
+        checked={stationShuffle}
+        onClick={() => onToggleStationShuffle(!stationShuffle)}
+      />
     ) : (
       <CheckboxRow
         label="Reihenfolge pro Schüler mischen"
