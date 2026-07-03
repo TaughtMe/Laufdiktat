@@ -5,6 +5,7 @@ import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
 import { useManualHighlighting } from '../hooks/dashboard/useManualHighlighting';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
 import { parseCSV } from '../utils/dashboard/csvParser';
+import { moveArrayItem } from '../utils/dashboard/reorder';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
@@ -100,7 +101,7 @@ export const Dashboard = () => {
 
   // Ganze Hook-Rückgaben werden an die Step-Komponenten durchgereicht
   // (reine Präsentation); hier nur destrukturieren, was Handler brauchen.
-  const highlighting = useManualHighlighting({ manualInput, importMode, setWords });
+  const highlighting = useManualHighlighting({ manualInput, importMode, setWords, setManualInput });
   const { resetChunks, applyChunksToWords, handleResetChunks } = highlighting;
 
   const math = useMathImport({ importMode, setWords });
@@ -171,6 +172,30 @@ export const Dashboard = () => {
     } else {
       const parsed = parseCSV(manualInput, mode);
       setWords(parsed);
+    }
+  };
+
+  // Löschen eines einzelnen Abschnitts im Panel: im Manuell-Modus muss der
+  // zugehörige Chunk entfernt werden (sonst bleibt er im Text markiert),
+  // sonst reicht ein direkter Eingriff in die Wörter-Liste.
+  const handleDeleteWord = (id: string) => {
+    if (importMode === 'manual') {
+      highlighting.handleDeleteChunk(id);
+    } else {
+      setWords(words.filter((w) => w.id !== id));
+    }
+  };
+
+  // Umsortieren per Drag & Drop im Abschnitte-Panel: im Manuell-Modus wandern
+  // die Textinhalte der Chunks (moveChunk), sonst wird die Wörter-Liste direkt
+  // umgestellt.
+  const handleReorderWords = (fromIndex: number, toIndex: number) => {
+    if (importMode === 'manual') {
+      const from = words[fromIndex];
+      const to = words[toIndex];
+      if (from && to) highlighting.moveChunk(from.id, to.id);
+    } else {
+      setWords(moveArrayItem(words, fromIndex, toIndex));
     }
   };
 
@@ -279,6 +304,8 @@ export const Dashboard = () => {
               onFileUpload={handleFileUpload}
               words={words}
               onResetChunks={handleResetChunks}
+              onDeleteWord={handleDeleteWord}
+              onReorderWords={handleReorderWords}
               highlighting={highlighting}
               math={math}
             />

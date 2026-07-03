@@ -4,6 +4,7 @@ import type { useManualHighlighting } from '../../hooks/dashboard/useManualHighl
 import type { useMathImport } from '../../hooks/dashboard/useMathImport';
 import type { WordItem } from '../../types/game';
 import { generateMathLines, parseMathExpr, type GapSlot, type MathOp } from '../../utils/dashboard/mathTasks';
+import { moveArrayItem } from '../../utils/dashboard/reorder';
 import { MiniStepper } from './MiniStepper';
 
 export type ImportMode = 'lines' | 'sentences' | 'manual' | 'math';
@@ -16,6 +17,10 @@ interface ImportStepProps {
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   words: WordItem[];
   onResetChunks: () => void;
+  /** Löscht einen einzelnen Abschnitt (Panel-Chip), mode-abhängig. */
+  onDeleteWord: (id: string) => void;
+  /** Sortiert die Abschnitte per Drag & Drop um, mode-abhängig. */
+  onReorderWords: (fromIndex: number, toIndex: number) => void;
   /** Komplette Rückgabe von useManualHighlighting – reine Durchreichung. */
   highlighting: ReturnType<typeof useManualHighlighting>;
   /** Komplette Rückgabe von useMathImport – reine Durchreichung. */
@@ -46,6 +51,8 @@ export const ImportStep = ({
   onFileUpload,
   words,
   onResetChunks,
+  onDeleteWord,
+  onReorderWords,
   highlighting,
   math,
 }: ImportStepProps) => {
@@ -56,7 +63,14 @@ export const ImportStep = ({
     handleWordClick,
     handleMouseUp,
     handleDeleteChunk,
+    moveChunk,
   } = highlighting;
+
+  // Drag & Drop: Index/Chunk, über dem gerade gezogen wird (nur fürs
+  // visuelle Feedback, der eigentliche Reorder passiert erst beim Drop).
+  const [dragOverWordIdx, setDragOverWordIdx] = useState<number | null>(null);
+  const [dragOverChunkId, setDragOverChunkId] = useState<string | null>(null);
+  const [dragOverMathIdx, setDragOverMathIdx] = useState<number | null>(null);
 
   // --- Mathe: zeilenbasierte Aufgabenliste (mathInput bleibt die Quelle) ---
   const mathLines = math.mathInput
@@ -76,9 +90,10 @@ export const ImportStep = ({
 
   const commitEdit = () => {
     if (editIdx === null) return;
+    const wasAppending = editIdx >= mathLines.length;
     const lines = [...mathLines];
     const v = draft.trim();
-    if (editIdx >= lines.length) {
+    if (wasAppending) {
       if (v) lines.push(v);
     } else if (v) {
       lines[editIdx] = v;
@@ -86,7 +101,12 @@ export const ImportStep = ({
       lines.splice(editIdx, 1);
     }
     commitLines(lines);
-    setEditIdx(null);
+    setDraft('');
+    // Fortlaufendes Eintippen: nach dem Anhängen bleibt das Feld für die
+    // nächste Aufgabe offen (Enter -> direkt weiter tippen), damit man nicht
+    // für jede einzelne Aufgabe erneut auf "Aufgabe hinzufügen" klicken muss.
+    // Leere Eingabe (Enter oder Verlassen) beendet das Hinzufügen.
+    setEditIdx(wasAppending && v ? lines.length : null);
   };
 
   const currentOps = (): MathOp[] => {
@@ -109,6 +129,11 @@ export const ImportStep = ({
     const lines = [...mathLines];
     lines.splice(i, 1);
     commitLines(lines);
+    if (editIdx !== null) setEditIdx(null);
+  };
+
+  const reorderRows = (fromIdx: number, toIdx: number) => {
+    commitLines(moveArrayItem(mathLines, fromIdx, toIdx));
     if (editIdx !== null) setEditIdx(null);
   };
 
@@ -257,7 +282,23 @@ export const ImportStep = ({
                       return (
                         <div
                           key={`${line}-${i}`}
-                          className="flex items-center justify-between gap-2 bg-surface-2 rounded-[10px] pl-3.5 pr-1.5 py-1.5"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('text/plain', String(i));
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => { e.preventDefault(); setDragOverMathIdx(i); }}
+                          onDragLeave={() => setDragOverMathIdx((cur) => (cur === i ? null : cur))}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverMathIdx(null);
+                            const fromIdx = Number(e.dataTransfer.getData('text/plain'));
+                            if (!Number.isNaN(fromIdx)) reorderRows(fromIdx, i);
+                          }}
+                          onDragEnd={() => setDragOverMathIdx(null)}
+                          className={`flex items-center justify-between gap-2 bg-surface-2 rounded-[10px] pl-3.5 pr-1.5 py-1.5 cursor-grab active:cursor-grabbing transition-shadow ${
+                            dragOverMathIdx === i ? 'ring-2 ring-accent' : ''
+                          }`}
                         >
                           <button
                             type="button"
@@ -382,13 +423,32 @@ export const ImportStep = ({
                         return (
                           <span
                             key={seg.chunkId}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', seg.chunkId!);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragOver={(e) => { e.preventDefault(); setDragOverChunkId(seg.chunkId!); }}
+                            onDragLeave={() => setDragOverChunkId((cur) => (cur === seg.chunkId ? null : cur))}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setDragOverChunkId(null);
+                              const fromId = e.dataTransfer.getData('text/plain');
+                              if (fromId) moveChunk(fromId, seg.chunkId!);
+                            }}
+                            onDragEnd={() => setDragOverChunkId(null)}
                             onClick={() => handleDeleteChunk(seg.chunkId!)}
-                            className="inline-block bg-accent-soft text-accent-strong rounded-lg px-2 py-0.5 mx-0.5 font-bold cursor-pointer hover:bg-danger/15 hover:text-danger transition-colors group relative"
-                            title="Klicken zum Löschen"
+                            className={`inline-block bg-accent-soft text-accent-strong rounded-lg px-2 py-0.5 mx-0.5 font-bold cursor-grab active:cursor-grabbing hover:bg-danger/15 hover:text-danger transition-colors group relative ${
+                              dragOverChunkId === seg.chunkId ? 'ring-2 ring-accent-strong' : ''
+                            }`}
+                            title="Ziehen zum Verschieben, Klicken zum Löschen"
                           >
                             {seg.text}
-                            <span className="absolute -top-1.5 -right-1.5 bg-danger text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                              ×
+                            {/* SVG statt Text-"×": ein echtes Zeichen hier würde die
+                                Zeichen-Indizes verfälschen, die handleMouseUp per
+                                Selection-Range aus dem gerenderten Text berechnet. */}
+                            <span className="absolute -top-1.5 -right-1.5 bg-danger text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                              <X className="w-2.5 h-2.5" />
                             </span>
                           </span>
                         );
@@ -452,13 +512,29 @@ export const ImportStep = ({
                     {words.map((word, idx) => (
                       <div
                         key={word.id}
-                        className="inline-flex items-center gap-1.5 bg-accent-soft text-accent-strong px-3 py-2 rounded-[10px] text-[13px] font-bold h-fit"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', String(idx));
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverWordIdx(idx); }}
+                        onDragLeave={() => setDragOverWordIdx((cur) => (cur === idx ? null : cur))}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverWordIdx(null);
+                          const fromIdx = Number(e.dataTransfer.getData('text/plain'));
+                          if (!Number.isNaN(fromIdx)) onReorderWords(fromIdx, idx);
+                        }}
+                        onDragEnd={() => setDragOverWordIdx(null)}
+                        className={`inline-flex items-center gap-1.5 bg-accent-soft text-accent-strong px-3 py-2 rounded-[10px] text-[13px] font-bold h-fit cursor-grab active:cursor-grabbing transition-shadow ${
+                          dragOverWordIdx === idx ? 'ring-2 ring-accent-strong' : ''
+                        }`}
                       >
                         <span className="opacity-55 text-[11px]">{idx + 1}.</span>
                         <span className="break-all">{word.prompt ? `${word.prompt} = ${word.targetWord}` : word.targetWord}</span>
                         <button
                           type="button"
-                          onClick={() => handleDeleteChunk(word.id)}
+                          onClick={() => onDeleteWord(word.id)}
                           className="text-[13px] leading-none cursor-pointer hover:opacity-70 ml-0.5"
                           title="Abschnitt löschen"
                         >
