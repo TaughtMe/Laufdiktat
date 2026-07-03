@@ -12,6 +12,7 @@ interface GameStore {
   isTtsEnabled: boolean;
   uebungMaxAttempts: number;
   showStars: boolean;
+  shuffleWords: boolean;
 
   // Actions
   setWords: (words: WordItem[]) => void;
@@ -24,6 +25,7 @@ interface GameStore {
   setTtsEnabled: (enabled: boolean) => void;
   setUebungMaxAttempts: (count: number) => void;
   setShowStars: (show: boolean) => void;
+  setShuffleWords: (shuffle: boolean) => void;
   /** Setzt die Spieldaten zurück (sauberer Beitritt – kein altes Spiel im Speicher). */
   resetGameData: () => void;
 }
@@ -42,6 +44,7 @@ export const useGameStore = create<GameStore>((set) => ({
   isTtsEnabled: true,
   uebungMaxAttempts: 3,
   showStars: true,
+  shuffleWords: false,
 
   // Actions
   setWords: (words) => set({ words }),
@@ -59,6 +62,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setTtsEnabled: (isTtsEnabled) => set({ isTtsEnabled }),
   setUebungMaxAttempts: (uebungMaxAttempts) => set({ uebungMaxAttempts }),
   setShowStars: (showStars) => set({ showStars }),
+  setShuffleWords: (shuffleWords) => set({ shuffleWords }),
   resetGameData: () =>
     set({
       words: [],
