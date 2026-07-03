@@ -15,6 +15,7 @@ import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '
 import { clearPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { seededShuffle } from '../utils/shared/seededShuffle';
+import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -41,6 +42,8 @@ export const Game = () => {
   const setUebungMaxAttempts = useGameStore((state) => state.setUebungMaxAttempts);
   const showStars = useGameStore((state) => state.showStars);
   const setShowStars = useGameStore((state) => state.setShowStars);
+  const strictTypingMode = useGameStore((state) => state.strictTypingMode);
+  const setStrictTypingMode = useGameStore((state) => state.setStrictTypingMode);
 
   // Auswertung: Startzeit, Gesamtfehler und Fehler je Aufgabe (für Lehrer-Statistik).
   const startedAtRef = useRef(0);
@@ -105,7 +108,7 @@ export const Game = () => {
     // Version passt: der Beitritt ist jetzt wirklich abgeschlossen.
     clearPendingJoin();
 
-    const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars } = data;
+    const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars, strictTypingMode: newStrictTypingMode } = data;
     setSessionEnded(false);
     setCurrentWordIndex(0);
     setGameState('IDLE');
@@ -130,7 +133,8 @@ export const Game = () => {
     if (newTtsEnabled !== undefined) setTtsEnabled(newTtsEnabled);
     if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
     if (newShowStars !== undefined) setShowStars(newShowStars);
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars]);
+    if (newStrictTypingMode !== undefined) setStrictTypingMode(newStrictTypingMode);
+  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars, setStrictTypingMode]);
 
   const onSessionEnded = useCallback(() => {
     setSessionEnded(true);
@@ -291,6 +295,20 @@ export const Game = () => {
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
     setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
+  };
+
+  // Strenger Eingabemodus: Zeichen-für-Zeichen-Wachstum kommt vom onBeforeInput-
+  // Guard schon fast immer sauber an; isSuspiciousBulkInsert ist der Fallback,
+  // falls doch mehrere Zeichen auf einmal durchkommen (Änderung verwerfen,
+  // statt sie zu übernehmen). Bei Mathe-Aufgaben zusätzlich auf Ziffern/
+  // Minus/Komma/Punkt einschränken.
+  const handleInputChange = (rawValue: string) => {
+    if (!strictTypingMode) {
+      setInputValue(rawValue);
+      return;
+    }
+    if (isSuspiciousBulkInsert(inputValue, rawValue)) return;
+    setInputValue(isMath ? sanitizeMathInput(rawValue) : rawValue);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -646,16 +664,21 @@ export const Game = () => {
                   type="text"
                   inputMode={isMath ? 'numeric' : 'text'}
                   value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onPaste={(e) => { if (strictTypingMode) e.preventDefault(); }}
+                  onDrop={(e) => { if (strictTypingMode) e.preventDefault(); }}
+                  onBeforeInput={(e) => {
+                    if (strictTypingMode && isBlockedInputType((e.nativeEvent as InputEvent).inputType)) {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`w-full text-center text-4xl font-bold py-6 px-4 bg-white/10 backdrop-blur-sm border-4 ${
                     errorShake
                       ? 'border-red-500 text-red-400'
                       : 'border-brand-500 text-white focus:ring-brand-500/20'
                   } rounded-[1.8rem] shadow-[0_10px_35px_rgba(0,0,0,0.1)] focus:outline-none focus:ring-4 transition-all relative z-10 font-sans tracking-wide placeholder:text-slate-500`}
                   placeholder={copyMode ? 'Hier abtippen...' : isMath ? 'Ergebnis...' : 'Wort eingeben...'}
-                  autoComplete="off"
-                  spellCheck="false"
-                  autoCorrect="off"
+                  {...(strictTypingMode ? STRICT_INPUT_ATTRS : {})}
                 />
                 
                 {/* Ink Splats Overlay */}

@@ -20,6 +20,8 @@ interface SettingsStepProps {
   onToggleStars: (checked: boolean) => void;
   shuffleWords: boolean;
   onToggleShuffle: (checked: boolean) => void;
+  strictTypingMode: boolean;
+  onToggleStrictTyping: (checked: boolean) => void;
 }
 
 const MODES: Array<{
@@ -108,21 +110,29 @@ const Checkbox = ({
   </button>
 );
 
-/** Options-Zeile mit Checkbox (Ja/Nein-Optionen). */
+/** Options-Zeile mit Checkbox (Ja/Nein-Optionen), optional mit Hilfetext darunter. */
 const CheckboxRow = ({
   label,
+  hint,
   checked,
   onClick,
   colorClass,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onClick: () => void;
   colorClass?: string;
 }) => (
-  <label className="flex items-center gap-3 cursor-pointer" onClick={(e) => { e.preventDefault(); onClick(); }}>
+  <label
+    className={`flex ${hint ? 'items-start' : 'items-center'} gap-3 cursor-pointer`}
+    onClick={(e) => { e.preventDefault(); onClick(); }}
+  >
     <Checkbox checked={checked} onClick={onClick} colorClass={colorClass} />
-    <span className="text-sm font-semibold text-ink">{label}</span>
+    <span className={hint ? 'mt-px' : undefined}>
+      <span className="block text-sm font-semibold text-ink">{label}</span>
+      {hint && <span className="block text-xs text-ink-faint mt-0.5">{hint}</span>}
+    </span>
   </label>
 );
 
@@ -169,6 +179,8 @@ export const SettingsStep = ({
   onToggleStars,
   shuffleWords,
   onToggleShuffle,
+  strictTypingMode,
+  onToggleStrictTyping,
 }: SettingsStepProps) => {
   const selected: ModeId = stationMode ? 'STATION' : gameMode;
   const activeMode = MODES.find((m) => m.id === selected)!;
@@ -191,6 +203,15 @@ export const SettingsStep = ({
         onClick={() => onToggleShuffle(!shuffleWords)}
       />
     );
+
+  const strictTypingRow = (
+    <CheckboxRow
+      label="Nur getippte Eingaben erlauben"
+      hint="Verhindert Einfügen und erschwert Autokorrektur/Vorschläge."
+      checked={strictTypingMode}
+      onClick={() => onToggleStrictTyping(!strictTypingMode)}
+    />
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1.15fr_1fr] gap-7 flex-1 min-h-0">
@@ -295,6 +316,7 @@ export const SettingsStep = ({
             )}
 
             {shuffleRow}
+            {strictTypingRow}
             {starsRow}
           </div>
         </div>

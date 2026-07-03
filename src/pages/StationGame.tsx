@@ -18,6 +18,7 @@ export const StationGame = () => {
   const setStationCount = useGameStore((s) => s.setStationCount);
   const isTtsEnabled = useGameStore((s) => s.isTtsEnabled);
   const setTtsEnabled = useGameStore((s) => s.setTtsEnabled);
+  const setStrictTypingMode = useGameStore((s) => s.setStrictTypingMode);
 
   const [view, setView] = useState<StationView>('GRID');
   const [studentNumber, setStudentNumber] = useState<number | null>(null);
@@ -46,12 +47,17 @@ export const StationGame = () => {
         setPeeks(d.peeks);
       }
     }).on('broadcast', { event: 'session-start' }, (payload) => {
-      const { stationCount: newStationCount, isTtsEnabled: newTts } = payload.payload;
+      const { stationCount: newStationCount, isTtsEnabled: newTts, strictTypingMode: newStrict } = payload.payload;
       if (newStationCount !== undefined) {
         setStationCount(newStationCount);
       }
       if (newTts !== undefined) {
         setTtsEnabled(newTts);
+      }
+      // Kein Eingabefeld in den Stationen (Schüler schreiben auf Papier) – nur
+      // Store-Konsistenz mit der Schüler-App, falls später doch ein Feld dazukommt.
+      if (newStrict !== undefined) {
+        setStrictTypingMode(newStrict);
       }
       // Neue Sitzung -> evtl. "Sitzung beendet"-Hinweis verlassen, frisch zur Auswahl.
       setSessionEnded(false);
@@ -62,7 +68,7 @@ export const StationGame = () => {
     });
     channelRef.current.subscribe();
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [roomCode, studentNumber, setStationCount, setTtsEnabled, navigate]);
+  }, [roomCode, studentNumber, setStationCount, setTtsEnabled, setStrictTypingMode, navigate]);
 
   const sendUpdate = useCallback((idx: number, p: number) => {
     if (!channelRef.current || !studentNumber) return;

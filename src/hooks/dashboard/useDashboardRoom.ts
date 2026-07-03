@@ -40,6 +40,7 @@ const buildSessionPayload = (sessionId: string) => {
     // räumliche Zuordnung zum Wort an der jeweiligen Station.
     shuffleWords: s.stationMode ? false : s.shuffleWords,
     sessionId,
+    strictTypingMode: s.strictTypingMode,
   };
 };
 

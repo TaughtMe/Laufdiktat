@@ -18,6 +18,8 @@ export interface SessionStartData {
   shuffleWords?: boolean;
   /** Kennung der laufenden Sitzung – Teil des Shuffle-Seeds. */
   sessionId?: string;
+  /** Strenger Eingabemodus: Einfügen/Autokorrektur erschweren (siehe utils/game/strictTyping.ts). */
+  strictTypingMode?: boolean;
 }
 
 interface UseGameRoomArgs {
