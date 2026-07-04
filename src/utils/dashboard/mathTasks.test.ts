@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMathLine, parseMathExpr, buildGapTask, generateMathLines, type MathOp } from './mathTasks';
+import { parseMathLine, parseMathExpr, buildGapTask, generateMathLines, type MathOp, type GenOptions } from './mathTasks';
 
 describe('parseMathLine', () => {
   it('rechnet Plus und Minus', () => {
@@ -44,30 +44,114 @@ describe('buildGapTask (Lückenaufgaben)', () => {
 
 describe('generateMathLines', () => {
   const allOps: MathOp[] = ['+', '-', '*', '/'];
+  const base: Omit<GenOptions, 'ops'> = {
+    minValue: 0,
+    maxValue: 20,
+    count: 7,
+    allowNegativeResults: false,
+    excludeZeroOperand: false,
+    excludeZeroResult: false,
+    multiplicationTables: [],
+  };
 
   it('erzeugt die gewünschte Anzahl', () => {
-    expect(generateMathLines({ ops: allOps, max: 20, count: 7, noNegative: true })).toHaveLength(7);
+    expect(generateMathLines({ ...base, ops: allOps })).toHaveLength(7);
   });
 
-  it('hält den Zahlenraum strikt ein (Operanden UND Ergebnis)', () => {
-    for (const max of [10, 20, 100]) {
-      const lines = generateMathLines({ ops: allOps, max, count: 300, noNegative: true });
+  it('hält den Zahlenraum bei Plus/Minus strikt ein (Operanden UND Ergebnis)', () => {
+    for (const maxValue of [10, 20, 100]) {
+      const lines = generateMathLines({ ...base, ops: ['+', '-'], maxValue, count: 300 });
       for (const line of lines) {
         const item = parseMathLine(line);
         expect(item, `parsebar: ${line}`).not.toBeNull();
-        const operands = (line.match(/\d+/g) || []).map(Number);
+        const operands = (line.match(/-?\d+/g) || []).map(Number);
         const answer = Number(item!.targetWord);
-        expect(Math.max(...operands), `Operand <= ${max}: ${line}`).toBeLessThanOrEqual(max);
-        expect(answer, `Ergebnis <= ${max}: ${line}`).toBeLessThanOrEqual(max);
-        expect(answer, `Ergebnis >= 0: ${line}`).toBeGreaterThanOrEqual(0);
+        expect(Math.max(...operands), `Operand <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+        expect(answer, `Ergebnis <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+        expect(answer, `Ergebnis >= 0 (keine negativen Ergebnisse): ${line}`).toBeGreaterThanOrEqual(0);
       }
     }
   });
 
+  it('hält die untere Zahlenraum-Grenze (Von) bei Plus ein', () => {
+    const lines = generateMathLines({ ...base, ops: ['+'], minValue: 10, maxValue: 20, count: 200 });
+    for (const line of lines) {
+      const operands = (line.match(/\d+/g) || []).map(Number);
+      for (const n of operands) {
+        expect(n, `Operand zwischen 10 und 20: ${line}`).toBeGreaterThanOrEqual(10);
+        expect(n, `Operand zwischen 10 und 20: ${line}`).toBeLessThanOrEqual(20);
+      }
+    }
+  });
+
+  it('erlaubt negative Ergebnisse nur, wenn allowNegativeResults aktiv ist', () => {
+    const lines = generateMathLines({
+      ...base,
+      ops: ['-'],
+      minValue: 0,
+      maxValue: 5,
+      count: 200,
+      allowNegativeResults: true,
+    });
+    const results = lines.map((l) => Number(parseMathLine(l)!.targetWord));
+    // Bei kleinem Zahlenraum und vielen Versuchen sollte mindestens einmal ein
+    // negatives Ergebnis vorkommen, wenn es ausdrücklich erlaubt ist.
+    expect(results.some((r) => r < 0)).toBe(true);
+  });
+
+  it('vermeidet 0 als Rechenzahl, wenn excludeZeroOperand aktiv ist', () => {
+    const lines = generateMathLines({
+      ...base,
+      ops: ['+', '-'],
+      minValue: 0,
+      maxValue: 5,
+      count: 200,
+      excludeZeroOperand: true,
+    });
+    for (const line of lines) {
+      const operands = (line.match(/-?\d+/g) || []).map(Number);
+      expect(operands.every((n) => n !== 0), `kein 0-Operand: ${line}`).toBe(true);
+    }
+  });
+
+  it('vermeidet Ergebnis 0, wenn excludeZeroResult aktiv ist', () => {
+    const lines = generateMathLines({
+      ...base,
+      ops: ['+', '-'],
+      minValue: 0,
+      maxValue: 10,
+      count: 200,
+      excludeZeroResult: true,
+    });
+    for (const line of lines) {
+      const item = parseMathLine(line);
+      expect(item, line).not.toBeNull();
+      expect(Number(item!.targetWord), `Ergebnis != 0: ${line}`).not.toBe(0);
+    }
+  });
+
   it('liefert bei nur Division immer ganzzahlige, gültige Aufgaben', () => {
-    const lines = generateMathLines({ ops: ['/'], max: 100, count: 200, noNegative: true });
+    const lines = generateMathLines({ ...base, ops: ['/'], count: 200 });
     for (const line of lines) {
       expect(parseMathLine(line), line).not.toBeNull();
+    }
+  });
+
+  it('berücksichtigt die gewählten Einmaleins-Reihen bei Mal', () => {
+    const lines = generateMathLines({ ...base, ops: ['*'], multiplicationTables: [5], count: 200 });
+    for (const line of lines) {
+      const expr = parseMathExpr(line);
+      expect(expr, line).not.toBeNull();
+      expect(expr!.a === 5 || expr!.b === 5, `5er-Reihe: ${line}`).toBe(true);
+    }
+  });
+
+  it('berücksichtigt die gewählten Einmaleins-Reihen bei Geteilt', () => {
+    const lines = generateMathLines({ ...base, ops: ['/'], multiplicationTables: [5], count: 200 });
+    for (const line of lines) {
+      const expr = parseMathExpr(line);
+      expect(expr, line).not.toBeNull();
+      expect(expr!.b, `Divisor 5: ${line}`).toBe(5);
     }
   });
 });

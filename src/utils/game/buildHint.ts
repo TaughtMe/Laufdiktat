@@ -1,15 +1,4 @@
-// Stabiler Hash + deterministische "Zufalls"-Reihenfolge, damit ein Hinweis
-// bei jedem Render gleich aussieht (kein Flackern).
-const hashStr = (s: string): number => {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-};
-
-const deterministicOrder = (n: number, seed: string): number[] =>
-  Array.from({ length: n }, (_, i) => i).sort(
-    (a, b) => hashStr(`${seed}:${a}`) - hashStr(`${seed}:${b}`)
-  );
+import { deterministicOrder } from '../shared/seededShuffle';
 
 /**
  * Baut den Hinweis für Freies Üben.

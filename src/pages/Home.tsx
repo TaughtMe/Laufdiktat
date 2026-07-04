@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Dices, Camera, LogIn } from 'lucide-react';
+import { Dices, Camera, LogIn, Moon, Sun } from 'lucide-react';
 import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
@@ -8,6 +8,13 @@ import { VersionBadge } from '../components/shared/VersionBadge';
 import { checkForUpdateReady, applyUpdate } from '../pwa';
 import { savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
+import { useTheme } from '../hooks/shared/useTheme';
+
+const CODE_LENGTH = 4;
+const toCodeChars = (raw: string): string[] => {
+  const digits = raw.replace(/\D/g, '').slice(0, CODE_LENGTH).split('');
+  return Array.from({ length: CODE_LENGTH }, (_, i) => digits[i] ?? '');
+};
 
 const ADJECTIVES = ['Schnell', 'Flink', 'Schlau', 'Mutig', 'Wild', 'Kühn', 'Listig', 'Stark', 'Frech'];
 const ANIMALS = [
@@ -49,11 +56,14 @@ const getRandomName = () => {
 export const Home = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [roomCode, setRoomCode] = useState(() => searchParams.get('room') || '');
+  const [codeChars, setCodeChars] = useState(() => toCodeChars(searchParams.get('room') || ''));
+  const roomCode = useMemo(() => codeChars.join(''), [codeChars]);
+  const digitRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [studentName, setStudentName] = useState(getRandomName);
   const [scanning, setScanning] = useState(false);
   const [joining, setJoining] = useState(false);
   const resetGameData = useGameStore((s) => s.resetGameData);
+  const { dark, toggleTheme } = useTheme();
 
   // Sauberer Beitritt: alten Spielzustand verwerfen, dann ins Spiel.
   // Räumt pendingJoin bewusst NICHT auf – das übernimmt erst Game.tsx, sobald
@@ -114,7 +124,7 @@ export const Home = () => {
     }
     setScanning(false);
     if (code) {
-      setRoomCode(code);
+      setCodeChars(toCodeChars(code));
       joinGame(code, studentName);
     }
   }, [joinGame, studentName]);
@@ -131,39 +141,95 @@ export const Home = () => {
     }
   };
 
+  // Raum-Code als vier Einzelfelder: Eingabe eines Ziffer springt automatisch
+  // ins nächste Feld, Backspace in einem leeren Feld springt zurück und löscht
+  // die vorherige Ziffer (klassisches PIN-Eingabe-Verhalten).
+  const handleDigitChange = (index: number, e: ChangeEvent<HTMLInputElement>) => {
+    const digit = e.target.value.replace(/\D/g, '').slice(-1);
+    setCodeChars((prev) => {
+      const next = [...prev];
+      next[index] = digit;
+      return next;
+    });
+    if (digit && index < CODE_LENGTH - 1) {
+      digitRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleDigitKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleStartDictation();
+    } else if (e.key === 'Backspace' && !codeChars[index] && index > 0) {
+      digitRefs.current[index - 1]?.focus();
+      setCodeChars((prev) => {
+        const next = [...prev];
+        next[index - 1] = '';
+        return next;
+      });
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      digitRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < CODE_LENGTH - 1) {
+      digitRefs.current[index + 1]?.focus();
+    }
+  };
+
+  // Ganzen Code auf einmal einfügen (z. B. aus der Zwischenablage) – verteilt
+  // die Ziffern statt nur die erste ins angeklickte Feld zu schreiben.
+  const handleDigitPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LENGTH);
+    if (pasted.length <= 1) return;
+    e.preventDefault();
+    setCodeChars(toCodeChars(pasted));
+    digitRefs.current[Math.min(pasted.length, CODE_LENGTH) - 1]?.focus();
+  };
+
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center px-4 py-6 sm:py-8 [@media(max-height:700px)]:py-3 bg-brand-bg dark:bg-slate-950 transition-colors duration-300 relative overflow-x-hidden">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center px-4 py-6 sm:py-8 [@media(max-height:700px)]:py-3 bg-page transition-colors duration-300 relative overflow-x-hidden">
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-20 w-10 h-10 rounded-full bg-surface-2 text-ink-muted flex items-center justify-center cursor-pointer hover:text-ink transition-colors shadow-sm"
+        title={dark ? 'Helles Design' : 'Dunkles Design'}
+        aria-label={dark ? 'Helles Design aktivieren' : 'Dunkles Design aktivieren'}
+      >
+        {dark ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
+      </button>
 
       {/* Main Card */}
-      <div className="z-10 bg-white dark:bg-slate-900 rounded-[1.5rem] sm:rounded-[1.8rem] p-5 sm:p-8 md:p-10 [@media(max-height:700px)]:p-4 shadow-[0_10px_35px_rgba(0,0,0,0.03)] border border-slate-100/50 dark:border-slate-800 flex flex-col items-center text-center space-y-4 sm:space-y-6 [@media(max-height:700px)]:space-y-2 w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-500">
+      <div className="z-10 bg-surface rounded-[28px] p-5 sm:p-8 md:p-10 [@media(max-height:700px)]:p-4 shadow-[0_10px_35px_rgba(0,0,0,0.03)] flex flex-col items-center text-center space-y-4 sm:space-y-6 [@media(max-height:700px)]:space-y-2 w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-500">
         <div className="space-y-1 sm:space-y-1.5">
-          <h1 className="text-2.5xl sm:text-3.5xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-2.5xl sm:text-3.5xl font-black text-ink tracking-tight">
             Laufdiktat
           </h1>
-          <p className="text-[0.8rem] sm:text-[0.85rem] text-slate-400 dark:text-slate-500 max-w-[280px] leading-relaxed mx-auto">
+          <p className="text-[0.8rem] sm:text-[0.85rem] text-ink-muted max-w-[280px] leading-relaxed mx-auto">
             Gib den Raumcode deines Lehrers ein, um zu starten.
           </p>
         </div>
 
         <div className="w-full flex flex-col items-center space-y-3 sm:space-y-4">
-          <div className="relative w-full">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={4}
-              placeholder="Raum-Code"
-              value={roomCode}
-              onChange={(e) => setRoomCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleStartDictation();
-              }}
-              className="w-full text-center text-lg font-semibold py-3 sm:py-3.5 pl-12 pr-12 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 focus:outline-none transition-all placeholder:text-[#a0aec0] dark:placeholder:text-slate-700 tracking-wide font-sans"
-            />
+          {/* Raum-Code: vier Einzelfelder + Kamera-Button, Cursor wandert
+              beim Tippen automatisch ins nächste Feld. */}
+          <div className="w-full grid grid-cols-5 gap-2 sm:gap-2.5">
+            {codeChars.map((digit, i) => (
+              <input
+                key={i}
+                ref={(el) => { digitRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleDigitChange(i, e)}
+                onKeyDown={(e) => handleDigitKeyDown(i, e)}
+                onPaste={handleDigitPaste}
+                aria-label={`Raum-Code Ziffer ${i + 1}`}
+                className="aspect-square w-full text-center text-xl sm:text-2xl font-extrabold rounded-2xl bg-surface-2 text-ink focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+              />
+            ))}
             <button
               type="button"
               onClick={() => setScanning(true)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-brand-500 hover:bg-brand-500/10 transition-colors cursor-pointer"
+              className="aspect-square w-full rounded-2xl bg-accent-soft text-accent-strong hover:opacity-80 transition-opacity cursor-pointer flex items-center justify-center"
               title="QR-Code scannen"
               aria-label="QR-Code scannen"
             >
@@ -173,25 +239,21 @@ export const Home = () => {
 
           {/* Animal Avatar */}
           {studentName && (
-            <div className="flex flex-col items-center gap-2 animate-in fade-in zoom-in-95 duration-300">
-              <AnimalAvatar studentName={studentName} className="w-24 h-24 sm:w-32 sm:h-32 [@media(max-height:700px)]:w-16 [@media(max-height:700px)]:h-16 mx-auto" />
+            <div className="w-24 h-24 sm:w-32 sm:h-32 [@media(max-height:700px)]:w-16 [@media(max-height:700px)]:h-16 rounded-full bg-surface-2 flex items-center justify-center animate-in fade-in zoom-in-95 duration-300">
+              <AnimalAvatar studentName={studentName} className="w-[70%] h-[70%]" />
             </div>
           )}
 
           <div className="w-full flex flex-col">
-            <input
-              type="text"
-              placeholder="Dein Name"
-              value={studentName}
-              readOnly
-              className="w-full text-center text-lg font-semibold py-3 sm:py-3.5 px-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 text-[#0f4a60] dark:text-white focus:outline-none transition-all"
-            />
+            <div className="w-full text-center text-lg font-bold py-3 sm:py-3.5 px-4 rounded-2xl bg-surface-2 text-ink">
+              {studentName}
+            </div>
             <button
               type="button"
               onClick={generateName}
-              className="mt-2.5 sm:mt-3 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350 flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full"
+              className="mt-2.5 sm:mt-3 text-xs font-semibold text-ink-faint hover:text-ink-muted flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full"
             >
-              <Dices className="w-3.5 h-3.5 text-slate-400" />
+              <Dices className="w-3.5 h-3.5" />
               <span>Zufälligen Namen generieren</span>
             </button>
           </div>
@@ -199,7 +261,7 @@ export const Home = () => {
           <button
             onClick={handleStartDictation}
             disabled={joining}
-            className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-bold py-3 sm:py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-3 sm:mt-4"
+            className="w-full bg-accent hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-extrabold py-3 sm:py-3.5 px-6 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-3 sm:mt-4"
           >
             {joining ? 'Suche nach Update…' : 'Beitreten'}
           </button>
@@ -209,10 +271,10 @@ export const Home = () => {
       {/* Lehrer-Login + Impressum – bewusst im normalen Fluss (nicht absolut
           positioniert), damit auf kleinen Höhen nichts überlappt, sondern die
           Seite notfalls scrollt. */}
-      <div className="z-10 w-full flex flex-col items-center gap-3 mt-4 sm:mt-5 [@media(max-height:700px)]:mt-2 pb-10 [@media(max-height:700px)]:pb-4">
+      <div className="z-10 w-full flex flex-col items-center gap-3 mt-4 sm:mt-5 [@media(max-height:700px)]:mt-2 pb-6 [@media(max-height:700px)]:pb-4">
         <Link
           to="/dashboard"
-          className="inline-flex items-center gap-2 text-sm font-bold text-darkteal-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-500 hover:text-brand-600 dark:hover:text-brand-400 px-6 py-2.5 rounded-xl shadow-sm hover:shadow transition-all active:scale-[0.98]"
+          className="inline-flex items-center gap-2 text-sm font-bold text-ink bg-surface border border-line hover:bg-surface-2 px-6 py-2.5 rounded-full shadow-sm hover:shadow transition-all active:scale-[0.98]"
         >
           <LogIn className="w-4 h-4" />
           Lehrer-Login
@@ -220,16 +282,17 @@ export const Home = () => {
 
         <Link
           to="/legal"
-          className="text-sm text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400 font-medium transition-colors"
+          className="text-sm text-ink-faint hover:text-ink-muted font-medium transition-colors"
         >
           Impressum &amp; Datenschutz
         </Link>
+
+        <VersionBadge fixed={false} />
       </div>
 
       {scanning && (
         <QrScannerOverlay onResult={handleScanResult} onClose={() => setScanning(false)} />
       )}
-      <VersionBadge />
     </div>
   );
 };

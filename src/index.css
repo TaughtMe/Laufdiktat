@@ -1,4 +1,83 @@
 @import "tailwindcss";
+/* Plus Jakarta Sans – selbst gehostet über @fontsource (kein Google-CDN,
+   damit keine IPs an Dritte gehen; siehe Datenschutz-Audit). */
+@import "@fontsource-variable/plus-jakarta-sans";
+
+/* Dark-Mode klassenbasiert (statt prefers-color-scheme): src/theme.ts setzt
+   `.dark` auf <html> – gespeicherte Wahl oder System-Einstellung als Default. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design-Tokens aus dem Dashboard-Redesign (Claude Design, Palette B, Accent
+   #0e93a8 / Hue 195). Light in :root, Dark via .dark – Komponenten nutzen die
+   semantischen Utilities aus @theme inline unten und brauchen dann kaum noch
+   eigene dark:-Klassen. */
+:root {
+  --bg: oklch(0.97 0.008 230);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.955 0.012 230);
+  --border: oklch(0.9 0.012 230);
+  --card-border: #d7e4ea;
+  --text: oklch(0.24 0.03 220);
+  --text-muted: oklch(0.5 0.02 220);
+  --text-faint: oklch(0.68 0.015 220);
+  --accent: oklch(0.62 0.12 195);
+  --accent-strong: oklch(0.48 0.12 195);
+  --accent-soft: oklch(0.93 0.045 195);
+  --violet: oklch(0.58 0.14 290);
+  --violet-soft: oklch(0.93 0.035 290);
+  --amber: oklch(0.68 0.15 55);
+  --amber-soft: oklch(0.94 0.05 75);
+  --green: oklch(0.62 0.13 155);
+  --green-soft: oklch(0.94 0.04 150);
+  --danger: oklch(0.62 0.18 22);
+}
+
+.dark {
+  --bg: oklch(0.21 0.015 230);
+  --surface: oklch(0.25 0.016 230);
+  --surface-2: oklch(0.29 0.016 230);
+  --border: oklch(0.34 0.016 230);
+  --card-border: #263747;
+  --text: oklch(0.95 0.006 230);
+  --text-muted: oklch(0.68 0.014 230);
+  --text-faint: oklch(0.5 0.014 230);
+  --accent: oklch(0.72 0.11 195);
+  --accent-strong: oklch(0.82 0.11 195);
+  --accent-soft: oklch(0.33 0.05 195);
+  --violet: oklch(0.72 0.12 290);
+  --violet-soft: oklch(0.34 0.05 290);
+  --amber: oklch(0.76 0.13 65);
+  --amber-soft: oklch(0.36 0.05 75);
+  --green: oklch(0.72 0.12 155);
+  --green-soft: oklch(0.34 0.05 150);
+  --danger: oklch(0.7 0.16 22);
+}
+
+/* Semantische Utilities: bg-surface, text-ink-muted, border-line, bg-ok-soft …
+   Die Werte referenzieren die CSS-Variablen oben und wechseln daher automatisch
+   mit .dark – ohne dark:-Klassen in den Komponenten. */
+@theme inline {
+  --font-sans: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --color-page: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-card-line: var(--card-border);
+  --color-ink: var(--text);
+  --color-ink-muted: var(--text-muted);
+  --color-ink-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-viol: var(--violet);
+  --color-viol-soft: var(--violet-soft);
+  --color-warn: var(--amber);
+  --color-warn-soft: var(--amber-soft);
+  --color-ok: var(--green);
+  --color-ok-soft: var(--green-soft);
+  --color-danger: var(--danger);
+}
 
 @theme {
   --color-primary: #3b82f6; /* Example primary color, adjust later */

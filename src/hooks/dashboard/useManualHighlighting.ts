@@ -14,6 +14,7 @@ interface UseManualHighlightingArgs {
   manualInput: string;
   importMode: ImportMode;
   setWords: (words: WordItem[]) => void;
+  setManualInput: (value: string) => void;
 }
 
 const chunksToWords = (chunks: Chunk[]): WordItem[] =>
@@ -24,7 +25,7 @@ const chunksToWords = (chunks: Chunk[]): WordItem[] =>
  * Chunk-State, Segment-/Token-Berechnung, Klick- und Auswahl-Handler.
  * Verhalten unverändert gegenüber der vorherigen Inline-Version.
  */
-export const useManualHighlighting = ({ manualInput, importMode, setWords }: UseManualHighlightingArgs) => {
+export const useManualHighlighting = ({ manualInput, importMode, setWords, setManualInput }: UseManualHighlightingArgs) => {
   const [manualChunks, setManualChunks] = useState<Chunk[]>([]);
   const highlightContainerRef = useRef<HTMLDivElement>(null);
 
@@ -270,6 +271,42 @@ export const useManualHighlighting = ({ manualInput, importMode, setWords }: Use
     selection.removeAllRanges();
   };
 
+  /**
+   * Vertauscht die Textinhalte zweier markierter Abschnitte an ihren
+   * bestehenden Positionen im Text – der Zwischentext (Leerzeichen/
+   * Satzzeichen) bleibt dabei unverändert stehen, nur die markierten Wörter
+   * wandern in ihrer neuen Reihenfolge in die alten "Slots". Für Drag & Drop:
+   * sowohl beim Ziehen im Text selbst als auch im Abschnitte-Panel.
+   */
+  const moveChunk = (chunkId: string, targetChunkId: string) => {
+    if (chunkId === targetChunkId) return;
+    const sorted = [...manualChunks].sort((a, b) => a.start - b.start);
+    const fromIdx = sorted.findIndex((c) => c.id === chunkId);
+    const toIdx = sorted.findIndex((c) => c.id === targetChunkId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const texts = sorted.map((c) => c.text);
+    const [movedText] = texts.splice(fromIdx, 1);
+    texts.splice(toIdx, 0, movedText);
+
+    let cursor = 0;
+    let newInput = '';
+    const newChunks: Chunk[] = [];
+    sorted.forEach((c, i) => {
+      newInput += manualInput.substring(cursor, c.start);
+      const start = newInput.length;
+      const text = texts[i];
+      newInput += text;
+      newChunks.push({ id: crypto.randomUUID(), start, end: start + text.length, text });
+      cursor = c.end;
+    });
+    newInput += manualInput.substring(cursor);
+
+    setManualInput(newInput);
+    setManualChunks(newChunks);
+    setWords(chunksToWords(newChunks));
+  };
+
   const handleDeleteChunk = (chunkId: string) => {
     const updatedChunks = manualChunks.filter((c) => c.id !== chunkId);
     setManualChunks(updatedChunks);
@@ -297,6 +334,7 @@ export const useManualHighlighting = ({ manualInput, importMode, setWords }: Use
     handleWordClick,
     handleMouseUp,
     handleDeleteChunk,
+    moveChunk,
     handleResetChunks,
     resetChunks,
     applyChunksToWords,

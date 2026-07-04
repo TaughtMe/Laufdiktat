@@ -1,7 +1,9 @@
 {
   "name": "laufdiktat",
   "private": true,
-  "version": "2.1.1",
+  "version": "3.0.0",
+  "license": "UNLICENSED",
+  "author": "Toby Bryson",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@supabase/supabase-js": "^2.105.4",
     "lucide-react": "^1.16.0",
     "qr-scanner": "^1.4.2",
