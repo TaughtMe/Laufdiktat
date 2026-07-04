@@ -29,6 +29,13 @@ export type AttackType = 'ink' | 'flicker';
 export interface StationStudentState {
   currentIndex: number;
   peeks: number;
+  /**
+   * Einmal gesetzt (beim ersten Ansehen des letzten Wortes), bleibt es auf
+   * true stehen – auch wenn der Schüler danach zurückblättert, um sich
+   * frühere Sätze nochmal anzusehen. So zeigt das Lehrer-Dashboard "Fertig"
+   * stabil an, statt bei jedem Zurückblättern wieder zu verschwinden.
+   */
+  finished?: boolean;
 }
 
 export interface SessionStartPayload {

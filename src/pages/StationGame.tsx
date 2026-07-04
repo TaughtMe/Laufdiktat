@@ -37,7 +37,12 @@ export const StationGame = () => {
   const [seenKeys, setSeenKeys] = useState<Set<string>>(new Set());
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [sessionEnded, setSessionEnded] = useState(false);
+  // Einmal gesetzt (letztes Wort zum ersten Mal angesehen), bleibt stehen –
+  // auch wenn danach zurückgeblättert wird (siehe StationStudentState).
+  const [finished, setFinished] = useState(false);
+  const [showFinishedToast, setShowFinishedToast] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishedToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const seenKey = studentNumber !== null ? `${studentNumber}:${currentIndex}` : '';
@@ -51,6 +56,7 @@ export const StationGame = () => {
       if (d.studentNumber === studentNumber) {
         setCurrentIndex(d.currentIndex);
         setPeeks(d.peeks);
+        setFinished(!!d.finished);
       }
     }).on('broadcast', { event: 'session-start' }, (payload) => {
       const {
@@ -86,9 +92,13 @@ export const StationGame = () => {
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
   }, [roomCode, studentNumber, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
 
-  const sendUpdate = useCallback((idx: number, p: number) => {
+  const sendUpdate = useCallback((idx: number, p: number, isFinished: boolean) => {
     if (!channelRef.current || !studentNumber) return;
-    channelRef.current.send({ type: 'broadcast', event: 'update-station-state', payload: { studentNumber, currentIndex: idx, peeks: p } });
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'update-station-state',
+      payload: { studentNumber, currentIndex: idx, peeks: p, finished: isFinished },
+    });
   }, [studentNumber]);
 
   const resetTimeout = useCallback(() => {
@@ -106,6 +116,9 @@ export const StationGame = () => {
     setStudentNumber(num);
     setCurrentIndex(0);
     setPeeks(0);
+    // Neuer Durchlauf -> erstmal nicht fertig (ein sync-station-state direkt
+    // danach übernimmt ggf. den Stand, falls derselbe Schüler fortsetzt).
+    setFinished(false);
     setView('ACTIVE');
     if (channelRef.current) {
       channelRef.current.send({ type: 'broadcast', event: 'request-station-state', payload: { studentNumber: num } });
@@ -117,7 +130,7 @@ export const StationGame = () => {
     if (currentIndex <= 0) return;
     const next = currentIndex - 1;
     setCurrentIndex(next);
-    sendUpdate(next, peeks);
+    sendUpdate(next, peeks, finished);
     resetTimeout();
   };
 
@@ -127,7 +140,7 @@ export const StationGame = () => {
     if (!hasSeenCurrent) return;
     const next = currentIndex + 1;
     setCurrentIndex(next);
-    sendUpdate(next, peeks);
+    sendUpdate(next, peeks, finished);
     resetTimeout();
   };
 
@@ -138,6 +151,21 @@ export const StationGame = () => {
     }
   };
 
+  // Erstes Ansehen eines Wortes: dauerhaft merken (schaltet Weiterblättern
+  // frei) und, falls es das letzte Wort ist, den Schüler als fertig markieren
+  // – bleibt danach stehen, auch wenn er zurückblättert (siehe finished-State
+  // oben). Zeigt zusätzlich kurz einen Hinweis-Toast.
+  const markFirstSeen = () => {
+    setSeenKeys((prev) => new Set(prev).add(seenKey));
+    if (currentIndex === words.length - 1 && !finished) {
+      setFinished(true);
+      setShowFinishedToast(true);
+      if (finishedToastTimeoutRef.current) clearTimeout(finishedToastTimeoutRef.current);
+      finishedToastTimeoutRef.current = setTimeout(() => setShowFinishedToast(false), 4000);
+      sendUpdate(currentIndex, peeks, true);
+    }
+  };
+
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2 && bimanualLocked) {
       setBimanualLocked(false);
@@ -145,11 +173,9 @@ export const StationGame = () => {
         // Wiederholtes Ansehen desselben Wortes zählt als Spicker.
         const newPeeks = peeks + 1;
         setPeeks(newPeeks);
-        sendUpdate(currentIndex, newPeeks);
+        sendUpdate(currentIndex, newPeeks, finished);
       } else if (seenKey) {
-        // Erstes Ansehen: dauerhaft merken (auch nach Zurückkehren),
-        // schaltet das Weiterblättern frei, zählt aber nicht.
-        setSeenKeys((prev) => new Set(prev).add(seenKey));
+        markFirstSeen();
       }
       resetTimeout();
     }
@@ -179,9 +205,9 @@ export const StationGame = () => {
     if (hasSeenCurrent) {
       const newPeeks = peeks + 1;
       setPeeks(newPeeks);
-      sendUpdate(currentIndex, newPeeks);
+      sendUpdate(currentIndex, newPeeks, finished);
     } else if (seenKey) {
-      setSeenKeys((prev) => new Set(prev).add(seenKey));
+      markFirstSeen();
     }
     resetTimeout();
   };
@@ -288,6 +314,13 @@ export const StationGame = () => {
           </span>
         </div>
       </header>
+
+      {/* Fertig-Hinweis: kurzer, nicht blockierender Toast – Navigation bleibt möglich. */}
+      {showFinishedToast && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 pointer-events-none bg-ok text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
+          🎉 Super, alle Sätze angesehen! Du kannst noch zurückblättern.
+        </div>
+      )}
 
       {/* Touch area indicators */}
       <main className="flex-1 relative flex items-center justify-center p-4">

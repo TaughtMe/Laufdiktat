@@ -193,6 +193,12 @@ export const SettingsStep = ({
     <CheckboxRow label="Sterne für Schüler anzeigen" checked={showStars} onClick={() => onToggleStars(!showStars)} />
   );
 
+  // In allen Modi verfügbar (nicht mehr nur bei Freier Übung): Schüler können
+  // sich Wort/Aufgabe vorlesen lassen, zählt überall gleich als Spicker.
+  const ttsRow = (
+    <CheckboxRow label="Vorlesen erlauben" checked={isTtsEnabled} onClick={onToggleTts} colorClass="bg-viol border-viol" />
+  );
+
   // Im Stationsmodus eine eigene Variante: Stationen sind geteilte Geräte, daher
   // wird nicht pro Gerät, sondern pro Schülernummer gemischt (stabil über alle
   // Stations-iPads hinweg, siehe utils/game/stationShuffle.ts).
@@ -296,10 +302,7 @@ export const SettingsStep = ({
           <h4 className="text-base font-extrabold text-ink mb-3">Optionen</h4>
           <div className="flex flex-col gap-3.5">
             {selected === 'UEBUNG' && (
-              <>
-                <CheckboxRow label="Vorlesen (Ton)" checked={isTtsEnabled} onClick={onToggleTts} colorClass="bg-viol border-viol" />
-                <StepperRow label="Fehlversuche bis Lösung" value={uebungMaxAttempts} onChange={onChangeAttempts} min={1} max={10} />
-              </>
+              <StepperRow label="Fehlversuche bis Lösung" value={uebungMaxAttempts} onChange={onChangeAttempts} min={1} max={10} />
             )}
 
             {selected === 'BATTLE' && (
@@ -323,6 +326,7 @@ export const SettingsStep = ({
               <StepperRow label="Anzahl Stationen" value={stationCount} onChange={onChangeStationCount} min={1} max={100} />
             )}
 
+            {ttsRow}
             {shuffleRow}
             {strictTypingRow}
             {starsRow}

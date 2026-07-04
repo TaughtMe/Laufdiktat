@@ -202,7 +202,9 @@ export const Dashboard = () => {
   const getStationStatus = (num: number): 'idle' | 'active' | 'done' => {
     const s = stationStates.get(num);
     if (!s) return 'idle';
-    if (s.currentIndex >= words.length - 1 && s.peeks > 0) return 'done';
+    // finished wird beim ersten Ansehen des letzten Wortes gesetzt und bleibt
+    // danach stehen, auch wenn der Schüler zurückblättert (siehe StationGame.tsx).
+    if (s.finished) return 'done';
     return 'active';
   };
 

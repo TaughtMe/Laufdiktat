@@ -16,6 +16,7 @@ import { clearPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { seededShuffle } from '../utils/shared/seededShuffle';
 import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
+import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -80,6 +81,12 @@ export const Game = () => {
   const currentWord = words[currentWordIndex] || { targetWord: '' };
   const isMath = !!currentWord.prompt;
   const displayPrompt = currentWord.prompt ?? currentWord.targetWord;
+
+  // Automatische Schriftgröße für den aufgedeckten Ziel-Text: kurze Wörter/
+  // Aufgaben bleiben groß, lange Sätze werden verkleinert, bis sie in die
+  // sichere Textfläche passen (siehe Container unten).
+  const { containerRef: revealContainerRef, textRef: revealTextRef, fontSize: revealFontSize } =
+    useAutoFitFontSize(displayPrompt, { min: 28, max: 88 });
 
   // Eingehende Sitzung übernehmen (neue Runde -> alles zurücksetzen).
   const onSessionStart = useCallback((data: SessionStartData) => {
@@ -417,8 +424,8 @@ export const Game = () => {
   }
 
   return (
-    <div 
-      className="flex flex-col min-h-[100dvh] bg-gradient-to-b from-[#0a2a3c] via-[#0d3349] to-[#0a2a3c] select-none overflow-hidden touch-none relative"
+    <div
+      className="flex flex-col h-[100dvh] bg-gradient-to-b from-[#0a2a3c] via-[#0d3349] to-[#0a2a3c] select-none overflow-hidden touch-none relative"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
@@ -428,24 +435,41 @@ export const Game = () => {
           Verbindung zum Server verloren. Ergebnisse können nicht synchronisiert werden.
         </div>
       )}
-      <header className="py-4 px-6 flex justify-between items-center z-10">
-        <div className="flex items-center gap-3">
+      {/* Header ist Teil des festen Flex-Layouts (shrink-0) – überdeckt dadurch
+          nie die Textfläche darunter. Vorlesen lebt hier statt über dem Text. */}
+      <header className="py-3 px-4 sm:px-6 flex justify-between items-center gap-3 z-20 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             onClick={() => { if (gameState === 'FINISHED') { leaveToHome(); } else { setShowExitConfirm(true); } }}
-            className="p-2 -ml-2 rounded-full hover:bg-white/10 text-slate-400 transition-colors cursor-pointer"
+            className="p-2 -ml-2 rounded-full hover:bg-white/10 text-slate-400 transition-colors cursor-pointer shrink-0"
             title="Spiel abbrechen und zur Startseite"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold text-white">
+          <h1 className="text-base sm:text-lg font-bold text-white truncate">
             Wort {currentWordIndex + 1} von {words.length}
           </h1>
         </div>
-        <div className="flex gap-4 text-sm font-semibold text-slate-400">
-          <span>Spicker: {metrics.peeks}</span>
-          <span>Fehler: {Math.max(0, metrics.attempts - (gameState === 'FINISHED' ? words.length : currentWordIndex))}</span>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {isTtsEnabled && gameState !== 'FINISHED' && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); speakWord(); }}
+              onTouchStart={(e) => e.stopPropagation()}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors active:scale-95 cursor-pointer shrink-0"
+              title="Vorlesen (zählt als Spicker)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+              </svg>
+            </button>
+          )}
+          <div className="flex gap-3 sm:gap-4 text-xs sm:text-sm font-semibold text-slate-400 whitespace-nowrap">
+            <span>Spicker: {metrics.peeks}</span>
+            <span>Fehler: {Math.max(0, metrics.attempts - (gameState === 'FINISHED' ? words.length : currentWordIndex))}</span>
+          </div>
         </div>
       </header>
 
@@ -556,36 +580,22 @@ export const Game = () => {
         </div>
       )}
 
-      <main className="flex-1 relative flex items-center justify-center p-4">
-        {/* Freies Üben: Vorlesen-Button, von Anfang an sichtbar und drückbar
-            (außerhalb des Doppel-Touch-Bereichs). Zählt als Spicker. */}
-        {gameMode === 'UEBUNG' && isTtsEnabled && gameState !== 'FINISHED' && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); speakWord(); }}
-            onTouchStart={(e) => e.stopPropagation()}
-            className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-sm font-bold px-4 py-2.5 rounded-full border border-white/10 backdrop-blur-sm transition-colors active:scale-95 cursor-pointer"
-            title="Wort vorlesen (zählt als Spicker)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
-            </svg>
-            <span>Vorlesen</span>
-          </button>
-        )}
-
+      {/* Sichere Textfläche: flex-1 + min-h-0 sorgt dafür, dass dieser Bereich
+          exakt den Platz zwischen Header und Footer füllt und nie darunter
+          oder darüber hinausragt. */}
+      <main className="flex-1 min-h-0 relative flex items-center justify-center p-4 overflow-hidden">
         {gameState !== 'FINISHED' && (
           <>
-            {/* Haptische Barriere: Visuelle Indikatoren */}
-            <div className={`absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-20'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`w-8 h-8 transition-colors duration-300 ${bimanualLocked ? 'text-[#5efcc2]' : 'text-slate-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7" />
-              </svg>
+            {/* Dezente Randzonen: nur sichtbar, solange das Wort verborgen ist
+                (bimanualLocked=false). Sobald aufgedeckt wird, blenden sie
+                komplett aus – bleiben aber technisch aktiv (pointer-events
+                spielen hier keine Rolle, die Touch-Erkennung hängt am
+                äußeren Container). */}
+            <div className={`absolute left-0 top-0 bottom-0 w-14 sm:w-16 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${bimanualLocked ? 'opacity-0' : 'opacity-25'}`}>
+              <div className="w-1.5 h-24 rounded-full bg-[#5efcc2]" />
             </div>
-            <div className={`absolute right-3 top-1/2 -translate-y-1/2 transition-all duration-300 pointer-events-none ${bimanualLocked ? 'opacity-100' : 'opacity-20'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`w-8 h-8 transition-colors duration-300 ${bimanualLocked ? 'text-[#5efcc2]' : 'text-slate-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7" />
-              </svg>
+            <div className={`absolute right-0 top-0 bottom-0 w-14 sm:w-16 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${bimanualLocked ? 'opacity-0' : 'opacity-25'}`}>
+              <div className="w-1.5 h-24 rounded-full bg-[#5efcc2]" />
             </div>
           </>
         )}
@@ -593,29 +603,25 @@ export const Game = () => {
         {/* Core Interaction Area */}
         <div className="z-10 w-full max-w-md flex flex-col items-center">
           {gameState === 'IDLE' && (
-            <div className="text-center space-y-6 pointer-events-none max-w-sm px-6">
-              <div className="w-20 h-20 mx-auto bg-white/10 rounded-full flex items-center justify-center backdrop-blur-sm">
-                <span className="text-4xl">✋</span>
-              </div>
-              <p className="text-slate-300 font-bold text-lg sm:text-xl leading-relaxed">
-                Mit zwei Fingern gleichzeitig
-                die <span className="text-[#5efcc2] font-extrabold">Bildschirmränder</span>{' '}
-                gedrückt halten, um das Wort
-                zu sehen.
+            <div className="text-center pointer-events-none max-w-xs px-6">
+              <p className="text-slate-300 font-bold text-base sm:text-lg leading-relaxed">
+                Mit zwei Fingern an den Bildschirmrändern halten, um den Text zu sehen.
               </p>
             </div>
           )}
 
           {bimanualLocked && (
-            <div className={`text-center transform transition-transform scale-110 pointer-events-none ${isFlickerActive ? 'animate-flicker' : ''} px-6`}>
-              <div className="flex items-center justify-center gap-4">
-                <h2 className="text-5xl sm:text-7xl font-black text-brand-500 dark:text-brand-400 tracking-tight drop-shadow-sm font-sans select-none">
-                  {displayPrompt}
-                </h2>
-              </div>
-              <p className="mt-8 text-xs font-bold tracking-wider uppercase text-slate-400 bg-white/5 px-5 py-2.5 rounded-full inline-block border border-white/10 backdrop-blur-sm">
-                Wort einprägen... Loslassen zum Tippen!
-              </p>
+            <div
+              ref={revealContainerRef}
+              className={`w-[92vw] max-w-2xl h-[38vh] max-h-[420px] flex items-center justify-center pointer-events-none ${isFlickerActive ? 'animate-flicker' : ''}`}
+            >
+              <h2
+                ref={revealTextRef}
+                style={{ fontSize: `${revealFontSize}px` }}
+                className="font-black text-brand-500 dark:text-brand-400 tracking-tight drop-shadow-sm font-sans select-none text-center leading-tight break-words"
+              >
+                {displayPrompt}
+              </h2>
             </div>
           )}
 
