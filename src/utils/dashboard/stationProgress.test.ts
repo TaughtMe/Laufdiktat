@@ -27,4 +27,10 @@ describe('setStationProgress', () => {
     expect(next.get(1)).toEqual({ currentIndex: 5, peeks: 2 });
     expect(next).not.toBe(original);
   });
+
+  it('speichert finished mit, wenn es im Update enthalten ist', () => {
+    let map = new Map<number, StationStudentState>();
+    map = setStationProgress(map, 3, { currentIndex: 4, peeks: 0, finished: true });
+    expect(map.get(3)).toEqual({ currentIndex: 4, peeks: 0, finished: true });
+  });
 });

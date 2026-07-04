@@ -165,8 +165,8 @@ export const useDashboardRoom = ({
     });
 
     channel.on('broadcast', { event: 'update-station-state' }, (payload) => {
-      const { studentNumber, currentIndex, peeks } = payload.payload;
-      setStationStates((prev) => setStationProgress(prev, studentNumber, { currentIndex, peeks }));
+      const { studentNumber, currentIndex, peeks, finished } = payload.payload;
+      setStationStates((prev) => setStationProgress(prev, studentNumber, { currentIndex, peeks, finished }));
     });
 
     channel.subscribe((status) => {
