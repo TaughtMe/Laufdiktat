@@ -30,6 +30,25 @@ describe('deterministicOrder', () => {
   it('gibt [] bei n=0 zurück', () => {
     expect(deterministicOrder(0, 'irgendwas')).toEqual([]);
   });
+
+  // Regressionstest: Ein einzelnes Seed-Paar reicht nicht, um eine schlechte
+  // Durchmischung zu erkennen (ein früherer Bug ließ ~50% realistischer
+  // Schülernamen auf dieselbe Reihenfolge kollidieren, obwohl ein einzelnes
+  // Testpaar zufällig unterschiedlich ausfiel). Deshalb hier viele Seeds mit
+  // realistischer Form (Raum:Name:Sitzung) prüfen.
+  it('erzeugt für viele realistische Schüler-Seeds überwiegend unterschiedliche Reihenfolgen', () => {
+    const names = [
+      'Flinker Dackel', 'Wilder Bär', 'Schneller Fuchs', 'Kluger Igel', 'Mutiger Löwe',
+      'Freche Robbe', 'Stille Eule', 'Neugieriges Erdmaennchen', 'Schlaues Capybara', 'Frecher Igel',
+      'Zebra-Fan', 'Koala-Freund', 'Tiger-Team', 'Adler-Auge', 'Pandabaer',
+    ];
+    const orders = new Set(names.map((name) => deterministicOrder(8, `4172:${name}:session-1`).join(',')));
+    // Bei guter Durchmischung sind fast alle Reihenfolgen verschieden; ein paar
+    // zufällige Kollisionen unter 15 Namen (8! Möglichkeiten) sind normal,
+    // eine Kollisionsrate wie beim Bug (nur 5 von 10 eindeutig) darf es nicht
+    // mehr geben.
+    expect(orders.size).toBeGreaterThanOrEqual(names.length - 1);
+  });
 });
 
 describe('seededShuffle', () => {
