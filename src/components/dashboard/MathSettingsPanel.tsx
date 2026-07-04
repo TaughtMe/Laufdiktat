@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Settings } from 'lucide-react';
-import { opSymbol, MULTIPLICATION_TABLES, type MathExpr, type GapSlot } from '../../utils/dashboard/mathTasks';
+import { opSymbol, displayNum, MULTIPLICATION_TABLES, type MathExpr, type GapSlot } from '../../utils/dashboard/mathTasks';
+import type { MathPreviewLine } from '../../hooks/dashboard/useMathImport';
 import { MiniStepper } from './MiniStepper';
 import { EmptyChips } from './EmptyChips';
+import { MathDisplay } from '../shared/MathDisplay';
 
 interface MathSettingsPanelProps {
   mathMinValue: number;
@@ -22,6 +24,7 @@ interface MathSettingsPanelProps {
   /** Einmaleins-Reihen nur relevant/sichtbar, wenn Mal oder Geteilt aktiv ist. */
   showMultiplicationTables: boolean;
   mathExprs: MathExpr[];
+  mathPreviewLines: MathPreviewLine[];
   mathGaps: GapSlot[];
   setGapAt: (index: number, slot: GapSlot) => void;
 }
@@ -61,6 +64,7 @@ export const MathSettingsPanel = ({
   setMathTables,
   showMultiplicationTables,
   mathExprs,
+  mathPreviewLines,
   mathGaps,
   setGapAt,
 }: MathSettingsPanelProps) => {
@@ -107,7 +111,7 @@ export const MathSettingsPanel = ({
 
       <div className="relative flex-1 min-h-0">
         {/* Vorschau-Inhalt */}
-        {mathExprs.length === 0 ? (
+        {mathPreviewLines.length === 0 ? (
           <EmptyChips text="Noch keine Aufgaben." sub="Die Vorschau erscheint, sobald Aufgaben da sind." />
         ) : mathGap ? (
           <div className="flex flex-col gap-1.5 overflow-y-auto h-full">
@@ -122,7 +126,7 @@ export const MathSettingsPanel = ({
                     gap === slot ? 'bg-warn text-white' : 'bg-surface-2 text-ink hover:bg-line'
                   }`}
                 >
-                  {gap === slot ? '_' : val}
+                  {gap === slot ? '_' : displayNum(val)}
                 </button>
               );
               return (
@@ -139,10 +143,16 @@ export const MathSettingsPanel = ({
           </div>
         ) : (
           <div className="flex flex-col gap-1.5 overflow-y-auto h-full">
-            {mathExprs.map((e, i) => (
+            {mathPreviewLines.map((entry, i) => (
               <div key={i} className="flex items-center gap-2 text-[13.5px] font-mono">
                 <span className="text-ink-faint text-xs w-6 shrink-0 text-right">{i + 1}.</span>
-                <span className="font-bold text-ink">{`${e.a} ${opSymbol(e.op)} ${e.b} = ${e.result}`}</span>
+                {entry.type === 'simple' ? (
+                  <span className="font-bold text-ink">{`${displayNum(entry.expr.a)} ${opSymbol(entry.expr.op)} ${displayNum(entry.expr.b)} = ${displayNum(entry.expr.result)}`}</span>
+                ) : (
+                  <span className="font-bold text-ink inline-flex items-center gap-1.5">
+                    <MathDisplay text={entry.line} isLatex /> <span>= {displayNum(entry.value)}</span>
+                  </span>
+                )}
               </div>
             ))}
           </div>

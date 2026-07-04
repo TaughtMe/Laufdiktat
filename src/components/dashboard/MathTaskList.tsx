@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { RefreshCw, X, Plus } from 'lucide-react';
-import { parseMathExpr, opSymbol } from '../../utils/dashboard/mathTasks';
+import { parseMathExpr, opSymbol, displayNum } from '../../utils/dashboard/mathTasks';
+import { evaluateLatexExpr } from '../../utils/dashboard/latexMath';
 import { moveArrayItem } from '../../utils/dashboard/reorder';
 import { EmptyChips } from './EmptyChips';
+import { MathDisplay } from '../shared/MathDisplay';
 
 interface MathTaskListProps {
   mathInput: string;
@@ -94,6 +96,9 @@ export const MathTaskList = ({ mathInput, validCount, onChangeLines, generateSin
         ) : (
           mathLines.map((line, i) => {
             const expr = parseMathExpr(line);
+            // Fällt bei ungültigem einfachen Format auf die LaTeX-Auswertung
+            // zurück (Brüche/Potenzen/Wurzeln, siehe latexMath.ts).
+            const latexValue = expr ? null : evaluateLatexExpr(line);
             if (editIdx === i) {
               return (
                 <input
@@ -136,9 +141,17 @@ export const MathTaskList = ({ mathInput, validCount, onChangeLines, generateSin
                   type="button"
                   onClick={() => startEdit(i)}
                   title="Zum Bearbeiten klicken"
-                  className={`font-mono text-[13.5px] font-bold text-left cursor-text rounded px-1 -mx-1 hover:bg-line/40 transition-colors ${expr ? 'text-ink' : 'text-danger'}`}
+                  className={`font-mono text-[13.5px] font-bold text-left cursor-text rounded px-1 -mx-1 hover:bg-line/40 transition-colors ${expr || latexValue !== null ? 'text-ink' : 'text-danger'}`}
                 >
-                  {expr ? `${expr.a} ${opSymbol(expr.op)} ${expr.b} = ${expr.result}` : `${line} (ungültig)`}
+                  {expr ? (
+                    `${displayNum(expr.a)} ${opSymbol(expr.op)} ${displayNum(expr.b)} = ${displayNum(expr.result)}`
+                  ) : latexValue !== null ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MathDisplay text={line} isLatex /> <span>= {displayNum(latexValue)}</span>
+                    </span>
+                  ) : (
+                    `${line} (ungültig)`
+                  )}
                 </button>
                 <div className="flex items-center">
                   {rowActionBtn('Neu würfeln', () => rerollRow(i), <RefreshCw className="w-3.5 h-3.5" />)}

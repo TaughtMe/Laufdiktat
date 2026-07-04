@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMathLine, parseMathExpr, buildGapTask, generateMathLines, type MathOp, type GenOptions } from './mathTasks';
+import { parseMathLine, parseMathExpr, buildGapTask, generateMathLines, displayNum, type MathOp, type GenOptions } from './mathTasks';
 
 describe('parseMathLine', () => {
   it('rechnet Plus und Minus', () => {
@@ -14,17 +14,42 @@ describe('parseMathLine', () => {
     expect(parseMathLine('6×7')).toMatchObject({ targetWord: '42' });
   });
 
-  it('rechnet Geteilt nur ganzzahlig (:, /, ÷)', () => {
+  it('rechnet Geteilt, auch mit nicht-ganzzahligem Ergebnis (:, /, ÷)', () => {
     expect(parseMathLine('20:4')).toMatchObject({ prompt: '20 : 4', targetWord: '5' });
     expect(parseMathLine('20/4')).toMatchObject({ targetWord: '5' });
-    expect(parseMathLine('7:2')).toBeNull(); // nicht ganzzahlig
-    expect(parseMathLine('5:0')).toBeNull(); // Division durch 0
+    expect(parseMathLine('7:2')).toMatchObject({ targetWord: '3.5' }); // manuell: nicht-ganzzahlig erlaubt
+    expect(parseMathLine('5:0')).toBeNull(); // Division durch 0 bleibt verboten
   });
 
   it('gibt null bei ungültigen Zeilen', () => {
     expect(parseMathLine('abc')).toBeNull();
     expect(parseMathLine('4 + ')).toBeNull();
     expect(parseMathLine('')).toBeNull();
+  });
+
+  it('rechnet mit negativen Zahlen', () => {
+    expect(parseMathLine('-4 + 7')).toMatchObject({ prompt: '-4 + 7', targetWord: '3' });
+    expect(parseMathLine('3 - 10')).toMatchObject({ targetWord: '-7' });
+    expect(parseMathLine('-3 * -2')).toMatchObject({ targetWord: '6' });
+  });
+
+  it('rechnet mit Dezimalzahlen (Komma oder Punkt)', () => {
+    expect(parseMathLine('2,5 + 1,5')).toMatchObject({ prompt: '2,5 + 1,5', targetWord: '4' });
+    expect(parseMathLine('2.5 + 1.5')).toMatchObject({ targetWord: '4' });
+    expect(parseMathLine('0,1 + 0,2')).toMatchObject({ targetWord: '0.3' }); // kein Fließkomma-Rauschen
+    expect(parseMathLine('-1,5 + 4')).toMatchObject({ targetWord: '2.5' });
+  });
+});
+
+describe('displayNum', () => {
+  it('zeigt Dezimalzahlen mit Komma statt Punkt', () => {
+    expect(displayNum(3.5)).toBe('3,5');
+    expect(displayNum(-2.25)).toBe('-2,25');
+  });
+
+  it('zeigt ganze Zahlen ohne Nachkommastellen', () => {
+    expect(displayNum(4)).toBe('4');
+    expect(displayNum(-7)).toBe('-7');
   });
 });
 
