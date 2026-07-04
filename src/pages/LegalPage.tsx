@@ -8,6 +8,7 @@ const CONTACT_EMAIL = 'toby.bryson@sksbg.de';
 export const LegalPage: React.FC = () => {
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
+  const currentYear = new Date().getFullYear();
 
   return (
     <div className="min-h-[100dvh] bg-page">
@@ -56,6 +57,47 @@ export const LegalPage: React.FC = () => {
               Nicht-kommerzielles Bildungsprojekt. Eine vollständige Anschrift wird auf Anfrage über die
               oben genannte E-Mail-Adresse mitgeteilt.
             </p>
+          </div>
+        </section>
+
+        {/* Urheberrecht */}
+        <section className="space-y-4">
+          <h2 className="text-xl font-extrabold text-ink">Urheberrecht &amp; Quellenangaben</h2>
+
+          <div className="space-y-1">
+            <h3 className="font-bold text-ink">1. Eigene Inhalte</h3>
+            <p>
+              © {currentYear} Toby Bryson. Konzept, Quellcode und eigens erstellte Inhalte dieser Anwendung sind
+              urheberrechtlich geschützt. Vervielfältigung, Bearbeitung, Verbreitung oder jede Art der
+              Verwertung außerhalb der Grenzen des Urheberrechts bedürfen der vorherigen schriftlichen
+              Zustimmung.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <h3 className="font-bold text-ink">2. Eingesetzte Inhalte Dritter</h3>
+            <p>Diese Anwendung nutzt folgende fremde Inhalte im Rahmen der jeweiligen Lizenzbedingungen:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                <span className="font-bold text-ink">Schriftart „Plus Jakarta Sans"</span> – lizenziert unter der
+                SIL Open Font License 1.1.
+              </li>
+              <li>
+                <span className="font-bold text-ink">Tier-Illustrationen</span> – von{' '}
+                <span className="font-semibold">CocoMaterial</span>, lizenziert unter CC0 1.0 (gemeinfrei,
+                Namensnennung nicht erforderlich).
+              </li>
+              <li>
+                <span className="font-bold text-ink">Symbol-Icons</span> – von{' '}
+                <span className="font-semibold">Lucide</span> (ISC-Lizenz); einzelne Icons stammen ursprünglich
+                aus dem Feather-Projekt (MIT-Lizenz, © Cole Bemis).
+              </li>
+              <li>
+                Weitere eingesetzte Open-Source-Software (u.&nbsp;a. React, Supabase-Client) unterliegt jeweils
+                eigenen, überwiegend permissiven Lizenzen (MIT/ISC/Apache-2.0). Eine vollständige Liste aller
+                verwendeten Bibliotheken samt Lizenzen wird auf Anfrage zur Verfügung gestellt.
+              </li>
+            </ul>
           </div>
         </section>
 

@@ -2,6 +2,8 @@
   "name": "laufdiktat",
   "private": true,
   "version": "2.1.1",
+  "license": "UNLICENSED",
+  "author": "Toby Bryson",
   "type": "module",
   "scripts": {
     "dev": "vite",

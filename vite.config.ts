@@ -12,7 +12,7 @@ export default defineConfig({
       // den Versions-Button (Update-Benachrichtigung) bestätigt.
       registerType: 'prompt',
       injectRegister: null,
-      includeAssets: ['favicon.svg', 'laufdiktat_icon.svg'],
+      includeAssets: ['laufdiktat_icon.svg'],
       manifest: {
         name: 'Laufdiktat',
         short_name: 'Laufdiktat',
