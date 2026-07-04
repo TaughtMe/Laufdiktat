@@ -17,6 +17,7 @@ import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { seededShuffle } from '../utils/shared/seededShuffle';
 import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
+import { MathDisplay } from '../components/shared/MathDisplay';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -620,7 +621,7 @@ export const Game = () => {
                 style={{ fontSize: `${revealFontSize}px` }}
                 className="font-black text-brand-500 dark:text-brand-400 tracking-tight drop-shadow-sm font-sans select-none text-center leading-tight break-words"
               >
-                {displayPrompt}
+                <MathDisplay text={displayPrompt} isLatex={currentWord.isLatex} />
               </h2>
             </div>
           )}

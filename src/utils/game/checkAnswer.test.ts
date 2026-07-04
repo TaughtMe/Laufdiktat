@@ -41,4 +41,13 @@ describe('checkAnswer (Mathe)', () => {
   it('lehnt falsches Ergebnis ab', () => {
     expect(checkAnswer(mathItem('8'), '7')).toBe(false);
   });
+
+  it('akzeptiert gerundete Ergebnisse innerhalb der Toleranz (z. B. 1/3, Wurzeln)', () => {
+    expect(checkAnswer(mathItem('0.333333333'), '0,33')).toBe(true);
+    expect(checkAnswer(mathItem('1.414213562'), '1,41')).toBe(true);
+  });
+
+  it('lehnt Ergebnisse außerhalb der Toleranz ab', () => {
+    expect(checkAnswer(mathItem('0.333333333'), '0,3')).toBe(false);
+  });
 });

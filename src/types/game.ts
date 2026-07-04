@@ -10,6 +10,12 @@ export interface WordItem {
    */
   prompt?: string;
   isCompleted: boolean;
+  /**
+   * Manuell eingegebene komplexere Mathe-Aufgabe (Bruch/Potenz/Wurzel via
+   * LaTeX-ähnlicher Syntax, siehe utils/dashboard/latexMath.ts). Wenn
+   * gesetzt, wird `prompt` per KaTeX gerendert statt als Klartext gezeigt.
+   */
+  isLatex?: boolean;
 }
 
 export interface GameMetrics {

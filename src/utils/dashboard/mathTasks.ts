@@ -1,4 +1,5 @@
 import type { WordItem } from '../../types/game';
+import { evaluateLatexExpr } from './latexMath';
 
 export type MathOp = '+' | '-' | '*' | '/';
 
@@ -8,14 +9,24 @@ const uid = () =>
 // Anzeige: deutsches Schul-Format (· für mal, : für geteilt, − für minus).
 export const opSymbol = (op: MathOp) => (op === '+' ? '+' : op === '-' ? '−' : op === '*' ? '·' : ':');
 const sym = opSymbol;
-const format = (a: number, op: MathOp, b: number) => `${a} ${sym(op)} ${b}`;
+
+// Rundet Fließkomma-Rauschen weg (z. B. 0.1 + 0.2 -> 0.30000000000000004),
+// ohne echte Nachkommastellen zu verlieren.
+const round = (n: number): number => Math.round(n * 1e9) / 1e9;
+
+/** Zeigt eine Zahl im deutschen Format an (Komma statt Punkt, keine unnötigen Nachkommastellen). */
+export const displayNum = (n: number): string => round(n).toString().replace('.', ',');
+
+const format = (a: number, op: MathOp, b: number) => `${displayNum(a)} ${sym(op)} ${displayNum(b)}`;
 
 const compute = (a: number, op: MathOp, b: number): number | null => {
   switch (op) {
-    case '+': return a + b;
-    case '-': return a - b;
-    case '*': return a * b;
-    case '/': return b !== 0 && a % b === 0 ? a / b : null; // nur ganzzahlige Division
+    case '+': return round(a + b);
+    case '-': return round(a - b);
+    case '*': return round(a * b);
+    // Manuelle Eingabe erlaubt auch nicht-ganzzahlige Ergebnisse (z. B. 7 : 2 = 3,5);
+    // der Zufallsgenerator konstruiert Divisionen ohnehin immer exakt teilbar.
+    case '/': return b !== 0 ? round(a / b) : null;
   }
 };
 
@@ -29,22 +40,25 @@ export interface MathExpr {
 /** Wo die Lücke sitzt: erster Operand, zweiter Operand oder Ergebnis. */
 export type GapSlot = 'a' | 'b' | 'result';
 
+const parseNum = (s: string): number => parseFloat(s.replace(',', '.'));
+
 /**
- * Parst eine Zeile wie "4+4", "12 − 5", "6·7" oder "20:4" sicher (kein eval)
- * in ihre Bestandteile. Akzeptiert +, -, −, *, ×, ·, /, :, ÷.
- * Division nur mit ganzzahligem Ergebnis, sonst null.
+ * Parst eine Zeile wie "4+4", "12 − 5", "6·7", "20:4", "-3,5 + 2" oder
+ * "7 : 2" (nicht-ganzzahliges Ergebnis 3,5) sicher (kein eval) in ihre
+ * Bestandteile. Akzeptiert +, -, −, *, ×, ·, /, :, ÷. Operanden dürfen negativ
+ * und/oder Dezimalzahlen sein (Komma oder Punkt).
  */
 export const parseMathExpr = (line: string): MathExpr | null => {
-  const m = line.trim().match(/^(-?\d+)\s*([+\-−*×·/:÷])\s*(-?\d+)$/);
+  const m = line.trim().match(/^(-?\d+(?:[.,]\d+)?)\s*([+\-−*×·/:÷])\s*(-?\d+(?:[.,]\d+)?)$/);
   if (!m) return null;
-  const a = parseInt(m[1], 10);
+  const a = parseNum(m[1]);
   const raw = m[2];
   const op: MathOp =
     raw === '+' ? '+'
     : raw === '-' || raw === '−' ? '-'
     : raw === '*' || raw === '×' || raw === '·' ? '*'
     : '/';
-  const b = parseInt(m[3], 10);
+  const b = parseNum(m[3]);
   if (Number.isNaN(a) || Number.isNaN(b)) return null;
   const result = compute(a, op, b);
   if (result === null) return null;
@@ -67,13 +81,38 @@ export const parseMathLine = (line: string): WordItem | null => {
 };
 
 /**
+ * Baut eine Aufgabe aus einer komplexeren, LaTeX-ähnlichen Eingabe (Brüche
+ * \frac{}{}, Wurzeln \sqrt{}/\sqrt[n]{}, Potenzen ^, Klammern) – die Zeile
+ * selbst bleibt der Prompt (wird per KaTeX gerendert, siehe MathDisplay),
+ * das berechnete Ergebnis ist die Antwort.
+ */
+export const buildLatexMathWord = (line: string): WordItem | null => {
+  const value = evaluateLatexExpr(line);
+  if (value === null) return null;
+  return { id: uid(), prompt: line.trim(), targetWord: String(round(value)), isCompleted: false, isLatex: true };
+};
+
+/**
+ * Manuelle Eingabe: versucht zuerst das einfache "a op b"-Format (unterstützt
+ * Lückenaufgaben), fällt sonst auf die LaTeX-ähnliche Auswertung zurück
+ * (nur normale Aufgaben, keine Lücken – Brüche/Potenzen/Wurzeln lassen sich
+ * nicht sinnvoll in a/op/b/Ergebnis aufteilen). Nur für manuelle Eingabe
+ * gedacht, nicht für den Zufallsgenerator.
+ */
+export const parseManualMathLine = (line: string, gap?: GapSlot): WordItem | null => {
+  const e = parseMathExpr(line);
+  if (e) return gap ? buildGapTask(e, gap) : normalMathWord(e);
+  return buildLatexMathWord(line);
+};
+
+/**
  * Lückenaufgabe: eine Zahl der Gleichung wird durch "_" ersetzt, die gesuchte
  * Zahl ist die Antwort. Beispiel: gap 'b' -> "4 + _ = 7", Antwort "3".
  */
 export const buildGapTask = (e: MathExpr, gap: GapSlot): WordItem => {
-  const aS = gap === 'a' ? '_' : String(e.a);
-  const bS = gap === 'b' ? '_' : String(e.b);
-  const rS = gap === 'result' ? '_' : String(e.result);
+  const aS = gap === 'a' ? '_' : displayNum(e.a);
+  const bS = gap === 'b' ? '_' : displayNum(e.b);
+  const rS = gap === 'result' ? '_' : displayNum(e.result);
   const prompt = `${aS} ${sym(e.op)} ${bS} = ${rS}`;
   const answer = gap === 'a' ? e.a : gap === 'b' ? e.b : e.result;
   return { id: uid(), prompt, targetWord: String(answer), isCompleted: false };

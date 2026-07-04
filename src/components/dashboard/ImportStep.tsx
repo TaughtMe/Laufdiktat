@@ -77,7 +77,7 @@ export const ImportStep = ({
   );
 
   return (
-    <div className="flex flex-col h-full min-h-[460px]">
+    <div className="flex flex-col h-full min-h-[600px]">
       {/* Reiter-Zeile + Upload-Pill */}
       <div className="flex items-end justify-between gap-3">
         <div className="flex gap-1 items-end overflow-x-auto min-w-0 [scrollbar-width:none]">
@@ -134,7 +134,7 @@ export const ImportStep = ({
             <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-5 flex-1 min-h-0">
               <MathTaskList
                 mathInput={math.mathInput}
-                validCount={math.mathExprs.length}
+                validCount={math.mathPreviewLines.length}
                 onChangeLines={(lines) => math.handleMathInputChange(lines.join('\n'))}
                 generateSingleLine={() => generateMathLines({ ...math.buildGenOptions(), count: 1 })[0]}
               />
@@ -155,6 +155,7 @@ export const ImportStep = ({
                 setMathTables={math.setMathTables}
                 showMultiplicationTables={math.mathMul || math.mathDiv}
                 mathExprs={math.mathExprs}
+                mathPreviewLines={math.mathPreviewLines}
                 mathGaps={math.mathGaps}
                 setGapAt={math.setGapAt}
               />

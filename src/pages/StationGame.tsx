@@ -6,6 +6,7 @@ import { ExitConfirm, SessionEndedOverlay } from '../components/game/GameOverlay
 import { useExitGuard } from '../hooks/game/useExitGuard';
 import { LegalLink } from '../components/shared/LegalLink';
 import { buildStationOrder } from '../utils/game/stationShuffle';
+import { MathDisplay } from '../components/shared/MathDisplay';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -362,7 +363,7 @@ export const StationGame = () => {
           {bimanualLocked ? (
             <div className="text-center transform transition-transform scale-110 pointer-events-none px-6">
               <h2 className="text-5xl sm:text-7xl font-black text-brand-500 dark:text-brand-450 tracking-tight drop-shadow-sm font-sans select-none">
-                {currentWord}
+                <MathDisplay text={currentWord} isLatex={currentItem?.isLatex} />
               </h2>
               <p className="mt-8 text-xs font-bold tracking-wider uppercase text-slate-400 dark:text-slate-500 bg-[#f0f5fa] dark:bg-slate-805/80 px-5 py-2.5 rounded-full inline-block border border-slate-100/50 dark:border-slate-800">
                 Wort einprägen... Loslassen zum Schreiben!
