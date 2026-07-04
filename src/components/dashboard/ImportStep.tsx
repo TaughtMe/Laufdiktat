@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Upload, Trash2, Sparkles, RefreshCw, X, Plus } from 'lucide-react';
+import { Upload, Trash2, X } from 'lucide-react';
 import type { useManualHighlighting } from '../../hooks/dashboard/useManualHighlighting';
 import type { useMathImport } from '../../hooks/dashboard/useMathImport';
 import type { WordItem } from '../../types/game';
-import { generateMathLines, parseMathExpr, type GapSlot, type MathOp } from '../../utils/dashboard/mathTasks';
-import { moveArrayItem } from '../../utils/dashboard/reorder';
-import { MiniStepper } from './MiniStepper';
+import { generateMathLines } from '../../utils/dashboard/mathTasks';
+import { EmptyChips } from './EmptyChips';
+import { MathQuickBar } from './MathQuickBar';
+import { MathTaskList } from './MathTaskList';
+import { MathSettingsPanel } from './MathSettingsPanel';
 
 export type ImportMode = 'lines' | 'sentences' | 'manual' | 'math';
 
@@ -34,14 +36,13 @@ const TABS: Array<{ id: ImportMode; label: string }> = [
   { id: 'math', label: 'Mathe' },
 ];
 
-const OP_SYM: Record<MathOp, string> = { '+': '+', '-': '−', '*': '·', '/': ':' };
-
 /**
  * Schritt 1 nach dem Redesign: angeheftete Reiter über einem Panel
  * (oben links bewusst eckig, damit der aktive erste Reiter bündig
  * anschließt). Sätze/Zeilen/Manuell: links Eingabe, rechts Abschnitts-
- * Chips. Mathe: Generator-Toolbar oben, darunter Aufgabenliste mit
- * Zeilen-Aktionen (Bearbeiten/Neu würfeln/Löschen) und Vorschau-Panel.
+ * Chips. Mathe: MathQuickBar oben, darunter MathTaskList (links) und
+ * MathSettingsPanel mit Vorschau (rechts, Einstellungen als Overlay über
+ * der Vorschau via Zahnrad-Icon).
  */
 export const ImportStep = ({
   importMode,
@@ -70,99 +71,6 @@ export const ImportStep = ({
   // visuelle Feedback, der eigentliche Reorder passiert erst beim Drop).
   const [dragOverWordIdx, setDragOverWordIdx] = useState<number | null>(null);
   const [dragOverChunkId, setDragOverChunkId] = useState<string | null>(null);
-  const [dragOverMathIdx, setDragOverMathIdx] = useState<number | null>(null);
-
-  // --- Mathe: zeilenbasierte Aufgabenliste (mathInput bleibt die Quelle) ---
-  const mathLines = math.mathInput
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  // editIdx === mathLines.length bedeutet: neue Aufgabe wird gerade angelegt.
-  const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [draft, setDraft] = useState('');
-
-  const commitLines = (lines: string[]) => math.handleMathInputChange(lines.join('\n'));
-
-  const startEdit = (i: number) => {
-    setEditIdx(i);
-    setDraft(mathLines[i] ?? '');
-  };
-
-  const commitEdit = () => {
-    if (editIdx === null) return;
-    const wasAppending = editIdx >= mathLines.length;
-    const lines = [...mathLines];
-    const v = draft.trim();
-    if (wasAppending) {
-      if (v) lines.push(v);
-    } else if (v) {
-      lines[editIdx] = v;
-    } else {
-      lines.splice(editIdx, 1);
-    }
-    commitLines(lines);
-    setDraft('');
-    // Fortlaufendes Eintippen: nach dem Anhängen bleibt das Feld für die
-    // nächste Aufgabe offen (Enter -> direkt weiter tippen), damit man nicht
-    // für jede einzelne Aufgabe erneut auf "Aufgabe hinzufügen" klicken muss.
-    // Leere Eingabe (Enter oder Verlassen) beendet das Hinzufügen.
-    setEditIdx(wasAppending && v ? lines.length : null);
-  };
-
-  const currentOps = (): MathOp[] => {
-    const ops: MathOp[] = [];
-    if (math.mathPlus) ops.push('+');
-    if (math.mathMinus) ops.push('-');
-    if (math.mathMul) ops.push('*');
-    if (math.mathDiv) ops.push('/');
-    return ops.length ? ops : ['+'];
-  };
-
-  const rerollRow = (i: number) => {
-    const [line] = generateMathLines({ ops: currentOps(), max: math.mathMax, count: 1, noNegative: math.mathNoNeg });
-    const lines = [...mathLines];
-    lines[i] = line;
-    commitLines(lines);
-  };
-
-  const deleteRow = (i: number) => {
-    const lines = [...mathLines];
-    lines.splice(i, 1);
-    commitLines(lines);
-    if (editIdx !== null) setEditIdx(null);
-  };
-
-  const reorderRows = (fromIdx: number, toIdx: number) => {
-    commitLines(moveArrayItem(mathLines, fromIdx, toIdx));
-    if (editIdx !== null) setEditIdx(null);
-  };
-
-  const opPill = (label: string, title: string, active: boolean, onClick: () => void) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      aria-pressed={active}
-      className={`w-9 h-9 rounded-lg text-[15px] font-extrabold border transition-colors cursor-pointer ${
-        active
-          ? 'bg-accent text-white border-accent'
-          : 'bg-transparent text-ink-muted border-line hover:text-ink'
-      }`}
-    >
-      {label}
-    </button>
-  );
-
-  const rowActionBtn = (title: string, onClick: () => void, children: React.ReactNode) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className="p-1.5 rounded-md text-ink-faint hover:text-ink hover:bg-line/60 transition-colors cursor-pointer shrink-0"
-    >
-      {children}
-    </button>
-  );
 
   const hint = (text: string) => (
     <p className="text-[11.5px] text-ink-faint mt-2 leading-relaxed shrink-0">{text}</p>
@@ -206,190 +114,50 @@ export const ImportStep = ({
       >
         {importMode === 'math' ? (
           <>
-            {/* Generator-Toolbar */}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 shrink-0">
-              <div className="flex items-center gap-1.5">
-                {opPill('+', 'Plus-Aufgaben', math.mathPlus, () => math.setMathPlus((v) => !v))}
-                {opPill('−', 'Minus-Aufgaben', math.mathMinus, () => math.setMathMinus((v) => !v))}
-                {opPill('·', 'Mal-Aufgaben', math.mathMul, () => math.setMathMul((v) => !v))}
-                {opPill(':', 'Geteilt-Aufgaben', math.mathDiv, () => math.setMathDiv((v) => !v))}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-bold text-ink">Bis:</span>
-                <MiniStepper value={math.mathMax} onChange={math.setMathMax} min={1} max={1000} />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-bold text-ink">Anzahl:</span>
-                <MiniStepper value={math.mathCount} onChange={math.setMathCount} min={1} max={50} />
-              </div>
-              <label className="flex items-center gap-2 text-[13px] font-semibold text-ink cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={math.mathNoNeg}
-                  onChange={(e) => math.setMathNoNeg(e.target.checked)}
-                  className="w-[18px] h-[18px] accent-[var(--accent)]"
-                />
-                Keine negativen Ergebnisse
-              </label>
-              <label className="flex items-center gap-2 text-[13px] font-semibold text-ink cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={math.mathGap}
-                  onChange={(e) => math.setMathGap(e.target.checked)}
-                  className="w-[18px] h-[18px] accent-[var(--accent)]"
-                />
-                Lückenaufgaben (fehlende Zahl, z.&nbsp;B. 4 + __ = 7)
-              </label>
-              <button
-                type="button"
-                onClick={math.handleGenerateMath}
-                className="ml-auto flex items-center gap-2 px-5 py-2.5 bg-accent hover:opacity-90 text-white rounded-full font-bold text-[13px] transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap"
-              >
-                <Sparkles className="w-4 h-4" /> Aufgaben erzeugen
-              </button>
-            </div>
+            <MathQuickBar
+              mathPlus={math.mathPlus}
+              setMathPlus={math.setMathPlus}
+              mathMinus={math.mathMinus}
+              setMathMinus={math.setMathMinus}
+              mathMul={math.mathMul}
+              setMathMul={math.setMathMul}
+              mathDiv={math.mathDiv}
+              setMathDiv={math.setMathDiv}
+              mathMaxValue={math.mathMaxValue}
+              setMathMaxValue={math.setMathMaxValue}
+              mathCount={math.mathCount}
+              setMathCount={math.setMathCount}
+              onGenerate={math.handleGenerateMath}
+            />
 
-            {/* Aufgabenliste + Vorschau */}
-            <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-5 flex-1 min-h-0">
-              {/* Linke Karte: Aufgaben mit Zeilen-Aktionen */}
-              <div className="border border-line rounded-[22px] p-4 flex flex-col gap-2.5 min-h-[11rem] md:min-h-0 overflow-hidden">
-                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted shrink-0">
-                  {math.mathExprs.length} Aufgaben
-                </span>
-                <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 min-h-0">
-                  {mathLines.length === 0 && editIdx === null ? (
-                    <EmptyChips text="Noch keine Aufgaben." sub="Oben erzeugen oder unten selbst hinzufügen." />
-                  ) : (
-                    mathLines.map((line, i) => {
-                      const expr = parseMathExpr(line);
-                      if (editIdx === i) {
-                        return (
-                          <input
-                            key={`edit-${i}`}
-                            autoFocus
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onBlur={commitEdit}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitEdit();
-                              if (e.key === 'Escape') setEditIdx(null);
-                            }}
-                            className="bg-surface-2 rounded-[10px] px-3.5 py-2.5 font-mono text-[13.5px] font-bold text-ink outline-none ring-2 ring-accent"
-                            placeholder="z. B. 4 + 4"
-                          />
-                        );
-                      }
-                      return (
-                        <div
-                          key={`${line}-${i}`}
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/plain', String(i));
-                            e.dataTransfer.effectAllowed = 'move';
-                          }}
-                          onDragOver={(e) => { e.preventDefault(); setDragOverMathIdx(i); }}
-                          onDragLeave={() => setDragOverMathIdx((cur) => (cur === i ? null : cur))}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            setDragOverMathIdx(null);
-                            const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-                            if (!Number.isNaN(fromIdx)) reorderRows(fromIdx, i);
-                          }}
-                          onDragEnd={() => setDragOverMathIdx(null)}
-                          className={`flex items-center justify-between gap-2 bg-surface-2 rounded-[10px] pl-3.5 pr-1.5 py-1.5 cursor-grab active:cursor-grabbing transition-shadow ${
-                            dragOverMathIdx === i ? 'ring-2 ring-accent' : ''
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => startEdit(i)}
-                            title="Zum Bearbeiten klicken"
-                            className={`font-mono text-[13.5px] font-bold text-left cursor-text rounded px-1 -mx-1 hover:bg-line/40 transition-colors ${expr ? 'text-ink' : 'text-danger'}`}
-                          >
-                            {expr ? `${expr.a} ${OP_SYM[expr.op]} ${expr.b} = ${expr.result}` : `${line} (ungültig)`}
-                          </button>
-                          <div className="flex items-center">
-                            {rowActionBtn('Neu würfeln', () => rerollRow(i), <RefreshCw className="w-3.5 h-3.5" />)}
-                            {rowActionBtn('Löschen', () => deleteRow(i), <X className="w-4 h-4" />)}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                  {editIdx === mathLines.length && (
-                    <input
-                      autoFocus
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={commitEdit}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitEdit();
-                        if (e.key === 'Escape') setEditIdx(null);
-                      }}
-                      className="bg-surface-2 rounded-[10px] px-3.5 py-2.5 font-mono text-[13.5px] font-bold text-ink outline-none ring-2 ring-accent"
-                      placeholder="z. B. 4 + 4"
-                    />
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditIdx(mathLines.length);
-                    setDraft('');
-                  }}
-                  className="flex items-center justify-center gap-1.5 text-xs font-bold text-ink-faint hover:text-ink transition-colors w-full border-t border-line pt-2.5 mt-auto cursor-pointer shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Aufgabe hinzufügen (+ − · :)</span>
-                </button>
-              </div>
-
-              {/* Rechte Karte: Vorschau (bei Lücken interaktiv) */}
-              <div className="border border-line rounded-[22px] p-4 flex flex-col gap-2.5 min-h-[11rem] md:min-h-0 overflow-hidden">
-                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted shrink-0">
-                  {math.mathGap ? 'Vorschau (Lücken)' : 'Vorschau'}
-                </span>
-                {math.mathExprs.length === 0 ? (
-                  <EmptyChips text="Noch keine Aufgaben." sub="Die Vorschau erscheint, sobald Aufgaben da sind." />
-                ) : math.mathGap ? (
-                  <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 min-h-0">
-                    <p className="text-[11px] text-ink-muted mb-1">Tippe die Zahl an, die zur Lücke (_) werden soll:</p>
-                    {math.mathExprs.map((e, i) => {
-                      const gap = math.mathGaps[i] ?? 'b';
-                      const numBtn = (slot: GapSlot, val: number) => (
-                        <button
-                          type="button"
-                          onClick={() => math.setGapAt(i, slot)}
-                          className={`min-w-[2rem] px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
-                            gap === slot ? 'bg-warn text-white' : 'bg-surface-2 text-ink hover:bg-line'
-                          }`}
-                        >
-                          {gap === slot ? '_' : val}
-                        </button>
-                      );
-                      return (
-                        <div key={i} className="flex items-center gap-1.5 text-sm font-mono">
-                          <span className="opacity-55 text-xs w-5 shrink-0 text-ink-muted">{i + 1}.</span>
-                          {numBtn('a', e.a)}
-                          <span className="text-ink-muted">{OP_SYM[e.op]}</span>
-                          {numBtn('b', e.b)}
-                          <span className="text-ink-muted">=</span>
-                          {numBtn('result', e.result)}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 min-h-0">
-                    {math.mathExprs.map((e, i) => (
-                      <div key={i} className="flex items-center gap-2 text-[13.5px] font-mono">
-                        <span className="text-ink-faint text-xs w-6 shrink-0 text-right">{i + 1}.</span>
-                        <span className="font-bold text-ink">{`${e.a} ${OP_SYM[e.op]} ${e.b} = ${e.result}`}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {/* Stabil responsiv: Desktop nebeneinander, schmälere Tablets untereinander. */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-5 flex-1 min-h-0">
+              <MathTaskList
+                mathInput={math.mathInput}
+                validCount={math.mathExprs.length}
+                onChangeLines={(lines) => math.handleMathInputChange(lines.join('\n'))}
+                generateSingleLine={() => generateMathLines({ ...math.buildGenOptions(), count: 1 })[0]}
+              />
+              <MathSettingsPanel
+                mathMinValue={math.mathMinValue}
+                setMathMinValue={math.setMathMinValue}
+                mathMaxValue={math.mathMaxValue}
+                setMathMaxValue={math.setMathMaxValue}
+                mathAllowNegative={math.mathAllowNegative}
+                setMathAllowNegative={math.setMathAllowNegative}
+                mathExcludeZeroOperand={math.mathExcludeZeroOperand}
+                setMathExcludeZeroOperand={math.setMathExcludeZeroOperand}
+                mathExcludeZeroResult={math.mathExcludeZeroResult}
+                setMathExcludeZeroResult={math.setMathExcludeZeroResult}
+                mathGap={math.mathGap}
+                setMathGap={math.setMathGap}
+                mathTables={math.mathTables}
+                setMathTables={math.setMathTables}
+                showMultiplicationTables={math.mathMul || math.mathDiv}
+                mathExprs={math.mathExprs}
+                mathGaps={math.mathGaps}
+                setGapAt={math.setGapAt}
+              />
             </div>
           </>
         ) : (
@@ -560,11 +328,3 @@ export const ImportStep = ({
     </div>
   );
 };
-
-const EmptyChips = ({ text, sub }: { text: string; sub: string }) => (
-  <div className="flex-1 flex flex-col items-center justify-center text-center py-8 text-ink-faint">
-    <Sparkles className="w-7 h-7 mb-2 opacity-50" />
-    <p className="text-xs font-bold">{text}</p>
-    <p className="text-[10px] mt-0.5">{sub}</p>
-  </div>
-);

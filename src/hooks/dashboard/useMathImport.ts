@@ -4,8 +4,10 @@ import {
   generateMathLines,
   normalMathWord,
   buildGapTask,
+  MULTIPLICATION_TABLES,
   type MathOp,
   type GapSlot,
+  type GenOptions,
 } from '../../utils/dashboard/mathTasks';
 import type { WordItem } from '../../types/game';
 
@@ -19,7 +21,6 @@ interface UseMathImportArgs {
 /**
  * Kapselt den Mathe-Import: Generator-Optionen, manuelle Eingabe,
  * Lückenaufgaben und das Aktualisieren der Wörter im Store.
- * Verhalten unverändert gegenüber der vorherigen Inline-Version.
  */
 export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
   // Generator + manuelle Eingabe – beides läuft über mathInput
@@ -28,12 +29,28 @@ export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
   const [mathMinus, setMathMinus] = useState(true);
   const [mathMul, setMathMul] = useState(false);
   const [mathDiv, setMathDiv] = useState(false);
-  const [mathMax, setMathMax] = useState(20);
   const [mathCount, setMathCount] = useState(10);
-  const [mathNoNeg, setMathNoNeg] = useState(true);
+  const [mathMinValueRaw, setMathMinValueRaw] = useState(0);
+  const [mathMaxValueRaw, setMathMaxValueRaw] = useState(20);
+  // Negative Ergebnisse sind jetzt eine Opt-in-Option (Default aus).
+  const [mathAllowNegative, setMathAllowNegative] = useState(false);
+  const [mathExcludeZeroOperand, setMathExcludeZeroOperand] = useState(false);
+  const [mathExcludeZeroResult, setMathExcludeZeroResult] = useState(false);
+  // Einmaleins-Reihen für Mal/Geteilt (Default: alle 1–10 aktiv).
+  const [mathTables, setMathTables] = useState<number[]>([...MULTIPLICATION_TABLES]);
   // Lückenaufgaben: an/aus + Lücken-Position je Aufgabe (Index -> 'a'|'b'|'result').
   const [mathGap, setMathGap] = useState(false);
   const [mathGaps, setMathGaps] = useState<GapSlot[]>([]);
+
+  // Von/Bis halten sich gegenseitig konsistent (Von darf Bis nicht überschreiten).
+  const setMathMinValue = (n: number) => {
+    setMathMinValueRaw(n);
+    setMathMaxValueRaw((prev) => (n > prev ? n : prev));
+  };
+  const setMathMaxValue = (n: number) => {
+    setMathMaxValueRaw(n);
+    setMathMinValueRaw((prev) => (n < prev ? n : prev));
+  };
 
   // Geparste Mathe-Ausdrücke aus dem Eingabefeld (ungültige Zeilen ignoriert).
   const mathExprs = mathInput
@@ -54,18 +71,34 @@ export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importMode, mathInput, mathGap, mathGaps, setWords]);
 
-  const handleMathInputChange = (value: string) => {
-    setMathInput(value);
-  };
-
-  const handleGenerateMath = () => {
+  const currentOps = (): MathOp[] => {
     const ops: MathOp[] = [];
     if (mathPlus) ops.push('+');
     if (mathMinus) ops.push('-');
     if (mathMul) ops.push('*');
     if (mathDiv) ops.push('/');
-    if (ops.length === 0) ops.push('+');
-    const lines = generateMathLines({ ops, max: mathMax, count: mathCount, noNegative: mathNoNeg });
+    return ops.length ? ops : ['+'];
+  };
+
+  /** Baut die aktuellen Generator-Optionen aus dem Hook-State (fürs Erzeugen und für Einzel-Reroll). */
+  const buildGenOptions = (ops: MathOp[] = currentOps()): GenOptions => ({
+    ops,
+    minValue: mathMinValueRaw,
+    maxValue: mathMaxValueRaw,
+    count: 1,
+    allowNegativeResults: mathAllowNegative,
+    excludeZeroOperand: mathExcludeZeroOperand,
+    excludeZeroResult: mathExcludeZeroResult,
+    multiplicationTables: mathTables,
+  });
+
+  const handleMathInputChange = (value: string) => {
+    setMathInput(value);
+  };
+
+  const handleGenerateMath = () => {
+    const ops = currentOps();
+    const lines = generateMathLines({ ...buildGenOptions(ops), count: mathCount });
     setMathInput(lines.join('\n'));
     setMathGaps([]); // neue Aufgaben -> Lücken auf Standard zurücksetzen
   };
@@ -89,12 +122,20 @@ export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
     setMathMul,
     mathDiv,
     setMathDiv,
-    mathMax,
-    setMathMax,
     mathCount,
     setMathCount,
-    mathNoNeg,
-    setMathNoNeg,
+    mathMinValue: mathMinValueRaw,
+    setMathMinValue,
+    mathMaxValue: mathMaxValueRaw,
+    setMathMaxValue,
+    mathAllowNegative,
+    setMathAllowNegative,
+    mathExcludeZeroOperand,
+    setMathExcludeZeroOperand,
+    mathExcludeZeroResult,
+    setMathExcludeZeroResult,
+    mathTables,
+    setMathTables,
     mathGap,
     setMathGap,
     mathGaps,
@@ -102,5 +143,7 @@ export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
     handleMathInputChange,
     handleGenerateMath,
     setGapAt,
+    currentOps,
+    buildGenOptions,
   };
 };
