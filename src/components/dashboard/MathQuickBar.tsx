@@ -74,7 +74,7 @@ export const MathQuickBar = ({
       </div>
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-bold text-ink">Bis:</span>
-        <MiniStepper value={mathMaxValue} onChange={setMathMaxValue} min={1} max={1000} />
+        <MiniStepper value={mathMaxValue} onChange={setMathMaxValue} min={-999} max={1000} />
       </div>
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-bold text-ink">Anzahl:</span>
