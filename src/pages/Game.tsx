@@ -411,13 +411,13 @@ export const Game = () => {
           <span className="text-6xl mb-4 block">⚠️</span>
           <h2 className="text-2xl font-bold text-white mb-2">Keine Wörter geladen</h2>
           <p className="text-slate-400 mb-6">
-            Bitte importiere im Dashboard eine Wortliste, um das Laufdiktat zu starten.
+            Der Raum konnte nicht geladen werden. Bitte kehre zur Startseite zurück und tritt dem Raum erneut bei.
           </p>
-          <button 
-            onClick={() => navigate('/dashboard')}
+          <button
+            onClick={leaveToHome}
             className="px-6 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-medium transition-colors cursor-pointer"
           >
-            Zum Dashboard
+            Zur Startseite
           </button>
         </div>
       </div>
