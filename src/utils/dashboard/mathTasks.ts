@@ -148,13 +148,21 @@ const randInt = (min: number, max: number): number => {
 const MAX_ATTEMPTS = 200;
 
 const genAddSub = (op: '+' | '-', opts: GenOptions): { a: number; b: number } | null => {
+  // Das Ergebnis muss regulär im selben Zahlenraum liegen wie die Operanden
+  // (Untergrenze UND Obergrenze). "Negative Ergebnisse zulassen" ist ein
+  // gezielter Zusatz-Override, damit z. B. bei Von=0 auch Ergebnisse wie
+  // "3 − 8 = −5" erlaubt sind – er spiegelt den Zahlenraum dafür ins
+  // Negative (mind. -maxValue), verengt eine bereits negative Untergrenze
+  // aber nie.
+  const resultFloor = opts.allowNegativeResults
+    ? Math.min(opts.minValue, -opts.maxValue)
+    : opts.minValue;
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const a = randInt(opts.minValue, opts.maxValue);
     const b = randInt(opts.minValue, opts.maxValue);
     if (opts.excludeZeroOperand && (a === 0 || b === 0)) continue;
     const result = op === '+' ? a + b : a - b;
-    if (result > opts.maxValue) continue; // Zahlenraum gilt auch fürs Ergebnis
-    if (!opts.allowNegativeResults && result < 0) continue;
+    if (result < resultFloor || result > opts.maxValue) continue; // Zahlenraum gilt auch fürs Ergebnis
     if (opts.excludeZeroResult && result === 0) continue;
     return { a, b };
   }

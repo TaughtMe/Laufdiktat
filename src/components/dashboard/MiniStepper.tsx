@@ -36,6 +36,15 @@ export const MiniStepper = ({
     setText(String(clamped));
   };
 
+  // Ziffern und ein optionales führendes Minus erlauben (für negative
+  // Zahlenbereiche, z. B. Von=-20): Minus zählt nur, wenn es am Anfang
+  // steht, alle anderen Zeichen (auch weitere Minuszeichen) fallen weg.
+  const sanitize = (raw: string): string => {
+    const negative = raw.trim().startsWith('-');
+    const digits = raw.replace(/\D/g, '');
+    return negative ? `-${digits}` : digits;
+  };
+
   return (
     <div className="flex items-center gap-2 shrink-0">
       <button
@@ -49,10 +58,10 @@ export const MiniStepper = ({
       </button>
       <input
         type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
+        inputMode={min < 0 ? 'text' : 'numeric'}
+        pattern={min < 0 ? '-?[0-9]*' : '[0-9]*'}
         value={text}
-        onChange={(e) => setText(e.target.value.replace(/\D/g, ''))}
+        onChange={(e) => setText(sanitize(e.target.value))}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
