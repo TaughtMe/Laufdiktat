@@ -98,7 +98,7 @@ describe('generateMathLines', () => {
     }
   });
 
-  it('hält die untere Zahlenraum-Grenze (Von) bei Plus ein', () => {
+  it('hält die untere Zahlenraum-Grenze (Von) bei Plus ein (Operanden UND Ergebnis)', () => {
     const lines = generateMathLines({ ...base, ops: ['+'], minValue: 10, maxValue: 20, count: 200 });
     for (const line of lines) {
       const operands = (line.match(/\d+/g) || []).map(Number);
@@ -106,6 +106,32 @@ describe('generateMathLines', () => {
         expect(n, `Operand zwischen 10 und 20: ${line}`).toBeGreaterThanOrEqual(10);
         expect(n, `Operand zwischen 10 und 20: ${line}`).toBeLessThanOrEqual(20);
       }
+      const answer = Number(parseMathLine(line)!.targetWord);
+      expect(answer, `Ergebnis zwischen 10 und 20: ${line}`).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it('hält die untere Zahlenraum-Grenze (Von) bei Minus auch fürs Ergebnis ein', () => {
+    // Von=5, Bis=20: "6 - 5 = 1" darf NICHT vorkommen, weil 1 < Von (5).
+    const lines = generateMathLines({ ...base, ops: ['-'], minValue: 5, maxValue: 20, count: 200 });
+    for (const line of lines) {
+      const answer = Number(parseMathLine(line)!.targetWord);
+      expect(answer, `Ergebnis zwischen 5 und 20: ${line}`).toBeGreaterThanOrEqual(5);
+      expect(answer, `Ergebnis zwischen 5 und 20: ${line}`).toBeLessThanOrEqual(20);
+    }
+  });
+
+  it('erlaubt negative Untergrenzen (Von negativ) für Operanden und Ergebnis', () => {
+    const lines = generateMathLines({ ...base, ops: ['+', '-'], minValue: -20, maxValue: -5, count: 200 });
+    for (const line of lines) {
+      const operands = (line.match(/-?\d+/g) || []).map(Number);
+      const answer = Number(parseMathLine(line)!.targetWord);
+      for (const n of operands) {
+        expect(n, `Operand zwischen -20 und -5: ${line}`).toBeGreaterThanOrEqual(-20);
+        expect(n, `Operand zwischen -20 und -5: ${line}`).toBeLessThanOrEqual(-5);
+      }
+      expect(answer, `Ergebnis zwischen -20 und -5: ${line}`).toBeGreaterThanOrEqual(-20);
+      expect(answer, `Ergebnis zwischen -20 und -5: ${line}`).toBeLessThanOrEqual(-5);
     }
   });
 
