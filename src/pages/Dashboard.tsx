@@ -83,6 +83,7 @@ export const Dashboard = () => {
     openLobbyError,
     results,
     studentsInLobby,
+    connectedStudents,
     studentVersions,
     hadTwoConnections,
     connectionWarning,
@@ -271,7 +272,7 @@ export const Dashboard = () => {
       onBack: () => setCurrentStep('SETTINGS'),
       nextLabel: stationMode ? 'Stationen starten' : 'Diktat jetzt starten',
       nextVariant: 'ok',
-      nextDisabled: !stationMode && studentsInLobby.length < 1,
+      nextDisabled: !stationMode && connectedStudents.size < 1,
       onNext: handleStartSession,
     },
     LIVE: {
@@ -354,7 +355,7 @@ export const Dashboard = () => {
             <LobbyStep
               roomCode={roomCode}
               stationMode={stationMode}
-              studentsInLobby={studentsInLobby}
+              connectedStudents={Array.from(connectedStudents)}
               studentVersions={studentVersions}
               appVersion={APP_VERSION}
               connectionWarning={connectionWarning}

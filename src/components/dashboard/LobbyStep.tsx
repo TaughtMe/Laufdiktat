@@ -5,7 +5,8 @@ import { AnimalAvatar } from '../shared/AnimalAvatar';
 interface LobbyStepProps {
   roomCode: string;
   stationMode: boolean;
-  studentsInLobby: string[];
+  /** Presence-basiert: wer ist JETZT GERADE verbunden (siehe useDashboardRoom.ts). */
+  connectedStudents: string[];
   studentVersions: Record<string, string>;
   appVersion: string;
   connectionWarning: boolean;
@@ -46,12 +47,15 @@ const StatusPanel = ({
  * Schritt 3 nach dem Redesign: links QR-Karte + Raumcode-Karte in Accent-
  * Tönung, rechts die "N verbunden"-Karte mit dem Schülerkarten-Grid.
  * Verbindungszustände (Warten, Abbruch, Serverfehler) und die Versions-
- * Badges pro Schüler bleiben vollständig erhalten.
+ * Badges pro Schüler bleiben vollständig erhalten. connectedStudents kommt
+ * jetzt aus Supabase Presence (siehe useDashboardRoom.ts) statt aus einem
+ * nur wachsenden Broadcast-Log – "Verbindung abgebrochen" kann dadurch
+ * erstmals tatsächlich auftreten, statt technisch unerreichbar zu sein.
  */
 export const LobbyStep = ({
   roomCode,
   stationMode,
-  studentsInLobby,
+  connectedStudents,
   studentVersions,
   appVersion,
   connectionWarning,
@@ -102,7 +106,7 @@ export const LobbyStep = ({
       <div className="bg-surface border border-line rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col gap-3.5 min-h-0">
         <div className="flex items-center gap-2 shrink-0">
           <span className={`w-[7px] h-[7px] rounded-full ${connectionWarning ? 'bg-danger' : 'bg-ok'}`} />
-          <span className="text-[13px] font-extrabold text-ink">{studentsInLobby.length} verbunden</span>
+          <span className="text-[13px] font-extrabold text-ink">{connectedStudents.length} verbunden</span>
         </div>
 
         {connectionWarning ? (
@@ -113,7 +117,7 @@ export const LobbyStep = ({
             text="Die Echtzeit-Verbindung zum Server wurde unterbrochen. Bitte versuche es erneut."
             action={retryButton}
           />
-        ) : hadTwoConnections && studentsInLobby.length < 1 ? (
+        ) : hadTwoConnections && connectedStudents.length < 1 ? (
           <StatusPanel
             icon={<XCircle className="w-6 h-6 animate-bounce" />}
             tone="error"
@@ -121,7 +125,7 @@ export const LobbyStep = ({
             text="Ein zuvor verbundenes Gerät hat die Verbindung verloren."
             action={retryButton}
           />
-        ) : studentsInLobby.length < 1 ? (
+        ) : connectedStudents.length < 1 ? (
           <StatusPanel
             icon={<Activity className="w-6 h-6" />}
             tone="wait"
@@ -134,7 +138,7 @@ export const LobbyStep = ({
           />
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2 overflow-y-auto content-start flex-1 min-h-0">
-            {studentsInLobby.map((name) => {
+            {connectedStudents.map((name) => {
               const studentVersion = studentVersions[name];
               const versionOk = !studentVersion || studentVersion === appVersion;
               return (

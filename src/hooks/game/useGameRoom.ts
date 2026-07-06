@@ -23,9 +23,9 @@ export interface SessionStartData {
   strictTypingMode?: boolean;
   /**
    * Gezielter Resync für genau einen (wieder-)beitretenden Schüler (siehe
-   * useDashboardRoom: student-joined während LIVE). Ist das Feld gesetzt,
-   * ignorieren alle anderen Schüler dieses Broadcast – sonst würde ein
-   * einzelner Reconnect (z. B. kurzer WLAN-Aussetzer) die ganze Klasse
+   * useDashboardRoom: Presence-join-Event während LIVE). Ist das Feld
+   * gesetzt, ignorieren alle anderen Schüler dieses Broadcast – sonst würde
+   * ein einzelner Reconnect (z. B. kurzer WLAN-Aussetzer) die ganze Klasse
    * zurück auf Wort 1 werfen.
    */
   targetStudent?: string;
@@ -44,7 +44,7 @@ interface UseGameRoomArgs {
    * Im Stationsmodus übernimmt StationGame.tsx eine eigene, unabhängige
    * Channel-Verbindung zum selben Raum. Bleibt diese hier zusätzlich aktiv,
    * laufen zwei parallele Verbindungen im selben Tab – inklusive doppelter
-   * student-joined-Broadcasts nach einem Reconnect, die unnötigen
+   * Presence-Einträge/Broadcasts nach einem Reconnect, die unnötigen
    * Raum-Traffic und Cross-Talk-Risiken erzeugen. Sobald bekannt ist, dass
    * es sich um einen Stationsraum handelt (siehe Game.tsx), wird diese
    * Verbindung deaktiviert – StationGame.tsx hat zu dem Zeitpunkt längst
@@ -71,11 +71,6 @@ export const useGameRoom = ({
   const [connectionWarning, setConnectionWarning] = useState(false);
   const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  // Nur beim allerersten erfolgreichen Verbinden "student-joined" senden (siehe
-  // unten) – ein Realtime-Reconnect nach einem kurzen WLAN-Aussetzer liefert
-  // ebenfalls den Status SUBSCRIBED, ist aber kein neuer Beitritt und darf die
-  // Lehrkraft nicht zu einem Resync für den ganzen Raum verleiten.
-  const hasAnnouncedJoinRef = useRef(false);
   // Einmaliger DB-Fallback-Fetch pro Mount (siehe unten) – nicht bei jedem
   // Reconnect nötig, da ein bereits laufender Reconnect-Resync über den
   // bestehenden targetStudent-Broadcast abgedeckt ist (siehe oben).
@@ -83,10 +78,18 @@ export const useGameRoom = ({
 
   useEffect(() => {
     if (!roomCode || !enabled) return;
-    hasAnnouncedJoinRef.current = false;
     hasFetchedRoomStateRef.current = false;
 
-    const channel = supabase.channel(`room-${roomCode}`);
+    // Presence-Key = Tiername, damit die Lehrkraft join/leave eindeutig
+    // demselben Schüler zuordnen kann (siehe useDashboardRoom.ts). Ohne
+    // studentName (sollte praktisch nicht vorkommen) generiert Supabase
+    // selbst einen zufälligen Key – dann taucht der Schüler zwar nicht
+    // namentlich im Presence-Roster auf, aber der Channel funktioniert
+    // trotzdem unverändert.
+    const channel = supabase.channel(
+      `room-${roomCode}`,
+      studentName ? { config: { presence: { key: studentName } } } : undefined
+    );
     channelRef.current = channel;
 
     channel
@@ -126,14 +129,14 @@ export const useGameRoom = ({
         } else if (status === 'SUBSCRIBED') {
           setConnectionWarning(false);
           if (studentName) {
-            if (!hasAnnouncedJoinRef.current) {
-              hasAnnouncedJoinRef.current = true;
-              await channel.send({
-                type: 'broadcast',
-                event: 'student-joined',
-                payload: { name: studentName, version: APP_VERSION },
-              });
-            }
+            // Presence statt student-joined-Broadcast: track() muss nach
+            // JEDEM (Re-)Connect erneut aufgerufen werden, da die vorherige
+            // Presence-Zuordnung mit der alten Verbindung automatisch
+            // verschwindet (siehe useDashboardRoom.ts: join/leave-Events).
+            // Das ersetzt die frühere hasAnnouncedJoinRef-Gating-Logik –
+            // Supabase unterscheidet echten Erstbeitritt und Reconnect jetzt
+            // selbst, zuverlässiger als unser eigenes Heuristik-Flag.
+            await channel.track({ name: studentName, appVersion: APP_VERSION });
             // Eigenen Fortschritt ankündigen und den der anderen abfragen –
             // unschädlich, auch nach einem bloßen Reconnect erneut zu senden.
             await channel.send({

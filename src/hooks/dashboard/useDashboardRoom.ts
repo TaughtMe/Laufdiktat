@@ -86,8 +86,19 @@ export const useDashboardRoom = ({
   // Migration noch nicht angewendet, oder Supabase nicht erreichbar).
   const [openLobbyError, setOpenLobbyError] = useState<string | null>(null);
   const [results, setResults] = useState<StudentResult[]>([]);
+  // Wächst monoton über die ganze Sitzung (nie entfernen!) – wird für den
+  // Live-Schritt und den CSV-Export gebraucht, wo auch ein Schüler sichtbar
+  // bleiben soll, der nach dem Fertigwerden das Gerät zuklappt/die
+  // Verbindung verliert. Für "wer ist GERADE verbunden" siehe
+  // connectedStudents (Presence-basiert) unten.
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
-  // App-Version je Schüler (aus student-joined), fürs Lobby-Kompatibilitäts-Badge.
+  // Presence-basiert (siehe handleOpenLobby): wer ist JETZT GERADE
+  // verbunden. Schrumpft anders als studentsInLobby auch wieder, sobald ein
+  // Gerät die Verbindung wirklich verliert (Supabase erkennt das über einen
+  // Heartbeat) – wird für die Lobby-Ansicht und die "Verbindung
+  // abgebrochen"-Erkennung gebraucht.
+  const [connectedStudents, setConnectedStudents] = useState<Set<string>>(new Set());
+  // App-Version je Schüler (aus der Presence-Payload), fürs Lobby-Kompatibilitäts-Badge.
   const [studentVersions, setStudentVersions] = useState<Record<string, string>>({});
   const [hadTwoConnections, setHadTwoConnections] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
@@ -121,6 +132,7 @@ export const useDashboardRoom = ({
     }
     setHadTwoConnections(false);
     setOpenLobbyError(null);
+    setConnectedStudents(new Set());
 
     // Raum in der DB anlegen (Kahoot-artige, kollisionssichere Code-Vergabe,
     // siehe open_room() in der Migration). Schlägt das fehl (Migration noch
@@ -150,35 +162,48 @@ export const useDashboardRoom = ({
     const channel = supabase.channel(`room-${room.code}`);
     channelRef.current = channel;
 
-    channel.on('broadcast', { event: 'student-joined' }, (payload) => {
-      if (payload.payload?.name) {
-        const { version } = payload.payload as { name: string; version?: string };
-        if (typeof version === 'string') {
-          setStudentVersions((prev) => ({ ...prev, [payload.payload.name]: version }));
-        }
-        setStudentsInLobby((prev) => {
-          if (!prev.includes(payload.payload.name)) {
-            const next = [...prev, payload.payload.name];
-            if (next.length >= 1) {
-              setHadTwoConnections(true);
-            }
-            return next;
-          }
-          return prev;
-        });
+    // Presence statt student-joined-Broadcast: "sync" liefert nach jeder
+    // Änderung den vollständigen, aktuellen Verbindungsstand (zuverlässiger
+    // als Broadcasts, die einen Verbindungsabbruch strukturell nicht
+    // erkennen können). "join" feuert zusätzlich gezielt für den einen
+    // Schlüssel, der gerade (wieder-)verbunden hat -- das ersetzt den alten
+    // student-joined-Trigger für den Resync unten 1:1, nur zuverlässiger.
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState<{ name: string; appVersion?: string }>();
+      const keys = Object.keys(state);
+      setConnectedStudents(new Set(keys));
+      if (keys.length >= 1) setHadTwoConnections(true);
 
-        if (stepRef.current === 'LIVE') {
-          // Späterer Beitritt/Reconnect innerhalb derselben Sitzung -> dieselbe
-          // sessionId, damit der Schüler dieselbe gemischte Reihenfolge bekommt.
-          // Gezielt nur an diesen einen Schüler (targetStudent) – sonst würde
-          // ein einzelner Reconnect (z. B. kurzer WLAN-Aussetzer) alle anderen,
-          // bereits laufenden oder sogar schon fertigen Schüler mit zurücksetzen.
-          channel.send({
-            type: 'broadcast',
-            event: 'session-start',
-            payload: buildSessionPayload(sessionIdRef.current, payload.payload.name),
-          });
+      setStudentsInLobby((prev) => {
+        const next = [...prev];
+        for (const key of keys) {
+          if (!next.includes(key)) next.push(key);
         }
+        return next;
+      });
+
+      setStudentVersions((prev) => {
+        const next = { ...prev };
+        for (const [key, entries] of Object.entries(state)) {
+          const version = entries[0]?.appVersion;
+          if (typeof version === 'string') next[key] = version;
+        }
+        return next;
+      });
+    });
+
+    channel.on('presence', { event: 'join' }, ({ key }) => {
+      if (stepRef.current === 'LIVE') {
+        // Späterer Beitritt/Reconnect innerhalb derselben Sitzung -> dieselbe
+        // sessionId, damit der Schüler dieselbe gemischte Reihenfolge bekommt.
+        // Gezielt nur an diesen einen Schüler (targetStudent) – sonst würde
+        // ein einzelner Reconnect (z. B. kurzer WLAN-Aussetzer) alle anderen,
+        // bereits laufenden oder sogar schon fertigen Schüler mit zurücksetzen.
+        channel.send({
+          type: 'broadcast',
+          event: 'session-start',
+          payload: buildSessionPayload(sessionIdRef.current, key),
+        });
       }
     });
 
@@ -269,6 +294,7 @@ export const useDashboardRoom = ({
     clearWords();
     setResults([]);
     setStudentsInLobby([]);
+    setConnectedStudents(new Set());
     setStudentVersions({});
     setLiveProgress({});
     setHadTwoConnections(false);
@@ -286,6 +312,7 @@ export const useDashboardRoom = ({
     openLobbyError,
     results,
     studentsInLobby,
+    connectedStudents,
     studentVersions,
     hadTwoConnections,
     connectionWarning,
