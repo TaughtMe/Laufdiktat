@@ -20,6 +20,14 @@ export interface SessionStartData {
   sessionId?: string;
   /** Strenger Eingabemodus: Einfügen/Autokorrektur erschweren (siehe utils/game/strictTyping.ts). */
   strictTypingMode?: boolean;
+  /**
+   * Gezielter Resync für genau einen (wieder-)beitretenden Schüler (siehe
+   * useDashboardRoom: student-joined während LIVE). Ist das Feld gesetzt,
+   * ignorieren alle anderen Schüler dieses Broadcast – sonst würde ein
+   * einzelner Reconnect (z. B. kurzer WLAN-Aussetzer) die ganze Klasse
+   * zurück auf Wort 1 werfen.
+   */
+  targetStudent?: string;
 }
 
 interface UseGameRoomArgs {
@@ -47,16 +55,25 @@ export const useGameRoom = ({
   const [connectionWarning, setConnectionWarning] = useState(false);
   const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Nur beim allerersten erfolgreichen Verbinden "student-joined" senden (siehe
+  // unten) – ein Realtime-Reconnect nach einem kurzen WLAN-Aussetzer liefert
+  // ebenfalls den Status SUBSCRIBED, ist aber kein neuer Beitritt und darf die
+  // Lehrkraft nicht zu einem Resync für den ganzen Raum verleiten.
+  const hasAnnouncedJoinRef = useRef(false);
 
   useEffect(() => {
     if (!roomCode) return;
+    hasAnnouncedJoinRef.current = false;
 
     const channel = supabase.channel(`room-${roomCode}`);
     channelRef.current = channel;
 
     channel
       .on('broadcast', { event: 'session-start' }, (payload) => {
-        onSessionStart(payload.payload as SessionStartData);
+        const data = payload.payload as SessionStartData;
+        // Gezielter Resync für einen anderen Schüler -> für uns nicht relevant.
+        if (data.targetStudent && data.targetStudent !== studentName) return;
+        onSessionStart(data);
       })
       .on('broadcast', { event: 'session-ended' }, () => {
         onSessionEnded();
@@ -88,12 +105,16 @@ export const useGameRoom = ({
         } else if (status === 'SUBSCRIBED') {
           setConnectionWarning(false);
           if (studentName) {
-            await channel.send({
-              type: 'broadcast',
-              event: 'student-joined',
-              payload: { name: studentName, version: APP_VERSION },
-            });
-            // Eigenen Fortschritt ankündigen und den der anderen abfragen.
+            if (!hasAnnouncedJoinRef.current) {
+              hasAnnouncedJoinRef.current = true;
+              await channel.send({
+                type: 'broadcast',
+                event: 'student-joined',
+                payload: { name: studentName, version: APP_VERSION },
+              });
+            }
+            // Eigenen Fortschritt ankündigen und den der anderen abfragen –
+            // unschädlich, auch nach einem bloßen Reconnect erneut zu senden.
             await channel.send({
               type: 'broadcast',
               event: 'student-progress',

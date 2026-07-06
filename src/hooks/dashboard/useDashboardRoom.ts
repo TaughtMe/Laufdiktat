@@ -25,7 +25,7 @@ type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 // wird für den deterministischen Pro-Schüler-Shuffle gebraucht: derselbe
 // Schüler bekommt beim Reconnect innerhalb derselben Sitzung dieselbe
 // Reihenfolge, eine neue Sitzung (erneutes "Diktat starten") mischt neu.
-const buildSessionPayload = (sessionId: string) => {
+const buildSessionPayload = (sessionId: string, targetStudent?: string) => {
   const s = useGameStore.getState();
   return {
     words: s.words,
@@ -45,6 +45,10 @@ const buildSessionPayload = (sessionId: string) => {
     // Stations-Variante: pro Schülernummer gemischt (siehe utils/game/stationShuffle.ts),
     // nur relevant und aktivierbar im Stationsmodus.
     stationShuffle: s.stationMode ? s.stationShuffle : false,
+    // Gesetzt beim Resync eines einzelnen (wieder-)beitretenden Schülers
+    // während einer laufenden Sitzung (siehe unten) – alle anderen Schüler
+    // ignorieren das Broadcast dann (siehe useGameRoom.ts).
+    targetStudent,
   };
 };
 
@@ -132,10 +136,13 @@ export const useDashboardRoom = ({
         if (stepRef.current === 'LIVE') {
           // Späterer Beitritt/Reconnect innerhalb derselben Sitzung -> dieselbe
           // sessionId, damit der Schüler dieselbe gemischte Reihenfolge bekommt.
+          // Gezielt nur an diesen einen Schüler (targetStudent) – sonst würde
+          // ein einzelner Reconnect (z. B. kurzer WLAN-Aussetzer) alle anderen,
+          // bereits laufenden oder sogar schon fertigen Schüler mit zurücksetzen.
           channel.send({
             type: 'broadcast',
             event: 'session-start',
-            payload: buildSessionPayload(sessionIdRef.current),
+            payload: buildSessionPayload(sessionIdRef.current, payload.payload.name),
           });
         }
       }

@@ -13,6 +13,7 @@ import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
 import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
 import { clearPendingJoin } from '../utils/game/pendingJoin';
+import { saveSessionProgress, readSessionProgress, clearSessionProgress } from '../utils/game/sessionProgress';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { seededShuffle } from '../utils/shared/seededShuffle';
 import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
@@ -74,8 +75,20 @@ export const Game = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const karaokeRef = useRef<HTMLDivElement>(null);
   const currentWordIndexRef = useRef(0);
+  // Sitzungs-ID der aktuell laufenden Runde (siehe onSessionStart) – nötig, um
+  // den lokal gemerkten Fortschritt (sessionProgress.ts) eindeutig genau dieser
+  // Sitzung zuzuordnen und bei einem Resync wiederherzustellen.
+  const sessionIdRef = useRef('');
 
   useEffect(() => { currentWordIndexRef.current = currentWordIndex; }, [currentWordIndex]);
+
+  // Fortschritt laufend lokal merken (siehe onSessionStart oben), damit ein
+  // Reload/Reconnect mitten in der Sitzung an derselben Stelle fortsetzt,
+  // statt wieder bei Wort 1 zu beginnen.
+  useEffect(() => {
+    if (!roomCode || !studentName || !sessionIdRef.current || gameState === 'FINISHED') return;
+    saveSessionProgress(roomCode, studentName, sessionIdRef.current, currentWordIndex);
+  }, [roomCode, studentName, currentWordIndex, gameState]);
 
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
@@ -118,8 +131,8 @@ export const Game = () => {
 
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars, strictTypingMode: newStrictTypingMode } = data;
     setSessionEnded(false);
-    setCurrentWordIndex(0);
     setGameState('IDLE');
+    sessionIdRef.current = data.sessionId ?? '';
     // Auswertung für die neue Runde zurücksetzen.
     startedAtRef.current = 0;
     errorsRef.current = 0;
@@ -134,6 +147,16 @@ export const Game = () => {
         ? seededShuffle(newWords, `${roomCode}:${studentName}:${data.sessionId}`)
         : newWords;
     setWords(orderedWords);
+    // Bei einem Resync (Reconnect/Reload innerhalb derselben Sitzung) an der
+    // zuletzt gemerkten Stelle fortsetzen, statt immer bei Wort 1 neu zu
+    // beginnen (siehe utils/game/sessionProgress.ts).
+    const restoredIndex =
+      roomCode && studentName && data.sessionId
+        ? readSessionProgress(roomCode, studentName, data.sessionId)
+        : null;
+    setCurrentWordIndex(
+      restoredIndex !== null && restoredIndex >= 0 && restoredIndex < orderedWords.length ? restoredIndex : 0
+    );
     setGameMode(newMode);
     setBattleOptions(newOptions);
     if (newStationMode !== undefined) setStationMode(newStationMode);
@@ -196,6 +219,8 @@ export const Game = () => {
 
   useEffect(() => {
     if (gameState !== 'FINISHED') return;
+    // Fertig -> der gemerkte Fortschritt wird nicht mehr gebraucht.
+    clearSessionProgress();
     if (hasSentFinishedRef.current) return; // garantiert nur einmal pro Runde
     hasSentFinishedRef.current = true;
     // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
@@ -223,6 +248,7 @@ export const Game = () => {
   // nächsten Öffnen nicht versucht, denselben Beitritt erneut fortzusetzen.
   const leaveToHome = useCallback(() => {
     clearPendingJoin();
+    clearSessionProgress();
     navigate('/');
   }, [navigate]);
 
