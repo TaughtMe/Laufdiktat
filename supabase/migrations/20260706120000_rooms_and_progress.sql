@@ -4,15 +4,24 @@
 -- Anbindung im App-Code (folgt in Phase 1).
 --
 -- Sicherheitsmodell: kein Login, der 4-stellige Raum-Code ist öffentlich
--- sichtbar (Beamer/QR) und daher NICHT die Zugriffsgrenze. Die eigentliche
--- Grenze ist das serverseitig erzeugte access_token je Raum. Direkter
+-- sichtbar (Beamer/QR) und daher NICHT die Zugriffsgrenze. Direkter
 -- Tabellenzugriff (PostgREST/`supabase.from(...)`) ist über RLS komplett
 -- gesperrt (deny-by-default) -- jeglicher Zugriff läuft ausschließlich über
--- die SECURITY DEFINER-Funktionen unten, die den Token explizit prüfen und
--- dadurch RLS bewusst umgehen (Standard-Postgres-Verhalten für den
--- Funktions-Owner). Wer künftig eine neue Tabellen-Query direkt im
--- Frontend ergänzt, bekommt also standardmäßig nichts zurück, bis er
--- bewusst eine neue geprüfte RPC-Funktion dafür anlegt.
+-- die SECURITY DEFINER-Funktionen unten, die dadurch RLS bewusst umgehen
+-- (Standard-Postgres-Verhalten für den Funktions-Owner). Wer künftig eine
+-- neue Tabellen-Query direkt im Frontend ergänzt, bekommt also
+-- standardmäßig nichts zurück, bis er bewusst eine neue geprüfte
+-- RPC-Funktion dafür anlegt.
+--
+-- Zwei getrennte Vertrauensstufen, NICHT ein einziges access_token für alle:
+-- - access_token: nur fürs Lehrer-Dashboard (open_room/update_session/
+--   end_room). Schreibrechte -- darf NIEMALS an Schülergeräte gehen, sonst
+--   könnte jeder Schüler die Sitzung eines anderen beenden/überschreiben.
+-- - room_id: für Schüler-seitige Lesezugriffe (get_room_state) ausreichend.
+--   Ein Schüler bekommt die room_id nur über find_active_room(code), kennt
+--   also ohnehin schon den (öffentlichen) Code -- das ist derselbe
+--   Vertrauensgrad wie heute beim reinen Broadcast-Modell (jeder mit dem
+--   Code kann dem Realtime-Channel beitreten), keine Verschlechterung.
 
 create extension if not exists pgcrypto;
 
@@ -110,19 +119,36 @@ end;
 $$;
 
 -- Einziger erlaubter Weg, einen Raum anhand des (öffentlichen) Codes zu
--- finden. Liefert nur das Minimum, das ein Client zum Beitreten braucht,
--- und nur für Räume, die tatsächlich noch Beitritte akzeptieren.
+-- finden. Liefert bewusst KEIN access_token (Schüler bekommen nie
+-- Schreibrechte) -- nur das Minimum, um zu wissen, ob/wie beigetreten
+-- werden kann, und für Räume, die tatsächlich noch Beitritte akzeptieren.
 create or replace function find_active_room(p_code text)
-returns table (room_id uuid, access_token text, station_mode boolean, status text)
+returns table (room_id uuid, station_mode boolean, status text)
 language sql
 security definer
 set search_path = public
 stable
 as $$
-  select id, access_token, station_mode, status
+  select id, station_mode, status
   from rooms
   where code = p_code and status in ('lobby', 'live')
   limit 1;
+$$;
+
+-- Rein lesender Zugriff für Schülergeräte: aktuelle Konfiguration/Sitzung
+-- eines Raums, den sie bereits über find_active_room() gefunden haben.
+-- Bewusst ohne Token-Prüfung -- die room_id selbst ist die Zugriffshürde
+-- (nur über den öffentlichen Code erreichbar, siehe Kommentar oben).
+create or replace function get_room_state(p_room_id uuid)
+returns table (status text, session_id text, config jsonb)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select status, session_id, config
+  from rooms
+  where id = p_room_id;
 $$;
 
 -- Sitzung starten/aktualisieren (Lehrer-Dashboard). Token-gated: ohne

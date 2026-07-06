@@ -9,6 +9,7 @@ import { checkForUpdateReady, applyUpdate } from '../pwa';
 import { savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useTheme } from '../hooks/shared/useTheme';
+import { findActiveRoom } from '../utils/rooms/roomApi';
 
 const CODE_LENGTH = 4;
 const toCodeChars = (raw: string): string[] => {
@@ -69,9 +70,30 @@ export const Home = () => {
   // Räumt pendingJoin bewusst NICHT auf – das übernimmt erst Game.tsx, sobald
   // die Version passt und die Sitzung wirklich übernommen wurde. Sonst ginge
   // der Raumcode verloren, falls ein Versions-Mismatch noch einen Reload auslöst.
-  const enterGame = useCallback((code: string, name: string) => {
+  //
+  // Prüft vorab per findActiveRoom(), ob der Code überhaupt zu einem
+  // beitrittsfähigen Raum gehört -- vorher landete ein falscher/veralteter
+  // Code kommentarlos auf dem endlosen "Warte auf Lehrer..."-Screen. Ein
+  // eindeutiges "kein Raum gefunden" bricht sofort ab; ein Fehler bei der
+  // Anfrage selbst (Netzwerk, Migration noch nicht angewendet) blockiert
+  // NICHT -- dann greift wie bisher der reine Broadcast-Pfad als Fallback.
+  // roomId (nie das schreibfähige access_token, siehe roomApi.ts) wandert
+  // mit in den Navigations-State, damit Game.tsx/useGameRoom.ts bei Bedarf
+  // selbst den aktuellen Raum-Zustand nachlesen können.
+  const enterGame = useCallback(async (code: string, name: string) => {
     resetGameData();
-    navigate('/game', { state: { roomCode: code, studentName: name } });
+    let roomId: string | undefined;
+    try {
+      const room = await findActiveRoom(code);
+      if (room === null) {
+        alert('Kein Raum mit diesem Code gefunden. Bitte Code prüfen oder bei der Lehrkraft nachfragen.');
+        return;
+      }
+      roomId = room.roomId;
+    } catch (err) {
+      console.error('[Room] find_active_room() fehlgeschlagen, fahre ohne Vorab-Prüfung fort', err);
+    }
+    navigate('/game', { state: { roomCode: code, studentName: name, roomId } });
   }, [navigate, resetGameData]);
 
   // Beim Öffnen der Startseite prüfen, ob ein Beitritt über einen

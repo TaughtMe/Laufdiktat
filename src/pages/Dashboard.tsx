@@ -55,7 +55,6 @@ export const Dashboard = () => {
   const [manualInput, setManualInput] = useState('');
   const [importMode, setImportMode] = useState<'lines' | 'sentences' | 'manual' | 'math'>('lines');
 
-  const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
   const gameMode = useGameStore((state) => state.gameMode);
@@ -80,6 +79,8 @@ export const Dashboard = () => {
   const setStationShuffle = useGameStore((state) => state.setStationShuffle);
 
   const {
+    roomCode,
+    openLobbyError,
     results,
     studentsInLobby,
     studentVersions,
@@ -91,13 +92,18 @@ export const Dashboard = () => {
     handleStartSession,
     handleEndSession,
   } = useDashboardRoom({
-    roomCode,
-    setRoomCode,
     stepRef,
     setCurrentStep,
     wordsLength: words.length,
     clearWords: () => setWords([]),
   });
+
+  // open_room() ist Voraussetzung für Phase 1 (siehe useDashboardRoom.ts) --
+  // schlägt es fehl, bleibt currentStep bewusst auf SETTINGS statt LOBBY
+  // hängen; hier nur sichtbar machen, was passiert ist.
+  useEffect(() => {
+    if (openLobbyError) alert(openLobbyError);
+  }, [openLobbyError]);
 
   // Ganze Hook-Rückgaben werden an die Step-Komponenten durchgereicht
   // (reine Präsentation); hier nur destrukturieren, was Handler brauchen.

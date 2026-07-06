@@ -4,6 +4,7 @@ import { useGameStore } from '../../store/gameStore';
 import { APP_VERSION } from '../../pwa';
 import { setStationProgress } from '../../utils/dashboard/stationProgress';
 import type { StationStudentState } from '../../types/game';
+import { openRoom, updateSession, endRoom } from '../../utils/rooms/roomApi';
 
 export interface StudentResult {
   name?: string;
@@ -21,11 +22,11 @@ type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 // Liest beim Senden immer den AKTUELLEN Store-Stand – so kommen z. B. ein
 // deaktivierter Ton oder geänderte Optionen garantiert frisch beim Schüler an
 // (keine veralteten Werte aus alten Closures).
-// sessionId identifiziert die aktuelle Sitzung (siehe sessionIdRef unten) –
-// wird für den deterministischen Pro-Schüler-Shuffle gebraucht: derselbe
-// Schüler bekommt beim Reconnect innerhalb derselben Sitzung dieselbe
-// Reihenfolge, eine neue Sitzung (erneutes "Diktat starten") mischt neu.
-const buildSessionPayload = (sessionId: string, targetStudent?: string) => {
+// Enthält nur die Felder, die auch dauerhaft in rooms.config landen sollen
+// (siehe roomApi.ts/updateSession) – sessionId/appVersion/targetStudent sind
+// reine Broadcast-Zusatzfelder und gehören nicht in die persistierte Config
+// (sessionId bekommt in der DB eine eigene Spalte, siehe Migration).
+const buildRoomConfig = () => {
   const s = useGameStore.getState();
   return {
     words: s.words,
@@ -36,25 +37,31 @@ const buildSessionPayload = (sessionId: string, targetStudent?: string) => {
     isTtsEnabled: s.isTtsEnabled,
     uebungMaxAttempts: s.uebungMaxAttempts,
     showStars: s.showStars,
-    appVersion: APP_VERSION,
     // Im Stationsmodus nie mischen: Stationsnummern haben eine feste
     // räumliche Zuordnung zum Wort an der jeweiligen Station.
     shuffleWords: s.stationMode ? false : s.shuffleWords,
-    sessionId,
     strictTypingMode: s.strictTypingMode,
     // Stations-Variante: pro Schülernummer gemischt (siehe utils/game/stationShuffle.ts),
     // nur relevant und aktivierbar im Stationsmodus.
     stationShuffle: s.stationMode ? s.stationShuffle : false,
-    // Gesetzt beim Resync eines einzelnen (wieder-)beitretenden Schülers
-    // während einer laufenden Sitzung (siehe unten) – alle anderen Schüler
-    // ignorieren das Broadcast dann (siehe useGameRoom.ts).
-    targetStudent,
   };
 };
 
+// sessionId identifiziert die aktuelle Sitzung (siehe sessionIdRef unten) –
+// wird für den deterministischen Pro-Schüler-Shuffle gebraucht: derselbe
+// Schüler bekommt beim Reconnect innerhalb derselben Sitzung dieselbe
+// Reihenfolge, eine neue Sitzung (erneutes "Diktat starten") mischt neu.
+const buildSessionPayload = (sessionId: string, targetStudent?: string) => ({
+  ...buildRoomConfig(),
+  appVersion: APP_VERSION,
+  sessionId,
+  // Gesetzt beim Resync eines einzelnen (wieder-)beitretenden Schülers
+  // während einer laufenden Sitzung (siehe unten) – alle anderen Schüler
+  // ignorieren das Broadcast dann (siehe useGameRoom.ts).
+  targetStudent,
+});
+
 interface UseDashboardRoomArgs {
-  roomCode: string;
-  setRoomCode: (code: string) => void;
   stepRef: RefObject<DashboardStep>;
   setCurrentStep: (step: DashboardStep) => void;
   wordsLength: number;
@@ -67,13 +74,17 @@ interface UseDashboardRoomArgs {
  * starten / beenden. Verhalten unverändert gegenüber der vorherigen Inline-Version.
  */
 export const useDashboardRoom = ({
-  roomCode,
-  setRoomCode,
   stepRef,
   setCurrentStep,
   wordsLength,
   clearWords,
 }: UseDashboardRoomArgs) => {
+  // Kommt jetzt von open_room() (siehe roomApi.ts) statt einem lokal
+  // gewürfelten Code – erst gesetzt, sobald handleOpenLobby erfolgreich war.
+  const [roomCode, setRoomCode] = useState('');
+  // Nutzerfreundliche Fehlermeldung, falls open_room() fehlschlägt (z. B.
+  // Migration noch nicht angewendet, oder Supabase nicht erreichbar).
+  const [openLobbyError, setOpenLobbyError] = useState<string | null>(null);
   const [results, setResults] = useState<StudentResult[]>([]);
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
   // App-Version je Schüler (aus student-joined), fürs Lobby-Kompatibilitäts-Badge.
@@ -90,6 +101,10 @@ export const useDashboardRoom = ({
   // Identifiziert die laufende Sitzung (siehe buildSessionPayload oben); wird
   // in handleStartSession neu erzeugt, in handleEndSession wieder geräumt.
   const sessionIdRef = useRef<string>('');
+  // room_id/access_token aus open_room() – access_token bleibt ausschließlich
+  // hier im Dashboard (siehe roomApi.ts: Schüler bekommen es nie).
+  const roomIdRef = useRef<string>('');
+  const accessTokenRef = useRef<string>('');
 
   // Station mode RAM state
   const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
@@ -105,6 +120,25 @@ export const useDashboardRoom = ({
       return;
     }
     setHadTwoConnections(false);
+    setOpenLobbyError(null);
+
+    // Raum in der DB anlegen (Kahoot-artige, kollisionssichere Code-Vergabe,
+    // siehe open_room() in der Migration). Schlägt das fehl (Migration noch
+    // nicht angewendet, Supabase nicht erreichbar), brechen wir hier bewusst
+    // hart ab -- ohne echten Code+Token ergibt der restliche Ablauf keinen Sinn.
+    let room;
+    try {
+      room = await openRoom({});
+    } catch (err) {
+      console.error('[Room] open_room() fehlgeschlagen', err);
+      setOpenLobbyError(
+        'Der Raum konnte nicht angelegt werden. Bitte Internetverbindung prüfen und erneut versuchen.'
+      );
+      return;
+    }
+    roomIdRef.current = room.roomId;
+    accessTokenRef.current = room.accessToken;
+    setRoomCode(room.code);
 
     // Falls bereits ein Channel offen ist (z. B. erneuter Klick auf "Lobby"),
     // diesen zuerst sauber entfernen, um doppelte Abos zu vermeiden.
@@ -113,7 +147,7 @@ export const useDashboardRoom = ({
       channelRef.current = null;
     }
 
-    const channel = supabase.channel(`room-${roomCode}`);
+    const channel = supabase.channel(`room-${room.code}`);
     channelRef.current = channel;
 
     channel.on('broadcast', { event: 'student-joined' }, (payload) => {
@@ -192,10 +226,25 @@ export const useDashboardRoom = ({
     if (!channelRef.current) {
       await handleOpenLobby();
     }
+    // handleOpenLobby kann fehlschlagen (siehe dort) -- dann gibt es weder
+    // Channel noch roomId/Token, hier ist nichts weiter zu tun.
+    if (!channelRef.current || !roomIdRef.current) return;
+
     // Neue Sitzung -> neue sessionId, damit ein frischer Shuffle-Seed entsteht
     // (bei erneutem "Diktat starten" bekommen Schüler eine neue Reihenfolge).
     sessionIdRef.current = crypto.randomUUID();
-    await channelRef.current?.send({
+
+    // Persistieren ist ein Best-Effort-Sicherheitsnetz für Resyncs, nicht
+    // Voraussetzung fürs Starten -- der bewährte Broadcast-Pfad direkt danach
+    // funktioniert unabhängig davon (z. B. wenn Phase-0-Migration auf diesem
+    // Supabase-Projekt noch nicht angewendet wurde).
+    try {
+      await updateSession(roomIdRef.current, accessTokenRef.current, sessionIdRef.current, buildRoomConfig());
+    } catch (err) {
+      console.error('[Room] update_session() fehlgeschlagen (Sitzung startet trotzdem)', err);
+    }
+
+    await channelRef.current.send({
       type: 'broadcast',
       event: 'session-start',
       payload: buildSessionPayload(sessionIdRef.current),
@@ -204,6 +253,13 @@ export const useDashboardRoom = ({
   };
 
   const handleEndSession = async () => {
+    if (roomIdRef.current) {
+      try {
+        await endRoom(roomIdRef.current, accessTokenRef.current);
+      } catch (err) {
+        console.error('[Room] end_room() fehlgeschlagen (Code bleibt evtl. länger reserviert)', err);
+      }
+    }
     if (channelRef.current) {
       await channelRef.current.send({ type: 'broadcast', event: 'session-ended' });
       await supabase.removeChannel(channelRef.current);
@@ -217,11 +273,17 @@ export const useDashboardRoom = ({
     setLiveProgress({});
     setHadTwoConnections(false);
     setStationStates(new Map());
-    setRoomCode(Math.floor(1000 + Math.random() * 9000).toString());
+    // Kein neuer Code hier -- der nächste handleOpenLobby()-Aufruf holt sich
+    // über open_room() einen frischen, kollisionsgeprüften Code.
+    setRoomCode('');
+    roomIdRef.current = '';
+    accessTokenRef.current = '';
     sessionIdRef.current = '';
   };
 
   return {
+    roomCode,
+    openLobbyError,
     results,
     studentsInLobby,
     studentVersions,

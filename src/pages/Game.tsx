@@ -27,6 +27,9 @@ export const Game = () => {
   // bei dem location.state (und damit der Raum-Code) verloren ginge.
   const [roomCode] = useState<string | undefined>(() => (location.state as { roomCode?: string } | null)?.roomCode);
   const [studentName] = useState<string | undefined>(() => (location.state as { studentName?: string } | null)?.studentName);
+  // Von Home.tsx (findActiveRoom) – nur für den DB-Fallback-Fetch in
+  // useGameRoom.ts, kein Ersatz für roomCode/studentName oben.
+  const [roomId] = useState<string | undefined>(() => (location.state as { roomId?: string } | null)?.roomId);
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -180,6 +183,7 @@ export const Game = () => {
   const { connectionWarning, roster, sendProgress, sendFinished, sendAttack } = useGameRoom({
     roomCode,
     studentName,
+    roomId,
     currentWordIndexRef,
     onSessionStart,
     onSessionEnded,

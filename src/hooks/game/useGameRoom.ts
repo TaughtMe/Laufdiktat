@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { APP_VERSION } from '../../pwa';
+import { getRoomState } from '../../utils/rooms/roomApi';
 import type { WordItem, GameMode, BattleOptions, AttackType } from '../../types/game';
 
 export interface SessionStartData {
@@ -33,6 +34,8 @@ export interface SessionStartData {
 interface UseGameRoomArgs {
   roomCode: string | undefined;
   studentName: string | undefined;
+  /** Aus Home.tsx (findActiveRoom) – für den einmaligen DB-Fallback-Fetch unten. */
+  roomId: string | undefined;
   currentWordIndexRef: RefObject<number>;
   onSessionStart: (data: SessionStartData) => void;
   onSessionEnded: () => void;
@@ -58,6 +61,7 @@ interface UseGameRoomArgs {
 export const useGameRoom = ({
   roomCode,
   studentName,
+  roomId,
   currentWordIndexRef,
   onSessionStart,
   onSessionEnded,
@@ -72,10 +76,15 @@ export const useGameRoom = ({
   // ebenfalls den Status SUBSCRIBED, ist aber kein neuer Beitritt und darf die
   // Lehrkraft nicht zu einem Resync für den ganzen Raum verleiten.
   const hasAnnouncedJoinRef = useRef(false);
+  // Einmaliger DB-Fallback-Fetch pro Mount (siehe unten) – nicht bei jedem
+  // Reconnect nötig, da ein bereits laufender Reconnect-Resync über den
+  // bestehenden targetStudent-Broadcast abgedeckt ist (siehe oben).
+  const hasFetchedRoomStateRef = useRef(false);
 
   useEffect(() => {
     if (!roomCode || !enabled) return;
     hasAnnouncedJoinRef.current = false;
+    hasFetchedRoomStateRef.current = false;
 
     const channel = supabase.channel(`room-${roomCode}`);
     channelRef.current = channel;
@@ -134,6 +143,22 @@ export const useGameRoom = ({
             });
             await channel.send({ type: 'broadcast', event: 'request-progress', payload: {} });
           }
+
+          // Einmaliger DB-Fallback: falls die Sitzung schon lief, bevor wir
+          // beigetreten sind (oder das session-start-Broadcast verpasst
+          // wurde), holen wir den aktuellen Stand direkt statt endlos auf
+          // einen Broadcast zu warten, der nie mehr kommt.
+          if (roomId && !hasFetchedRoomStateRef.current) {
+            hasFetchedRoomStateRef.current = true;
+            try {
+              const room = await getRoomState(roomId);
+              if (room && room.status === 'live' && room.sessionId) {
+                onSessionStart({ ...(room.config as unknown as SessionStartData), sessionId: room.sessionId });
+              }
+            } catch (err) {
+              console.error('[Room] get_room_state() fehlgeschlagen (Broadcast-Pfad bleibt Grundlage)', err);
+            }
+          }
         }
       });
 
@@ -141,7 +166,7 @@ export const useGameRoom = ({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
+  }, [roomCode, studentName, roomId, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
 
   const sendProgress = useCallback((index: number) => {
     if (studentName) {

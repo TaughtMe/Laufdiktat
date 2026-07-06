@@ -46,9 +46,12 @@ const [roomA, roomB] = await Promise.all([openRoom(), openRoom()]);
 check('open_room() liefert zwei Raeume mit unterschiedlichem Code', roomA.code !== roomB.code);
 check('access_token wird gesetzt und ist kein Leerstring', typeof roomA.access_token === 'string' && roomA.access_token.length > 0);
 
-// 2. find_active_room() findet einen frisch angelegten (lobby) Raum per Code.
+// 2. find_active_room() findet einen frisch angelegten (lobby) Raum per Code
+// und gibt bewusst KEIN access_token heraus (Schueler duerfen keine
+// Schreibrechte bekommen).
 const { data: found, error: findError } = await supabase.rpc('find_active_room', { p_code: roomA.code });
 check('find_active_room() findet den Raum ueber den Code', !findError && found?.[0]?.room_id === roomA.room_id);
+check('find_active_room() gibt kein access_token heraus', found?.[0]?.access_token === undefined);
 
 // 3. update_session() mit falschem Token wird abgelehnt.
 const { error: badTokenError } = await supabase.rpc('update_session', {
@@ -67,6 +70,14 @@ const { error: goodTokenError } = await supabase.rpc('update_session', {
   p_config: { gameMode: 'LAUFDIKTAT' },
 });
 check('update_session() mit korrektem Token funktioniert', !goodTokenError);
+
+// 4b. get_room_state() ist lesend fuer Schuelergeraete ohne Token nutzbar
+// und liefert die zuvor per update_session() gesetzte Konfiguration.
+const { data: state, error: stateError } = await supabase.rpc('get_room_state', { p_room_id: roomA.room_id });
+check(
+  'get_room_state() liefert Status/Config ohne Token',
+  !stateError && state?.[0]?.status === 'live' && state?.[0]?.config?.gameMode === 'LAUFDIKTAT'
+);
 
 // 5. Raum beenden gibt den Code sofort wieder frei.
 const { error: endError } = await supabase.rpc('end_room', {
