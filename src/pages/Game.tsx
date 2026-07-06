@@ -13,6 +13,7 @@ import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
 import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
 import { clearPendingJoin } from '../utils/game/pendingJoin';
+import { clearStudentIdentity } from '../utils/game/studentIdentity';
 import { getMyProgress, upsertProgress } from '../utils/rooms/roomApi';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { seededShuffle } from '../utils/shared/seededShuffle';
@@ -284,6 +285,12 @@ export const Game = () => {
         appVersion: APP_VERSION,
       }).catch((err) => console.error('[Room] upsert_progress() (Abschluss) fehlgeschlagen', err));
     }
+    // Fertig -> die gemerkte Namens-Zuordnung für DIESEN Raum-Code wird nicht
+    // mehr gebraucht (siehe utils/game/studentIdentity.ts). Ein neuer Beitritt
+    // zu demselben Code später bekommt dadurch wieder einen frischen
+    // Zufallsnamen statt versehentlich in eine bereits abgeschlossene
+    // Sitzung "hineinzurutschen".
+    clearStudentIdentity();
   }, [gameState, studentName, roomId, metrics.peeks, metrics.attempts, totalLength, words.length, sendFinished]);
 
   // Geräte-/Browser-Zurück abfangen, solange das Spiel läuft.

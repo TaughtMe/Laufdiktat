@@ -7,6 +7,7 @@ import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
 import { checkForUpdateReady, applyUpdate } from '../pwa';
 import { savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
+import { saveStudentIdentity, getStudentNameForRoom } from '../utils/game/studentIdentity';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useTheme } from '../hooks/shared/useTheme';
 import { findActiveRoom } from '../utils/rooms/roomApi';
@@ -82,6 +83,14 @@ export const Home = () => {
   // selbst den aktuellen Raum-Zustand nachlesen können.
   const enterGame = useCallback(async (code: string, name: string) => {
     resetGameData();
+    // Falls für GENAU diesen Code schon einmal ein Name benutzt wurde (siehe
+    // studentIdentity.ts), den übergebenen (evtl. frisch gewürfelten) Namen
+    // durch den bekannten ersetzen. Ohne das bekäme ein Schüler nach einem
+    // kompletten Neustart der App (Tablet-Akku leer, App geschlossen – nicht
+    // nur ein PWA-Update-Reload, das pendingJoin abdeckt) einen NEUEN
+    // Zufallsnamen und könnte seinen serverseitig gespeicherten Fortschritt
+    // nie wiederfinden (student_key = Name, siehe roomApi.ts).
+    const effectiveName = getStudentNameForRoom(code) ?? name;
     let roomId: string | undefined;
     try {
       const room = await findActiveRoom(code);
@@ -93,7 +102,8 @@ export const Home = () => {
     } catch (err) {
       console.error('[Room] find_active_room() fehlgeschlagen, fahre ohne Vorab-Prüfung fort', err);
     }
-    navigate('/game', { state: { roomCode: code, studentName: name, roomId } });
+    saveStudentIdentity(code, effectiveName);
+    navigate('/game', { state: { roomCode: code, studentName: effectiveName, roomId } });
   }, [navigate, resetGameData]);
 
   // Beim Öffnen der Startseite prüfen, ob ein Beitritt über einen
