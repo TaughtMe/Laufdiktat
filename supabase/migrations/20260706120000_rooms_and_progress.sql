@@ -199,8 +199,5 @@ begin
 end;
 $$;
 
--- Hinweis fuer spaetere Phasen (noch nicht Teil dieser Migration):
--- - upsert_progress(...) fuer room_students kommt mit Phase 3.
--- - Ein Cleanup-Job (pg_cron/Edge Function) fuer verwaiste Raeume
---   (last_activity_at zu alt) ist ebenfalls fuer Phase 3 vorgesehen, siehe
---   Architektur-Plan, Abschnitt "Skalierungs-Punkte".
+-- Fortsetzung (upsert_progress/get_my_progress/get_room_students/Cleanup-Job)
+-- in 20260706130000_progress_and_cleanup.sql (Phase 3).

@@ -8,6 +8,7 @@ import { LegalLink } from '../components/shared/LegalLink';
 import { buildStationOrder } from '../utils/game/stationShuffle';
 import { MathDisplay } from '../components/shared/MathDisplay';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
+import { upsertProgress } from '../utils/rooms/roomApi';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -16,6 +17,9 @@ export const StationGame = () => {
   const location = useLocation();
   // Einmalig festhalten (überlebt den popstate des Zurück-Guards).
   const [roomCode] = useState<string | undefined>(() => (location.state as { roomCode?: string } | null)?.roomCode);
+  // Von Home.tsx (findActiveRoom) – für upsertProgress() unten (dauerhafte
+  // Ablage, ergänzend zu den bestehenden Broadcasts).
+  const [roomId] = useState<string | undefined>(() => (location.state as { roomId?: string } | null)?.roomId);
   const words = useGameStore((s) => s.words);
   const stationCount = useGameStore((s) => s.stationCount);
   const setStationCount = useGameStore((s) => s.setStationCount);
@@ -109,7 +113,24 @@ export const StationGame = () => {
       event: 'update-station-state',
       payload: { studentNumber, currentIndex: idx, peeks: p, finished: isFinished },
     });
-  }, [studentNumber]);
+    // Zusätzlich dauerhaft ablegen (station-<n> als student_key, siehe
+    // Migration) -- Broadcast bleibt der schnelle Live-Pfad, das hier ist nur
+    // das Sicherheitsnetz für einen Dashboard-Reload beim Lehrer (siehe
+    // useDashboardRoom.ts: request-station-state-Fallback).
+    if (roomId && sessionId) {
+      upsertProgress({
+        roomId,
+        sessionId,
+        studentKey: `station-${studentNumber}`,
+        stationNumber: studentNumber,
+        currentIndex: idx,
+        peeks: p,
+        attempts: 0,
+        errors: 0,
+        finished: isFinished,
+      }).catch((err) => console.error('[Room] upsert_progress() (Station) fehlgeschlagen', err));
+    }
+  }, [studentNumber, roomId, sessionId]);
 
   const resetTimeout = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);

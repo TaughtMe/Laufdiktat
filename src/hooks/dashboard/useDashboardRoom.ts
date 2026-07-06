@@ -3,8 +3,21 @@ import { supabase } from '../../utils/supabaseClient';
 import { useGameStore } from '../../store/gameStore';
 import { APP_VERSION } from '../../pwa';
 import { setStationProgress } from '../../utils/dashboard/stationProgress';
-import type { StationStudentState } from '../../types/game';
-import { openRoom, updateSession, endRoom } from '../../utils/rooms/roomApi';
+import type { StationStudentState, WordItem } from '../../types/game';
+import {
+  openRoom,
+  updateSession,
+  endRoom,
+  getRoomState,
+  getRoomStudents,
+  getMyProgress,
+  type RoomStudentRow,
+} from '../../utils/rooms/roomApi';
+import {
+  saveDashboardRoomSession,
+  readDashboardRoomSession,
+  clearDashboardRoomSession,
+} from '../../utils/dashboard/dashboardRoomSession';
 
 export interface StudentResult {
   name?: string;
@@ -60,6 +73,50 @@ const buildSessionPayload = (sessionId: string, targetStudent?: string) => ({
   // ignorieren das Broadcast dann (siehe useGameRoom.ts).
   targetStudent,
 });
+
+// Nach einem Reload ist der Zustand-Store (Wörter, Modus, ...) leer -- die
+// gespeicherte rooms.config ist die einzige Quelle, um ihn für die
+// Wiederherstellung (siehe restoreDashboardSession unten) zu befüllen.
+const hydrateStoreFromConfig = (config: Record<string, unknown>) => {
+  const s = useGameStore.getState();
+  if (Array.isArray(config.words)) s.setWords(config.words as WordItem[]);
+  if (typeof config.gameMode === 'string') s.setGameMode(config.gameMode as typeof s.gameMode);
+  if (config.battleOptions && typeof config.battleOptions === 'object') {
+    s.setBattleOptions(config.battleOptions as Partial<typeof s.battleOptions>);
+  }
+  if (typeof config.stationMode === 'boolean') s.setStationMode(config.stationMode);
+  if (typeof config.stationCount === 'number') s.setStationCount(config.stationCount);
+  if (typeof config.isTtsEnabled === 'boolean') s.setTtsEnabled(config.isTtsEnabled);
+  if (typeof config.uebungMaxAttempts === 'number') s.setUebungMaxAttempts(config.uebungMaxAttempts);
+  if (typeof config.showStars === 'boolean') s.setShowStars(config.showStars);
+  if (typeof config.shuffleWords === 'boolean') s.setShuffleWords(config.shuffleWords);
+  if (typeof config.strictTypingMode === 'boolean') s.setStrictTypingMode(config.strictTypingMode);
+  if (typeof config.stationShuffle === 'boolean') s.setStationShuffle(config.stationShuffle);
+};
+
+/** Baut die Ergebnisliste (Direktmodus, für Live-Ansicht/CSV-Export) aus persistierten Schülerzeilen. */
+const resultsFromStudents = (students: RoomStudentRow[]): StudentResult[] =>
+  students
+    .filter((s) => s.finished)
+    .map((s) => ({
+      name: s.studentKey,
+      peeks: s.peeks,
+      attempts: s.attempts,
+      errors: s.errors,
+      durationMs: s.durationMs ?? undefined,
+      wordErrors: s.wordErrors,
+    }));
+
+/** Baut die Stationsübersicht aus persistierten Schülerzeilen. */
+const stationStatesFromStudents = (students: RoomStudentRow[]): Map<number, StationStudentState> => {
+  const map = new Map<number, StationStudentState>();
+  for (const s of students) {
+    if (s.stationNumber != null) {
+      map.set(s.stationNumber, { currentIndex: s.currentIndex, peeks: s.peeks, finished: s.finished });
+    }
+  }
+  return map;
+};
 
 interface UseDashboardRoomArgs {
   stepRef: RefObject<DashboardStep>;
@@ -125,41 +182,17 @@ export const useDashboardRoom = ({
     stationStatesRef.current = stationStates;
   }, [stationStates]);
 
-  const handleOpenLobby = async () => {
-    if (wordsLength === 0) {
-      alert('Bitte füge zuerst Wörter hinzu!');
-      return;
-    }
-    setHadTwoConnections(false);
-    setOpenLobbyError(null);
-    setConnectedStudents(new Set());
-
-    // Raum in der DB anlegen (Kahoot-artige, kollisionssichere Code-Vergabe,
-    // siehe open_room() in der Migration). Schlägt das fehl (Migration noch
-    // nicht angewendet, Supabase nicht erreichbar), brechen wir hier bewusst
-    // hart ab -- ohne echten Code+Token ergibt der restliche Ablauf keinen Sinn.
-    let room;
-    try {
-      room = await openRoom({});
-    } catch (err) {
-      console.error('[Room] open_room() fehlgeschlagen', err);
-      setOpenLobbyError(
-        'Der Raum konnte nicht angelegt werden. Bitte Internetverbindung prüfen und erneut versuchen.'
-      );
-      return;
-    }
-    roomIdRef.current = room.roomId;
-    accessTokenRef.current = room.accessToken;
-    setRoomCode(room.code);
-
-    // Falls bereits ein Channel offen ist (z. B. erneuter Klick auf "Lobby"),
-    // diesen zuerst sauber entfernen, um doppelte Abos zu vermeiden.
+  // Baut den Realtime-Channel für einen Code auf (Listener, keine
+  // Subscribe-Reaktion – die unterscheidet sich zwischen echtem Lobby-Öffnen
+  // und der Wiederherstellung nach einem Reload, siehe unten). Extrahiert
+  // aus handleOpenLobby, damit beide Pfade exakt dieselben Listener bekommen.
+  const attachChannel = async (code: string) => {
     if (channelRef.current) {
       await supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
 
-    const channel = supabase.channel(`room-${room.code}`);
+    const channel = supabase.channel(`room-${code}`);
     channelRef.current = channel;
 
     // Presence statt student-joined-Broadcast: "sync" liefert nach jeder
@@ -222,12 +255,27 @@ export const useDashboardRoom = ({
     // Station mode listeners
     channel.on('broadcast', { event: 'request-station-state' }, (payload) => {
       const { studentNumber } = payload.payload;
-      const current = stationStatesRef.current.get(studentNumber) || { currentIndex: 0, peeks: 0 };
-      channel.send({
-        type: 'broadcast',
-        event: 'sync-station-state',
-        payload: { studentNumber, ...current },
-      });
+      const current = stationStatesRef.current.get(studentNumber);
+      if (current) {
+        channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber, ...current } });
+        return;
+      }
+      // RAM-Map hat (noch) nichts -- z. B. weil das Dashboard zwischenzeitlich
+      // neu geladen wurde (siehe restoreDashboardSession unten). Fallback auf
+      // die DB, bevor wir dem Tablet einfach einen leeren Stand zurückgeben.
+      getMyProgress(roomIdRef.current, sessionIdRef.current, `station-${studentNumber}`)
+        .then((progress) => {
+          const fallback = progress ?? { currentIndex: 0, peeks: 0, finished: false };
+          channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber, ...fallback } });
+        })
+        .catch((err) => {
+          console.error('[Room] get_my_progress() (Stationsfallback) fehlgeschlagen', err);
+          channel.send({
+            type: 'broadcast',
+            event: 'sync-station-state',
+            payload: { studentNumber, currentIndex: 0, peeks: 0 },
+          });
+        });
     });
 
     channel.on('broadcast', { event: 'update-station-state' }, (payload) => {
@@ -235,6 +283,96 @@ export const useDashboardRoom = ({
       setStationStates((prev) => setStationProgress(prev, studentNumber, { currentIndex, peeks, finished }));
     });
 
+    return channel;
+  };
+
+  // Nach einem Reload des Dashboard-Tabs mitten in einer laufenden Sitzung
+  // war der Raum bisher komplett verloren (roomIdRef/accessTokenRef leben
+  // nur im Hook, der Zustand-Store wird von React/Vite ohnehin frisch
+  // initialisiert). Einmal beim Mount versuchen, eine zuvor gespeicherte
+  // Sitzung (siehe dashboardRoomSession.ts) wiederherzustellen.
+  useEffect(() => {
+    const saved = readDashboardRoomSession();
+    if (!saved) return;
+
+    (async () => {
+      let room;
+      try {
+        room = await getRoomState(saved.roomId);
+      } catch (err) {
+        console.error('[Room] Wiederherstellung nach Reload fehlgeschlagen (get_room_state)', err);
+        clearDashboardRoomSession();
+        return;
+      }
+      if (!room || room.status === 'ended') {
+        // Raum existiert nicht mehr oder wurde inzwischen beendet -> nichts
+        // wiederherzustellen, frisch bei IMPORT starten (Ausgangszustand).
+        clearDashboardRoomSession();
+        return;
+      }
+
+      roomIdRef.current = saved.roomId;
+      accessTokenRef.current = saved.accessToken;
+      if (room.sessionId) sessionIdRef.current = room.sessionId;
+      setRoomCode(saved.roomCode);
+      hydrateStoreFromConfig(room.config);
+
+      try {
+        const students = await getRoomStudents(saved.roomId, saved.accessToken);
+        setResults(resultsFromStudents(students));
+        setStationStates(stationStatesFromStudents(students));
+        setStudentsInLobby(students.map((s) => s.studentKey));
+        setLiveProgress(Object.fromEntries(students.map((s) => [s.studentKey, s.currentIndex])));
+      } catch (err) {
+        // Nicht fatal -- der Raum selbst ist wiederhergestellt, nur die
+        // Detail-Ergebnisse fehlen dann bis zum nächsten Broadcast.
+        console.error('[Room] Rehydrierung der Schülerdaten fehlgeschlagen', err);
+      }
+
+      const channel = await attachChannel(saved.roomCode);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setConnectionWarning(false);
+          setCurrentStep(room.status === 'live' ? 'LIVE' : 'LOBBY');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionWarning(true);
+        }
+      });
+    })();
+    // Nur einmal beim Mount versuchen -- ein laufender Raum wird danach
+    // ausschließlich über die Refs/den Channel weitergeführt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleOpenLobby = async () => {
+    if (wordsLength === 0) {
+      alert('Bitte füge zuerst Wörter hinzu!');
+      return;
+    }
+    setHadTwoConnections(false);
+    setOpenLobbyError(null);
+    setConnectedStudents(new Set());
+
+    // Raum in der DB anlegen (Kahoot-artige, kollisionssichere Code-Vergabe,
+    // siehe open_room() in der Migration). Schlägt das fehl (Migration noch
+    // nicht angewendet, Supabase nicht erreichbar), brechen wir hier bewusst
+    // hart ab -- ohne echten Code+Token ergibt der restliche Ablauf keinen Sinn.
+    let room;
+    try {
+      room = await openRoom({});
+    } catch (err) {
+      console.error('[Room] open_room() fehlgeschlagen', err);
+      setOpenLobbyError(
+        'Der Raum konnte nicht angelegt werden. Bitte Internetverbindung prüfen und erneut versuchen.'
+      );
+      return;
+    }
+    roomIdRef.current = room.roomId;
+    accessTokenRef.current = room.accessToken;
+    setRoomCode(room.code);
+    saveDashboardRoomSession({ roomId: room.roomId, accessToken: room.accessToken, roomCode: room.code });
+
+    const channel = await attachChannel(room.code);
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         setConnectionWarning(false);
@@ -305,6 +443,7 @@ export const useDashboardRoom = ({
     roomIdRef.current = '';
     accessTokenRef.current = '';
     sessionIdRef.current = '';
+    clearDashboardRoomSession();
   };
 
   return {

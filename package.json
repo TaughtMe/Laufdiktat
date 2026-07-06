@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "verify:rooms": "node --env-file=.env scripts/verify-phase0-schema.mjs"
+    "verify:rooms": "node --env-file=.env scripts/verify-phase0-schema.mjs",
+    "verify:progress": "node --env-file=.env scripts/verify-phase3-schema.mjs"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",

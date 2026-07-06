@@ -13,7 +13,7 @@ import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
 import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
 import { clearPendingJoin } from '../utils/game/pendingJoin';
-import { saveSessionProgress, readSessionProgress, clearSessionProgress } from '../utils/game/sessionProgress';
+import { getMyProgress, upsertProgress } from '../utils/rooms/roomApi';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { seededShuffle } from '../utils/shared/seededShuffle';
 import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
@@ -79,19 +79,31 @@ export const Game = () => {
   const karaokeRef = useRef<HTMLDivElement>(null);
   const currentWordIndexRef = useRef(0);
   // Sitzungs-ID der aktuell laufenden Runde (siehe onSessionStart) – nötig, um
-  // den lokal gemerkten Fortschritt (sessionProgress.ts) eindeutig genau dieser
-  // Sitzung zuzuordnen und bei einem Resync wiederherzustellen.
+  // den serverseitig gespeicherten Fortschritt (roomApi.ts: upsertProgress)
+  // eindeutig genau dieser Sitzung zuzuordnen und bei einem Resync
+  // wiederherzustellen.
   const sessionIdRef = useRef('');
 
   useEffect(() => { currentWordIndexRef.current = currentWordIndex; }, [currentWordIndex]);
 
-  // Fortschritt laufend lokal merken (siehe onSessionStart oben), damit ein
-  // Reload/Reconnect mitten in der Sitzung an derselben Stelle fortsetzt,
-  // statt wieder bei Wort 1 zu beginnen.
+  // Fortschritt laufend serverseitig merken (siehe onSessionStart oben),
+  // damit ein Reload/Reconnect -- auch auf einem ANDEREN Gerät -- an derselben
+  // Stelle fortsetzt statt wieder bei Wort 1 zu beginnen. Ersetzt die frühere
+  // localStorage-Lösung (sessionProgress.ts): die überlebte keinen
+  // Gerätewechsel, die DB-Zeile schon.
   useEffect(() => {
-    if (!roomCode || !studentName || !sessionIdRef.current || gameState === 'FINISHED') return;
-    saveSessionProgress(roomCode, studentName, sessionIdRef.current, currentWordIndex);
-  }, [roomCode, studentName, currentWordIndex, gameState]);
+    if (!roomId || !studentName || !sessionIdRef.current || gameState === 'FINISHED') return;
+    upsertProgress({
+      roomId,
+      sessionId: sessionIdRef.current,
+      studentKey: studentName,
+      currentIndex: currentWordIndex,
+      peeks: metrics.peeks,
+      attempts: metrics.attempts,
+      errors: errorsRef.current,
+      finished: false,
+    }).catch((err) => console.error('[Room] upsert_progress() fehlgeschlagen (Broadcast-Pfad bleibt Grundlage)', err));
+  }, [roomId, studentName, currentWordIndex, gameState, metrics.peeks, metrics.attempts]);
 
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
@@ -150,16 +162,25 @@ export const Game = () => {
         ? seededShuffle(newWords, `${roomCode}:${studentName}:${data.sessionId}`)
         : newWords;
     setWords(orderedWords);
-    // Bei einem Resync (Reconnect/Reload innerhalb derselben Sitzung) an der
-    // zuletzt gemerkten Stelle fortsetzen, statt immer bei Wort 1 neu zu
-    // beginnen (siehe utils/game/sessionProgress.ts).
-    const restoredIndex =
-      roomCode && studentName && data.sessionId
-        ? readSessionProgress(roomCode, studentName, data.sessionId)
-        : null;
-    setCurrentWordIndex(
-      restoredIndex !== null && restoredIndex >= 0 && restoredIndex < orderedWords.length ? restoredIndex : 0
-    );
+    // Sicherer Startwert; wird unten ggf. asynchron durch den serverseitig
+    // gespeicherten Stand ersetzt (Resync nach Reconnect/Reload/Gerätewechsel
+    // innerhalb derselben Sitzung, siehe utils/rooms/roomApi.ts).
+    setCurrentWordIndex(0);
+    const restoreSessionId = data.sessionId;
+    if (roomId && studentName && restoreSessionId) {
+      getMyProgress(roomId, restoreSessionId, studentName)
+        .then((progress) => {
+          // Zwischenzeitlich schon eine neuere Sitzung gestartet -> diese
+          // veraltete Antwort nicht mehr anwenden.
+          if (sessionIdRef.current !== restoreSessionId) return;
+          if (progress && progress.currentIndex >= 0 && progress.currentIndex < orderedWords.length) {
+            setCurrentWordIndex(progress.currentIndex);
+            setMetrics({ peeks: progress.peeks, attempts: progress.attempts });
+            errorsRef.current = progress.errors;
+          }
+        })
+        .catch((err) => console.error('[Room] get_my_progress() fehlgeschlagen (Startwert bleibt bei Wort 1)', err));
+    }
     setGameMode(newMode);
     setBattleOptions(newOptions);
     if (newStationMode !== undefined) setStationMode(newStationMode);
@@ -168,7 +189,7 @@ export const Game = () => {
     if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
     if (newShowStars !== undefined) setShowStars(newShowStars);
     if (newStrictTypingMode !== undefined) setStrictTypingMode(newStrictTypingMode);
-  }, [roomCode, studentName, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars, setStrictTypingMode]);
+  }, [roomCode, studentName, roomId, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars, setStrictTypingMode]);
 
   const onSessionEnded = useCallback(() => {
     setSessionEnded(true);
@@ -228,8 +249,6 @@ export const Game = () => {
 
   useEffect(() => {
     if (gameState !== 'FINISHED') return;
-    // Fertig -> der gemerkte Fortschritt wird nicht mehr gebraucht.
-    clearSessionProgress();
     if (hasSentFinishedRef.current) return; // garantiert nur einmal pro Runde
     hasSentFinishedRef.current = true;
     // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
@@ -246,7 +265,26 @@ export const Game = () => {
       wordCount: words.length,
       wordErrors: wordErrorsRef.current,
     });
-  }, [gameState, studentName, metrics.peeks, metrics.attempts, totalLength, words.length, sendFinished]);
+    // Zusätzlich dauerhaft ablegen (finished=true, Zeile bleibt bestehen) --
+    // das Lehrer-Dashboard kann Ergebnisse dadurch auch nach einem eigenen
+    // Reload noch aus der DB lesen, statt nur aus während der Sitzung
+    // akkumulierten Broadcasts (siehe useDashboardRoom.ts).
+    if (roomId && studentName && sessionIdRef.current) {
+      upsertProgress({
+        roomId,
+        sessionId: sessionIdRef.current,
+        studentKey: studentName,
+        currentIndex: currentWordIndexRef.current,
+        peeks: metrics.peeks,
+        attempts: metrics.attempts,
+        errors: errorsRef.current,
+        finished: true,
+        durationMs,
+        wordErrors: wordErrorsRef.current,
+        appVersion: APP_VERSION,
+      }).catch((err) => console.error('[Room] upsert_progress() (Abschluss) fehlgeschlagen', err));
+    }
+  }, [gameState, studentName, roomId, metrics.peeks, metrics.attempts, totalLength, words.length, sendFinished]);
 
   // Geräte-/Browser-Zurück abfangen, solange das Spiel läuft.
   const requestExit = useCallback(() => setShowExitConfirm(true), []);
@@ -257,7 +295,6 @@ export const Game = () => {
   // nächsten Öffnen nicht versucht, denselben Beitritt erneut fortzusetzen.
   const leaveToHome = useCallback(() => {
     clearPendingJoin();
-    clearSessionProgress();
     navigate('/');
   }, [navigate]);
 
