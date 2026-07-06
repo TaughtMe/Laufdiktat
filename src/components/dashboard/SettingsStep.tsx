@@ -90,20 +90,21 @@ const IconSquare = ({ mode, size = 52 }: { mode: (typeof MODES)[number]; size?: 
 );
 
 /** Kleines Kästchen-Kontrollkästchen im Design-Stil (statt Schalter-Pille). */
+// Ohne eigenes onClick: die umschließende Label-Zeile (CheckboxRow) fängt den
+// Klick bereits ab. Ein zusätzlicher Handler hier würde bei einem Klick auf
+// dieses Kästchen zweimal auslösen (Bubbling zur Label-Zeile) und den Wert
+// dadurch sofort wieder zurückkippen.
 const Checkbox = ({
   checked,
-  onClick,
   colorClass = 'bg-accent border-accent',
 }: {
   checked: boolean;
-  onClick: () => void;
   colorClass?: string;
 }) => (
   <button
     type="button"
     role="checkbox"
     aria-checked={checked}
-    onClick={onClick}
     className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
       checked ? colorClass : 'bg-transparent border-line'
     }`}
@@ -130,7 +131,7 @@ const CheckboxRow = ({
     className={`flex ${hint ? 'items-start' : 'items-center'} gap-3 cursor-pointer`}
     onClick={(e) => { e.preventDefault(); onClick(); }}
   >
-    <Checkbox checked={checked} onClick={onClick} colorClass={colorClass} />
+    <Checkbox checked={checked} colorClass={colorClass} />
     <span className={hint ? 'mt-px' : undefined}>
       <span className="block text-sm font-semibold text-ink">{label}</span>
       {hint && <span className="block text-xs text-ink-faint mt-0.5">{hint}</span>}
