@@ -57,6 +57,9 @@ begin
       -- bei einem laufenden Zwischenstand (beide null) den zuletzt
       -- bekannten Wert nicht versehentlich überschreiben.
       duration_ms     = coalesce(excluded.duration_ms, room_students.duration_ms),
+      -- Fehlerhaft (bei jedem Zwischenstand-Aufruf ohne word_errors wurde die
+      -- Spalte auf '{}' zurueckgesetzt) -- behoben in
+      -- 20260706140000_fix_word_errors_coalesce.sql, siehe dort.
       word_errors     = excluded.word_errors,
       app_version     = coalesce(excluded.app_version, room_students.app_version),
       station_number  = coalesce(excluded.station_number, room_students.station_number),

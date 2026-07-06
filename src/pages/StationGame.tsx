@@ -8,7 +8,7 @@ import { LegalLink } from '../components/shared/LegalLink';
 import { buildStationOrder } from '../utils/game/stationShuffle';
 import { MathDisplay } from '../components/shared/MathDisplay';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
-import { upsertProgress } from '../utils/rooms/roomApi';
+import { upsertProgress, getRoomState } from '../utils/rooms/roomApi';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -21,6 +21,7 @@ export const StationGame = () => {
   // Ablage, ergänzend zu den bestehenden Broadcasts).
   const [roomId] = useState<string | undefined>(() => (location.state as { roomId?: string } | null)?.roomId);
   const words = useGameStore((s) => s.words);
+  const setWords = useGameStore((s) => s.setWords);
   const stationCount = useGameStore((s) => s.stationCount);
   const setStationCount = useGameStore((s) => s.setStationCount);
   const isTtsEnabled = useGameStore((s) => s.isTtsEnabled);
@@ -50,12 +51,18 @@ export const StationGame = () => {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishedToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Einmaliger DB-Fallback pro Mount (siehe useGameRoom.ts, gleiches Prinzip):
+  // fängt eine Sitzung ab, die schon lief, bevor dieses Tablet beigetreten ist
+  // (oder das session-start-Broadcast verpasst wurde) -- ohne das blieb ein
+  // Stationen-Tablet sonst dauerhaft auf "Warte auf Lehrer" hängen.
+  const hasFetchedRoomStateRef = useRef(false);
 
   const seenKey = studentNumber !== null ? `${studentNumber}:${currentIndex}` : '';
   const hasSeenCurrent = seenKey !== '' && seenKeys.has(seenKey);
 
   useEffect(() => {
     if (!roomCode) return;
+    hasFetchedRoomStateRef.current = false;
     channelRef.current = supabase.channel(`room-${roomCode}`);
     channelRef.current.on('broadcast', { event: 'sync-station-state' }, (payload) => {
       const d = payload.payload;
@@ -102,9 +109,29 @@ export const StationGame = () => {
     }).on('broadcast', { event: 'session-ended' }, () => {
       setSessionEnded(true);
     });
-    channelRef.current.subscribe();
+    channelRef.current.subscribe(async (status) => {
+      if (status !== 'SUBSCRIBED' || !roomId || hasFetchedRoomStateRef.current) return;
+      try {
+        const room = await getRoomState(roomId);
+        // Erst nach einem erfolgreichen Aufruf als "erledigt" markieren --
+        // schlaegt der Versuch fehl, darf der naechste Reconnect es erneut
+        // probieren (siehe useGameRoom.ts, gleiches Prinzip).
+        hasFetchedRoomStateRef.current = true;
+        if (room && room.status === 'live') {
+          const config = room.config as Record<string, unknown>;
+          if (Array.isArray(config.words)) setWords(config.words as typeof words);
+          if (typeof config.stationCount === 'number') setStationCount(config.stationCount);
+          if (typeof config.isTtsEnabled === 'boolean') setTtsEnabled(config.isTtsEnabled);
+          if (typeof config.strictTypingMode === 'boolean') setStrictTypingMode(config.strictTypingMode);
+          if (typeof config.stationShuffle === 'boolean') setStationShuffle(config.stationShuffle);
+          if (room.sessionId) setSessionId(room.sessionId);
+        }
+      } catch (err) {
+        console.error('[Room] get_room_state() (Stationsfallback) fehlgeschlagen, naechster Reconnect versucht es erneut', err);
+      }
+    });
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [roomCode, studentNumber, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
+  }, [roomCode, roomId, studentNumber, setWords, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
 
   const sendUpdate = useCallback((idx: number, p: number, isFinished: boolean) => {
     if (!channelRef.current || !studentNumber) return;

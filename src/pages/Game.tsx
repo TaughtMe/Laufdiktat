@@ -147,39 +147,51 @@ export const Game = () => {
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars, strictTypingMode: newStrictTypingMode } = data;
     setSessionEnded(false);
     setGameState('IDLE');
+    // Erkennt einen doppelten Trigger für dieselbe Sitzung -- z. B. wenn nach
+    // einem Reconnect sowohl das gezielte session-start-Broadcast als auch
+    // der DB-Fallback in useGameRoom.ts fast gleichzeitig onSessionStart
+    // aufrufen. Für eine bereits laufende Sitzung ist der Fortschritt schon
+    // korrekt; ein zweiter destruktiver Reset würde Wortindex/Fehlerzähler
+    // kurz auf Null zurückblitzen lassen, bevor die (dann doppelte)
+    // Restore-Anfrage sie wieder korrigiert. Die Config-Felder unten werden
+    // trotzdem angewendet (idempotent, unabhängig davon harmlos).
+    const isNewSession = data.sessionId !== sessionIdRef.current;
     sessionIdRef.current = data.sessionId ?? '';
-    // Auswertung für die neue Runde zurücksetzen.
-    startedAtRef.current = 0;
-    errorsRef.current = 0;
-    wordErrorsRef.current = {};
-    hasSentFinishedRef.current = false;
-    // Reihenfolge pro Schüler mischen, aber stabil über Reload/Reconnect
-    // hinweg: Seed aus Raum + Name + Sitzungs-ID, nicht aus Math.random().
-    // Der Lehrer erzwingt shuffleWords=false im Stationsmodus (siehe
-    // useDashboardRoom), die Prüfung hier ist zusätzliche Absicherung.
-    const orderedWords =
-      data.shuffleWords && !newStationMode && data.sessionId
-        ? seededShuffle(newWords, `${roomCode}:${studentName}:${data.sessionId}`)
-        : newWords;
-    setWords(orderedWords);
-    // Sicherer Startwert; wird unten ggf. asynchron durch den serverseitig
-    // gespeicherten Stand ersetzt (Resync nach Reconnect/Reload/Gerätewechsel
-    // innerhalb derselben Sitzung, siehe utils/rooms/roomApi.ts).
-    setCurrentWordIndex(0);
-    const restoreSessionId = data.sessionId;
-    if (roomId && studentName && restoreSessionId) {
-      getMyProgress(roomId, restoreSessionId, studentName)
-        .then((progress) => {
-          // Zwischenzeitlich schon eine neuere Sitzung gestartet -> diese
-          // veraltete Antwort nicht mehr anwenden.
-          if (sessionIdRef.current !== restoreSessionId) return;
-          if (progress && progress.currentIndex >= 0 && progress.currentIndex < orderedWords.length) {
-            setCurrentWordIndex(progress.currentIndex);
-            setMetrics({ peeks: progress.peeks, attempts: progress.attempts });
-            errorsRef.current = progress.errors;
-          }
-        })
-        .catch((err) => console.error('[Room] get_my_progress() fehlgeschlagen (Startwert bleibt bei Wort 1)', err));
+
+    if (isNewSession) {
+      // Auswertung für die neue Runde zurücksetzen.
+      startedAtRef.current = 0;
+      errorsRef.current = 0;
+      wordErrorsRef.current = {};
+      hasSentFinishedRef.current = false;
+      // Reihenfolge pro Schüler mischen, aber stabil über Reload/Reconnect
+      // hinweg: Seed aus Raum + Name + Sitzungs-ID, nicht aus Math.random().
+      // Der Lehrer erzwingt shuffleWords=false im Stationsmodus (siehe
+      // useDashboardRoom), die Prüfung hier ist zusätzliche Absicherung.
+      const orderedWords =
+        data.shuffleWords && !newStationMode && data.sessionId
+          ? seededShuffle(newWords, `${roomCode}:${studentName}:${data.sessionId}`)
+          : newWords;
+      setWords(orderedWords);
+      // Sicherer Startwert; wird unten ggf. asynchron durch den serverseitig
+      // gespeicherten Stand ersetzt (Resync nach Reconnect/Reload/Gerätewechsel
+      // innerhalb derselben Sitzung, siehe utils/rooms/roomApi.ts).
+      setCurrentWordIndex(0);
+      const restoreSessionId = data.sessionId;
+      if (roomId && studentName && restoreSessionId) {
+        getMyProgress(roomId, restoreSessionId, studentName)
+          .then((progress) => {
+            // Zwischenzeitlich schon eine neuere Sitzung gestartet -> diese
+            // veraltete Antwort nicht mehr anwenden.
+            if (sessionIdRef.current !== restoreSessionId) return;
+            if (progress && progress.currentIndex >= 0 && progress.currentIndex < orderedWords.length) {
+              setCurrentWordIndex(progress.currentIndex);
+              setMetrics({ peeks: progress.peeks, attempts: progress.attempts });
+              errorsRef.current = progress.errors;
+            }
+          })
+          .catch((err) => console.error('[Room] get_my_progress() fehlgeschlagen (Startwert bleibt bei Wort 1)', err));
+      }
     }
     setGameMode(newMode);
     setBattleOptions(newOptions);

@@ -13,6 +13,29 @@
 
 import { supabase } from '../supabaseClient';
 
+// Ein einzelner, kurzer Retry für Aufrufe, deren einmaliges Scheitern (durch
+// einen kurzen WLAN-Aussetzer im Klassenzimmer) unverhältnismäßig lange
+// nachwirkt -- z. B. wenn ein einziger fehlgeschlagener Versuch die
+// Resync-Fähigkeit für eine ganze Sitzung stillschweigend deaktiviert (siehe
+// Code-Review-Findings zu findActiveRoom/updateSession). Bewusst nur EIN
+// Retry mit kurzer Pause, nicht endlos -- die aufrufende Seite hat ohnehin
+// einen eigenen "graceful degradation"-Pfad für den Fall, dass es trotzdem
+// fehlschlägt.
+const withRetry = async <T>(fn: () => Promise<T>, attempts = 2, delayMs = 400): Promise<T> => {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastErr;
+};
+
 export interface OpenRoomResult {
   roomId: string;
   code: string;
@@ -41,16 +64,22 @@ export const openRoom = async (config: Record<string, unknown> = {}): Promise<Op
   return { roomId: row.room_id, code: row.code, accessToken: row.access_token };
 };
 
-/** Findet einen beitrittsfähigen Raum über den öffentlichen Code. `null`, wenn keiner existiert. */
-export const findActiveRoom = async (code: string): Promise<ActiveRoomLookup | null> => {
-  const { data, error } = await supabase.rpc('find_active_room', { p_code: code });
-  if (error) {
-    throw new Error(error.message);
-  }
-  const row = data?.[0];
-  if (!row) return null;
-  return { roomId: row.room_id, stationMode: row.station_mode, status: row.status };
-};
+/**
+ * Findet einen beitrittsfähigen Raum über den öffentlichen Code. `null`, wenn
+ * keiner existiert. Ein Fehlschlag hier deaktiviert den DB-Fallback für die
+ * gesamte restliche Sitzung des Schülers (roomId bleibt sonst dauerhaft
+ * undefined) -- daher ein kurzer Retry, bevor aufgegeben wird.
+ */
+export const findActiveRoom = async (code: string): Promise<ActiveRoomLookup | null> =>
+  withRetry(async () => {
+    const { data, error } = await supabase.rpc('find_active_room', { p_code: code });
+    if (error) {
+      throw new Error(error.message);
+    }
+    const row = data?.[0];
+    if (!row) return null;
+    return { roomId: row.room_id, stationMode: row.station_mode, status: row.status };
+  });
 
 /** Liest Status/Konfiguration eines Raums (Schülerseite, kein Token nötig). */
 export const getRoomState = async (roomId: string): Promise<RoomState | null> => {
@@ -63,23 +92,29 @@ export const getRoomState = async (roomId: string): Promise<RoomState | null> =>
   return { status: row.status, sessionId: row.session_id, config: row.config ?? {} };
 };
 
-/** Startet/aktualisiert die Sitzung eines Raums (Lehrer-Dashboard, tokengebunden). */
+/**
+ * Startet/aktualisiert die Sitzung eines Raums (Lehrer-Dashboard, tokengebunden).
+ * Ein Fehlschlag hier lässt die DB mit einer veralteten/fehlenden session_id
+ * zurück, wodurch spätere Reconnects den DB-Fallback still verlieren --
+ * daher ein kurzer Retry, bevor der Aufrufer auf "best effort" zurückfällt.
+ */
 export const updateSession = async (
   roomId: string,
   accessToken: string,
   sessionId: string,
   config: Record<string, unknown>
-): Promise<void> => {
-  const { error } = await supabase.rpc('update_session', {
-    p_room_id: roomId,
-    p_access_token: accessToken,
-    p_session_id: sessionId,
-    p_config: config,
+): Promise<void> =>
+  withRetry(async () => {
+    const { error } = await supabase.rpc('update_session', {
+      p_room_id: roomId,
+      p_access_token: accessToken,
+      p_session_id: sessionId,
+      p_config: config,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
   });
-  if (error) {
-    throw new Error(error.message);
-  }
-};
 
 /** Beendet einen Raum und gibt seinen Code sofort wieder frei (Lehrer-Dashboard, tokengebunden). */
 export const endRoom = async (roomId: string, accessToken: string): Promise<void> => {
@@ -125,7 +160,11 @@ export const upsertProgress = async (input: UpsertProgressInput): Promise<void> 
     p_errors: input.errors,
     p_finished: input.finished,
     p_duration_ms: input.durationMs ?? null,
-    p_word_errors: input.wordErrors ?? {},
+    // NULL (nicht {}) wenn nicht mitgegeben -- die SQL-Funktion behandelt NULL
+    // als "unveraendert lassen" (coalesce), {} wuerde einen vorhandenen Stand
+    // aktiv loeschen (siehe Migrations-Kommentar in
+    // 20260706140000_fix_word_errors_coalesce.sql).
+    p_word_errors: input.wordErrors ?? null,
     p_app_version: input.appVersion ?? null,
     p_station_number: input.stationNumber ?? null,
   });

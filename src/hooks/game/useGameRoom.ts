@@ -152,14 +152,19 @@ export const useGameRoom = ({
           // wurde), holen wir den aktuellen Stand direkt statt endlos auf
           // einen Broadcast zu warten, der nie mehr kommt.
           if (roomId && !hasFetchedRoomStateRef.current) {
-            hasFetchedRoomStateRef.current = true;
             try {
               const room = await getRoomState(roomId);
+              // Erst NACH einem erfolgreichen Aufruf als "erledigt" markieren --
+              // schlaegt genau dieser erste Versuch fehl (z. B. derselbe kurze
+              // WLAN-Aussetzer, der den Reconnect ueberhaupt erst ausgeloest hat),
+              // bleibt der Fallback fuer den naechsten Reconnect innerhalb
+              // desselben Mounts nutzbar, statt dauerhaft deaktiviert zu sein.
+              hasFetchedRoomStateRef.current = true;
               if (room && room.status === 'live' && room.sessionId) {
                 onSessionStart({ ...(room.config as unknown as SessionStartData), sessionId: room.sessionId });
               }
             } catch (err) {
-              console.error('[Room] get_room_state() fehlgeschlagen (Broadcast-Pfad bleibt Grundlage)', err);
+              console.error('[Room] get_room_state() fehlgeschlagen (Broadcast-Pfad bleibt Grundlage, naechster Reconnect versucht es erneut)', err);
             }
           }
         }

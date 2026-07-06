@@ -57,6 +57,15 @@ describe('roomApi', () => {
       rpcMock.mockResolvedValue({ data: null, error: { message: 'network' } });
       await expect(findActiveRoom('4821')).rejects.toThrow('network');
     });
+
+    it('versucht es nach einem einzelnen transienten Fehler erneut, statt sofort aufzugeben', async () => {
+      rpcMock
+        .mockRejectedValueOnce(new Error('kurzer WLAN-Aussetzer'))
+        .mockResolvedValueOnce({ data: [{ room_id: 'r1', station_mode: false, status: 'lobby' }], error: null });
+      const result = await findActiveRoom('4821');
+      expect(rpcMock).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ roomId: 'r1', stationMode: false, status: 'lobby' });
+    });
   });
 
   describe('getRoomState', () => {
@@ -130,7 +139,7 @@ describe('roomApi', () => {
         p_errors: 0,
         p_finished: false,
         p_duration_ms: null,
-        p_word_errors: {},
+        p_word_errors: null,
         p_app_version: null,
         p_station_number: null,
       });

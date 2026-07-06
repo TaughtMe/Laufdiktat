@@ -83,6 +83,41 @@ const { data: updated } = await supabase.rpc('get_my_progress', {
 });
 check('upsert_progress() aktualisiert statt zu duplizieren', updated?.length === 1 && updated[0].current_index === 5 && updated[0].finished === true);
 
+// 3b. Regressionstest fuer den word_errors-Coalesce-Fix (siehe
+// 20260706140000_fix_word_errors_coalesce.sql): ein Zwischenstand-Aufruf
+// OHNE word_errors darf einen zuvor gespeicherten Stand nicht loeschen.
+await supabase.rpc('upsert_progress', {
+  p_room_id: room.room_id,
+  p_session_id: sessionId,
+  p_student_key: 'Schlauer Igel',
+  p_current_index: 6,
+  p_peeks: 1,
+  p_attempts: 7,
+  p_errors: 1,
+  p_finished: false,
+  p_word_errors: { Haus: 2 },
+});
+await supabase.rpc('upsert_progress', {
+  p_room_id: room.room_id,
+  p_session_id: sessionId,
+  p_student_key: 'Schlauer Igel',
+  p_current_index: 7,
+  p_peeks: 1,
+  p_attempts: 8,
+  p_errors: 1,
+  p_finished: false,
+  // p_word_errors bewusst weggelassen (Default null) -- genau der Aufruf,
+  // den Game.tsx bei jedem Zwischenstand macht.
+});
+const { data: afterOmitted } = await supabase.rpc('get_room_students', {
+  p_room_id: room.room_id,
+  p_access_token: room.access_token,
+});
+check(
+  'upsert_progress() ohne word_errors loescht einen vorhandenen Stand nicht',
+  afterOmitted?.[0]?.word_errors?.Haus === 2
+);
+
 // 4. get_room_students() ohne Token schlaegt fehl/liefert nichts.
 const { data: noTokenRows } = await supabase.rpc('get_room_students', {
   p_room_id: room.room_id,

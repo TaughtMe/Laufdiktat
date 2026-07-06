@@ -265,16 +265,19 @@ export const useDashboardRoom = ({
       // die DB, bevor wir dem Tablet einfach einen leeren Stand zurückgeben.
       getMyProgress(roomIdRef.current, sessionIdRef.current, `station-${studentNumber}`)
         .then((progress) => {
+          // progress === null heisst hier "in der DB bestaetigt noch nie
+          // gespielt" -- 0/0/false ist dann tatsaechlich korrekt, kein Fehlerfall.
           const fallback = progress ?? { currentIndex: 0, peeks: 0, finished: false };
           channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber, ...fallback } });
         })
         .catch((err) => {
-          console.error('[Room] get_my_progress() (Stationsfallback) fehlgeschlagen', err);
-          channel.send({
-            type: 'broadcast',
-            event: 'sync-station-state',
-            payload: { studentNumber, currentIndex: 0, peeks: 0 },
-          });
+          // Anders als oben: hier ist unbekannt, ob schon Fortschritt existiert
+          // (die Abfrage selbst ist fehlgeschlagen, kein bestaetigtes "leer").
+          // Bewusst NICHTS senden statt einen erfundenen Nullstand zu
+          // bestaetigen -- das Tablet behaelt seinen eigenen (bereits optimistisch
+          // auf 0 gesetzten) lokalen Stand, statt dass wir aktiv vorhandenen
+          // Fortschritt vortaeuschen zu haben geloescht.
+          console.error('[Room] get_my_progress() (Stationsfallback) fehlgeschlagen -- kein Ersatzwert gesendet', err);
         });
     });
 
@@ -321,8 +324,22 @@ export const useDashboardRoom = ({
         const students = await getRoomStudents(saved.roomId, saved.accessToken);
         setResults(resultsFromStudents(students));
         setStationStates(stationStatesFromStudents(students));
-        setStudentsInLobby(students.map((s) => s.studentKey));
-        setLiveProgress(Object.fromEntries(students.map((s) => [s.studentKey, s.currentIndex])));
+        // Zusammenführen statt ersetzen: falls die Presence-"sync" aus
+        // attachChannel() (siehe unten) bereits vor diesem Fetch gefeuert hat,
+        // darf ein schon verbundener Schüler ohne eigene DB-Zeile (z. B. gerade
+        // erst beigetreten, noch keine Antwort abgegeben) nicht wieder aus der
+        // Liste verschwinden.
+        setStudentsInLobby((prev) => {
+          const next = [...prev];
+          for (const key of students.map((s) => s.studentKey)) {
+            if (!next.includes(key)) next.push(key);
+          }
+          return next;
+        });
+        setLiveProgress((prev) => ({
+          ...prev,
+          ...Object.fromEntries(students.map((s) => [s.studentKey, s.currentIndex])),
+        }));
       } catch (err) {
         // Nicht fatal -- der Raum selbst ist wiederhergestellt, nur die
         // Detail-Ergebnisse fehlen dann bis zum nächsten Broadcast.
@@ -421,6 +438,14 @@ export const useDashboardRoom = ({
         await endRoom(roomIdRef.current, accessTokenRef.current);
       } catch (err) {
         console.error('[Room] end_room() fehlgeschlagen (Code bleibt evtl. länger reserviert)', err);
+        // Anders als beim Broadcast unten (der Raum ist für die Schüler so
+        // oder so vorbei) ist das hier ein stiller DB-Fehler, den sonst
+        // niemand bemerken würde -- der Lehrkraft sichtbar machen, auch wenn
+        // die lokale Ansicht trotzdem zu IMPORT zurückkehrt.
+        alert(
+          'Der Raum konnte serverseitig nicht sauber beendet werden (Internetverbindung?). ' +
+          'Der Raum-Code bleibt dadurch noch eine Weile reserviert, ist aber sonst kein Problem.'
+        );
       }
     }
     if (channelRef.current) {
