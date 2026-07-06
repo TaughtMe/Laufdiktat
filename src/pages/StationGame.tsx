@@ -67,7 +67,15 @@ export const StationGame = () => {
         strictTypingMode: newStrict,
         stationShuffle: newStationShuffle,
         sessionId: newSessionId,
+        targetStudent,
       } = payload.payload;
+      // Gezielter Resync für ein einzelnes (anderes) Gerät, das gerade neu
+      // verbunden hat (siehe useDashboardRoom/useGameRoom) – betrifft nicht
+      // die Stationen-Ansicht. Ohne diese Prüfung würde JEDES Tablet im Raum
+      // bei jedem Reconnect eines beliebigen anderen Geräts zurück auf die
+      // Nummernauswahl springen, obwohl der eigene Fortschritt (zentral beim
+      // Lehrer in stationStates) nie verloren ging.
+      if (targetStudent) return;
       if (newStationCount !== undefined) {
         setStationCount(newStationCount);
       }

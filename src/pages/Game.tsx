@@ -184,6 +184,11 @@ export const Game = () => {
     onSessionStart,
     onSessionEnded,
     onAttack: dispatchAttack,
+    // Sobald bekannt ist, dass es ein Stationsraum ist, übernimmt
+    // StationGame.tsx die Verbindung eigenständig (siehe useGameRoom.ts) –
+    // diese hier wird dann abgeschaltet, um doppelte student-joined-Broadcasts
+    // und Cross-Talk mit den anderen Stations-Tablets zu vermeiden.
+    enabled: !stationMode,
   });
 
   const {

@@ -37,6 +37,17 @@ interface UseGameRoomArgs {
   onSessionStart: (data: SessionStartData) => void;
   onSessionEnded: () => void;
   onAttack: (type: AttackType) => void;
+  /**
+   * Im Stationsmodus übernimmt StationGame.tsx eine eigene, unabhängige
+   * Channel-Verbindung zum selben Raum. Bleibt diese hier zusätzlich aktiv,
+   * laufen zwei parallele Verbindungen im selben Tab – inklusive doppelter
+   * student-joined-Broadcasts nach einem Reconnect, die unnötigen
+   * Raum-Traffic und Cross-Talk-Risiken erzeugen. Sobald bekannt ist, dass
+   * es sich um einen Stationsraum handelt (siehe Game.tsx), wird diese
+   * Verbindung deaktiviert – StationGame.tsx hat zu dem Zeitpunkt längst
+   * ihre eigene aufgebaut.
+   */
+  enabled?: boolean;
 }
 
 /**
@@ -51,6 +62,7 @@ export const useGameRoom = ({
   onSessionStart,
   onSessionEnded,
   onAttack,
+  enabled = true,
 }: UseGameRoomArgs) => {
   const [connectionWarning, setConnectionWarning] = useState(false);
   const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
@@ -62,7 +74,7 @@ export const useGameRoom = ({
   const hasAnnouncedJoinRef = useRef(false);
 
   useEffect(() => {
-    if (!roomCode) return;
+    if (!roomCode || !enabled) return;
     hasAnnouncedJoinRef.current = false;
 
     const channel = supabase.channel(`room-${roomCode}`);
@@ -129,7 +141,7 @@ export const useGameRoom = ({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack]);
+  }, [roomCode, studentName, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
 
   const sendProgress = useCallback((index: number) => {
     if (studentName) {
