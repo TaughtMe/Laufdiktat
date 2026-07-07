@@ -6,10 +6,16 @@
 -- kein word_errors (nur der finale finished=true-Aufruf tut das) -- dadurch
 -- wurde die Spalte bei jedem Tippfehler-Zwischenstand sofort wieder geleert.
 --
--- Fix: Default auf NULL setzen und in der UPDATE-Klausel coalesce()
--- verwenden wie bei den anderen optionalen Feldern -- ein "nicht
--- mitgeschickt" (NULL) überschreibt den vorhandenen Wert dann nicht mehr,
--- nur ein explizit mitgeschickter Wert tut das.
+-- WICHTIG: In der UPDATE-Klausel wird bewusst der rohe Funktionsparameter
+-- p_word_errors abgefragt, NICHT excluded.word_errors. word_errors ist eine
+-- NOT-NULL-Spalte, daher muss die INSERT-Seite mit coalesce(p_word_errors,
+-- '{}'::jsonb) arbeiten -- das macht excluded.word_errors dadurch aber IMMER
+-- nicht-null, ein coalesce(excluded.word_errors, ...) würde also nie auf den
+-- vorhandenen Wert zurückfallen und die Spalte weiterhin bei jedem Aufruf
+-- ohne word_errors auf '{}' zurücksetzen (so eine erste, fehlerhafte Version
+-- dieses Hotfixes das tatsächlich getan hat). Der rohe Parameter kennt den
+-- Unterschied zwischen "nicht mitgeschickt" (NULL) und "explizit {}"
+-- weiterhin korrekt.
 create or replace function upsert_progress(
   p_room_id uuid,
   p_session_id text,
@@ -47,11 +53,9 @@ begin
       errors          = excluded.errors,
       finished        = excluded.finished,
       duration_ms     = coalesce(excluded.duration_ms, room_students.duration_ms),
-      -- Vorher: unconditional excluded.word_errors -- lief bei jedem
-      -- Zwischenstand-Aufruf (ohne word_errors) auf '{}' zurueck. Jetzt wie
-      -- die anderen optionalen Felder: ein nicht mitgeschickter Wert (NULL)
-      -- laesst den zuletzt bekannten Stand unangetastet.
-      word_errors     = coalesce(excluded.word_errors, room_students.word_errors),
+      -- Bewusst p_word_errors (roher Parameter), nicht excluded.word_errors
+      -- -- siehe Erklärung im Kommentar oben.
+      word_errors     = coalesce(p_word_errors, room_students.word_errors),
       app_version     = coalesce(excluded.app_version, room_students.app_version),
       station_number  = coalesce(excluded.station_number, room_students.station_number),
       updated_at      = now();
