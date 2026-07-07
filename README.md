@@ -57,6 +57,8 @@ VITE_SUPABASE_ANON_KEY=dein-anon-key
 
 > Es werden **keine Tabellen** benötigt – die App nutzt ausschließlich Realtime-Broadcasts. Ohne `.env` startet die App trotzdem, aber die Räume (Echtzeit-Synchronisation) funktionieren nicht.
 
+> **Geplanter Umbau (noch nicht aktiv):** `supabase/migrations/` enthält bereits eine vorbereitete Migration für einen künftigen persistierten Raum-/Fortschritts-Zustand (robuster gegenüber WLAN-Aussetzern im Klassenzimmer). Solange diese Migration nicht angewendet und im App-Code nicht angebunden ist, gilt die obige Aussage unverändert – die laufende App nutzt weiterhin ausschließlich Broadcasts. Verifikation der Migration nach dem Anwenden: `npm run verify:rooms`.
+
 ### Entwicklungsserver
 
 ```bash
