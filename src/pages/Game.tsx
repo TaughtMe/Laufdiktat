@@ -803,9 +803,6 @@ export const Game = () => {
                 ))}
               </div>
 
-              <p className="text-center mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider pointer-events-none">
-                Enter oder ✓ zum Bestätigen
-              </p>
               <div className="mt-8 text-center relative z-30">
                 <button
                   type="button"
