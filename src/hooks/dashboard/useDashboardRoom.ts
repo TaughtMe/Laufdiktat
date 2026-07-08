@@ -241,7 +241,14 @@ export const useDashboardRoom = ({
     });
 
     channel.on('broadcast', { event: 'student-finished' }, (payload) => {
-      setResults((prev) => [...prev, payload.payload as StudentResult]);
+      const result = payload.payload as StudentResult;
+      setResults((prev) => [...prev, result]);
+      // Absicherung gegen verpasste/verzögerte Presence-Events (siehe unten
+      // bei student-progress): wer fertig wird, MUSS im Grid auftauchen,
+      // unabhängig davon, ob dessen Presence-Sync je bei uns ankam.
+      if (result.name) {
+        setStudentsInLobby((prev) => (prev.includes(result.name!) ? prev : [...prev, result.name!]));
+      }
     });
 
     // Live-Fortschritt der Schüler mitschreiben (für die Schüler-Übersicht).
@@ -249,6 +256,13 @@ export const useDashboardRoom = ({
       const { name, index } = payload.payload;
       if (typeof name === 'string' && typeof index === 'number') {
         setLiveProgress((prev) => ({ ...prev, [name]: index }));
+        // Presence ("sync"/"join") ist der Regelfall, um einen Schüler in die
+        // Liste aufzunehmen -- kommt sie aber verzögert oder gar nicht durch
+        // (z. B. kurzer Verbindungsabbruch direkt nach dem Beitritt), sendet
+        // der Schüler trotzdem laufend seinen Fortschritt. Ohne diesen
+        // Fallback bliebe er unsichtbar im Grid, obwohl er mitspielt und am
+        // Ende sogar als "fertig" gezählt würde (siehe student-finished oben).
+        setStudentsInLobby((prev) => (prev.includes(name) ? prev : [...prev, name]));
       }
     });
 

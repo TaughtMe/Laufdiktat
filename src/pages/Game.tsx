@@ -754,6 +754,7 @@ export const Game = () => {
                   ref={inputRef}
                   type="text"
                   inputMode={isMath ? 'numeric' : 'text'}
+                  enterKeyHint="done"
                   value={inputValue}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onPaste={(e) => { if (strictTypingMode) e.preventDefault(); }}
@@ -792,6 +793,15 @@ export const Game = () => {
               <p className="text-center mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider pointer-events-none">
                 Drücke Enter zum Bestätigen
               </p>
+              {/* Fallback für Geräte ohne Enter-Taste (z. B. iPhone-Ziffernblock
+                  bei Mathe-Aufgaben, inputMode="numeric" zeigt dort keine
+                  Bestätigen-Taste an). */}
+              <button
+                type="submit"
+                className="w-full mt-4 px-6 py-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer text-sm"
+              >
+                Bestätigen
+              </button>
               <div className="mt-8 text-center relative z-30">
                 <button
                   type="button"
