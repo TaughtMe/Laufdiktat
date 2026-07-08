@@ -19,6 +19,7 @@ import { seededShuffle } from '../utils/shared/seededShuffle';
 import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
 import { MathDisplay } from '../components/shared/MathDisplay';
+import { Check } from 'lucide-react';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -764,7 +765,7 @@ export const Game = () => {
                       e.preventDefault();
                     }
                   }}
-                  className={`w-full text-center text-4xl font-bold py-6 px-4 bg-white/10 backdrop-blur-sm border-4 ${
+                  className={`w-full text-center text-4xl font-bold py-6 pl-4 pr-16 bg-white/10 backdrop-blur-sm border-4 ${
                     errorShake
                       ? 'border-red-500 text-red-400'
                       : 'border-brand-500 text-white focus:ring-brand-500/20'
@@ -772,7 +773,19 @@ export const Game = () => {
                   placeholder={copyMode ? 'Hier abtippen...' : isMath ? 'Ergebnis...' : 'Wort eingeben...'}
                   {...(strictTypingMode ? STRICT_INPUT_ATTRS : {})}
                 />
-                
+
+                {/* Kompakter Bestätigen-Button im Feld: enterKeyHint deckt die
+                    Enter-Taste auf so gut wie allen aktuellen Geräten ab (auch
+                    iOS' Ziffernblock ab iOS 16.4), dieser Button ist nur ein
+                    dezenter Fallback statt eines separaten großen Buttons. */}
+                <button
+                  type="submit"
+                  aria-label="Bestätigen"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 flex items-center justify-center rounded-full bg-brand-500 hover:bg-brand-600 text-white shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  <Check className="w-5 h-5" strokeWidth={3} />
+                </button>
+
                 {/* Ink Splats Overlay */}
                 {inkSplats.map(splat => (
                   <div
@@ -791,17 +804,8 @@ export const Game = () => {
               </div>
 
               <p className="text-center mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider pointer-events-none">
-                Drücke Enter zum Bestätigen
+                Enter oder ✓ zum Bestätigen
               </p>
-              {/* Fallback für Geräte ohne Enter-Taste (z. B. iPhone-Ziffernblock
-                  bei Mathe-Aufgaben, inputMode="numeric" zeigt dort keine
-                  Bestätigen-Taste an). */}
-              <button
-                type="submit"
-                className="w-full mt-4 px-6 py-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer text-sm"
-              >
-                Bestätigen
-              </button>
               <div className="mt-8 text-center relative z-30">
                 <button
                   type="button"
