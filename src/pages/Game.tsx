@@ -535,7 +535,7 @@ export const Game = () => {
             </svg>
           </button>
           <h1 className="text-base sm:text-lg font-bold text-white truncate">
-            Wort {currentWordIndex + 1} von {words.length}
+            {isMath ? 'Aufgabe' : 'Wort'} {currentWordIndex + 1} von {words.length}
           </h1>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -650,7 +650,9 @@ export const Game = () => {
                     className="w-full py-3 px-4 rounded-xl bg-white/5 hover:bg-white/15 text-white font-bold text-sm transition-colors active:scale-[0.98] cursor-pointer flex items-center justify-between"
                   >
                     <span>{c.name}</span>
-                    <span className="text-[11px] text-slate-400 font-medium">Wort {c.index + 1}</span>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      {isMath ? 'Aufgabe' : 'Wort'} {c.index + 1}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -809,7 +811,7 @@ export const Game = () => {
                   onClick={() => setGameState('IDLE')}
                   className="text-xs font-bold tracking-wide uppercase text-slate-400 hover:text-[#5efcc2] transition-colors underline underline-offset-4 px-4 py-2 cursor-pointer"
                 >
-                  Wort nochmal ansehen
+                  {isMath ? 'Aufgabe' : 'Wort'} nochmal ansehen
                 </button>
               </div>
             </form>
@@ -822,7 +824,7 @@ export const Game = () => {
                 Geschafft!
               </h2>
               <p className="mt-3 text-sm text-slate-400 leading-relaxed max-w-[280px]">
-                Du hast alle {words.length} Wörter erfolgreich absolviert.
+                Du hast alle {words.length} {isMath ? 'Aufgaben' : 'Wörter'} erfolgreich absolviert.
               </p>
 
               {showStars && (() => {
@@ -873,4 +875,3 @@ export const Game = () => {
     </div>
   );
 };
-
