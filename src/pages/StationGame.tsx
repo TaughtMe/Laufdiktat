@@ -367,7 +367,7 @@ export const StationGame = () => {
             </svg>
           </button>
           <h1 className="text-lg font-bold text-darkteal-800 dark:text-white truncate">
-            Nr. {studentNumber} — Wort {currentIndex + 1}/{words.length}
+            Nr. {studentNumber} — {currentItem?.prompt ? 'Aufgabe' : 'Wort'} {currentIndex + 1}/{words.length}
           </h1>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -393,7 +393,7 @@ export const StationGame = () => {
       {/* Fertig-Hinweis: kurzer, nicht blockierender Toast – Navigation bleibt möglich. */}
       {showFinishedToast && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 pointer-events-none bg-ok text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
-          🎉 Super, alle Sätze angesehen! Du kannst noch zurückblättern.
+          🎉 Super, alle {currentItem?.prompt ? 'Aufgaben' : 'Sätze'} angesehen! Du kannst noch zurückblättern.
         </div>
       )}
 
@@ -429,7 +429,7 @@ export const StationGame = () => {
           ) : (
             <div className="text-center pointer-events-none max-w-xs px-6">
               <p className="text-darkteal-800 dark:text-slate-300 font-bold text-base sm:text-lg leading-relaxed">
-                Mit zwei Fingern an den Bildschirmrändern halten, um das Wort zu sehen.
+                Mit zwei Fingern an den Bildschirmrändern halten, um {currentItem?.prompt ? 'die Aufgabe' : 'das Wort'} zu sehen.
               </p>
             </div>
           )}
@@ -469,4 +469,3 @@ export const StationGame = () => {
     </div>
   );
 };
-
