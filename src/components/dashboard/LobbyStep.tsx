@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Activity, X, XCircle } from 'lucide-react';
+import { Activity, Maximize2, X, XCircle } from 'lucide-react';
 import { AnimalAvatar } from '../shared/AnimalAvatar';
 
 interface LobbyStepProps {
@@ -85,15 +85,19 @@ export const LobbyStep = ({
           type="button"
           onClick={() => setShowLargeQrCode(true)}
           aria-label="QR-Code groß anzeigen"
-          className="bg-surface border border-line rounded-[22px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px] flex flex-col items-center gap-2.5 cursor-zoom-in transition-all hover:border-accent/40 hover:shadow-md active:scale-[0.98]"
+          className="group bg-surface border border-line rounded-[22px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px] flex flex-col items-center gap-2.5 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/20 focus-visible:border-accent active:translate-y-0 active:scale-[0.98]"
         >
-          <div className="w-full aspect-square rounded-[14px] bg-white border border-line flex items-center justify-center p-2">
+          <div className="relative w-full aspect-square rounded-[14px] bg-white border border-line flex items-center justify-center p-2 overflow-hidden">
             <QRCodeSVG
               value={joinUrl}
               size={160}
               level="H"
-              className="w-full h-full"
+              className="w-full h-full transition-transform duration-200 group-hover:scale-[1.025] group-focus-visible:scale-[1.025]"
             />
+            <div className="absolute inset-0 bg-accent-strong/80 text-white flex flex-col items-center justify-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+              <Maximize2 className="w-8 h-8" strokeWidth={2.25} />
+              <span className="text-xs font-extrabold">Groß anzeigen</span>
+            </div>
           </div>
           <span className="text-xs font-bold text-ink text-center leading-snug">Mit Schülergerät scannen</span>
           <span className="text-[10px] font-bold text-accent-strong">Zum Vergrößern anklicken</span>
