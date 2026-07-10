@@ -6,10 +6,9 @@
 // Sicherheitsmodell (siehe Migrations-Kommentare):
 // - access_token ist reines Lehrer-Schreibrecht (open_room/update_session/
 //   end_room/getRoomStudents) und verlässt das Dashboard nie.
-// - findActiveRoom()/getRoomState()/upsertProgress()/getMyProgress() brauchen
-//   nur eine room_id -- derselbe Vertrauensgrad wie die bisherigen
-//   Broadcasts (jeder im Raum-Channel konnte immer schon für einen
-//   beliebigen Namen Fortschritt "senden").
+// - participant_token wird beim Beitritt pro Geraet und Raum zufaellig erzeugt.
+//   Raumzustand und Fortschritt sind dadurch nicht mehr allein mit einer
+//   erratbaren Raum-ID manipulierbar. In der DB liegt nur sein SHA-256-Hash.
 
 import { supabase } from '../supabaseClient';
 
@@ -17,7 +16,7 @@ import { supabase } from '../supabaseClient';
 // einen kurzen WLAN-Aussetzer im Klassenzimmer) unverhältnismäßig lange
 // nachwirkt -- z. B. wenn ein einziger fehlgeschlagener Versuch die
 // Resync-Fähigkeit für eine ganze Sitzung stillschweigend deaktiviert (siehe
-// Code-Review-Findings zu findActiveRoom/updateSession). Bewusst nur EIN
+// Code-Review-Findings zu joinRoom/updateSession). Bewusst nur EIN
 // Retry mit kurzer Pause, nicht endlos -- die aufrufende Seite hat ohnehin
 // einen eigenen "graceful degradation"-Pfad für den Fall, dass es trotzdem
 // fehlschlägt.
@@ -42,10 +41,12 @@ export interface OpenRoomResult {
   accessToken: string;
 }
 
-export interface ActiveRoomLookup {
+export interface JoinedRoom {
   roomId: string;
   stationMode: boolean;
   status: 'lobby' | 'live' | 'ended';
+  studentName: string;
+  participantToken: string;
 }
 
 export interface RoomState {
@@ -56,34 +57,50 @@ export interface RoomState {
 
 /** Legt einen neuen Raum an (Kahoot-artige Code-Vergabe, siehe open_room() in der Migration). */
 export const openRoom = async (config: Record<string, unknown> = {}): Promise<OpenRoomResult> => {
-  const { data, error } = await supabase.rpc('open_room', { p_config: config });
+  const { data, error } = await supabase.rpc('open_room_secure', { p_config: config });
   const row = data?.[0];
   if (error || !row) {
-    throw new Error(error?.message ?? 'open_room() lieferte keine Daten zurück');
+    throw new Error(error?.message ?? 'open_room_secure() lieferte keine Daten zurück');
   }
   return { roomId: row.room_id, code: row.code, accessToken: row.access_token };
 };
 
-/**
- * Findet einen beitrittsfähigen Raum über den öffentlichen Code. `null`, wenn
- * keiner existiert. Ein Fehlschlag hier deaktiviert den DB-Fallback für die
- * gesamte restliche Sitzung des Schülers (roomId bleibt sonst dauerhaft
- * undefined) -- daher ein kurzer Retry, bevor aufgegeben wird.
- */
-export const findActiveRoom = async (code: string): Promise<ActiveRoomLookup | null> =>
+/** Tritt einem Raum bei und gibt das geraetegebundene Teilnehmertoken zurück. */
+export const joinRoom = async (
+  code: string,
+  studentName: string,
+  existingParticipantToken?: string
+): Promise<JoinedRoom | null> =>
   withRetry(async () => {
-    const { data, error } = await supabase.rpc('find_active_room', { p_code: code });
+    const { data, error } = await supabase.rpc('join_room_secure', {
+      p_code: code,
+      p_student_key: studentName,
+      p_participant_token: existingParticipantToken ?? null,
+    });
     if (error) {
       throw new Error(error.message);
     }
     const row = data?.[0];
     if (!row) return null;
-    return { roomId: row.room_id, stationMode: row.station_mode, status: row.status };
+    return {
+      roomId: row.room_id,
+      stationMode: row.station_mode,
+      status: row.status,
+      studentName: row.assigned_student_key,
+      participantToken: row.participant_token,
+    };
   });
 
-/** Liest Status/Konfiguration eines Raums (Schülerseite, kein Token nötig). */
-export const getRoomState = async (roomId: string): Promise<RoomState | null> => {
-  const { data, error } = await supabase.rpc('get_room_state', { p_room_id: roomId });
+/** Liest den Raumzustand mit Teilnehmer- ODER Lehrerberechtigung. */
+export const getRoomState = async (
+  roomId: string,
+  credentials: { participantToken?: string; accessToken?: string }
+): Promise<RoomState | null> => {
+  const { data, error } = await supabase.rpc('get_room_state_secure', {
+    p_room_id: roomId,
+    p_participant_token: credentials.participantToken ?? null,
+    p_access_token: credentials.accessToken ?? null,
+  });
   if (error) {
     throw new Error(error.message);
   }
@@ -105,7 +122,7 @@ export const updateSession = async (
   config: Record<string, unknown>
 ): Promise<void> =>
   withRetry(async () => {
-    const { error } = await supabase.rpc('update_session', {
+    const { error } = await supabase.rpc('update_session_secure', {
       p_room_id: roomId,
       p_access_token: accessToken,
       p_session_id: sessionId,
@@ -118,7 +135,7 @@ export const updateSession = async (
 
 /** Beendet einen Raum und gibt seinen Code sofort wieder frei (Lehrer-Dashboard, tokengebunden). */
 export const endRoom = async (roomId: string, accessToken: string): Promise<void> => {
-  const { error } = await supabase.rpc('end_room', { p_room_id: roomId, p_access_token: accessToken });
+  const { error } = await supabase.rpc('end_room_secure', { p_room_id: roomId, p_access_token: accessToken });
   if (error) {
     throw new Error(error.message);
   }
@@ -135,6 +152,7 @@ export interface StudentProgress {
 export interface UpsertProgressInput extends StudentProgress {
   roomId: string;
   sessionId: string;
+  participantToken: string;
   studentKey: string;
   durationMs?: number;
   wordErrors?: Record<string, number>;
@@ -150,9 +168,10 @@ export interface UpsertProgressInput extends StudentProgress {
  * Reconnect) verändert nichts zusätzlich.
  */
 export const upsertProgress = async (input: UpsertProgressInput): Promise<void> => {
-  const { error } = await supabase.rpc('upsert_progress', {
+  const { error } = await supabase.rpc('upsert_progress_secure', {
     p_room_id: input.roomId,
     p_session_id: input.sessionId,
+    p_participant_token: input.participantToken,
     p_student_key: input.studentKey,
     p_current_index: input.currentIndex,
     p_peeks: input.peeks,
@@ -177,12 +196,14 @@ export const upsertProgress = async (input: UpsertProgressInput): Promise<void> 
 export const getMyProgress = async (
   roomId: string,
   sessionId: string,
-  studentKey: string
+  participantToken: string,
+  studentKey?: string
 ): Promise<StudentProgress | null> => {
-  const { data, error } = await supabase.rpc('get_my_progress', {
+  const { data, error } = await supabase.rpc('get_my_progress_secure', {
     p_room_id: roomId,
     p_session_id: sessionId,
-    p_student_key: studentKey,
+    p_participant_token: participantToken,
+    p_student_key: studentKey ?? null,
   });
   if (error) {
     throw new Error(error.message);
@@ -210,7 +231,7 @@ export interface RoomStudentRow extends StudentProgress {
 
 /** Liest den Fortschritt ALLER Schüler eines Raums (Lehrer-Dashboard, tokengebunden – Rehydrierung nach einem Reload). */
 export const getRoomStudents = async (roomId: string, accessToken: string): Promise<RoomStudentRow[]> => {
-  const { data, error } = await supabase.rpc('get_room_students', {
+  const { data, error } = await supabase.rpc('get_room_students_secure', {
     p_room_id: roomId,
     p_access_token: accessToken,
   });

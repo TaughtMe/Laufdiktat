@@ -47,17 +47,17 @@ npm install
 Die Live-Räume brauchen ein Supabase-Projekt (kostenloser Tarif genügt):
 
 1. Auf [supabase.com](https://supabase.com/) ein Projekt anlegen.
-2. Unter **Project Settings → API** die `Project URL` und den `anon public`-Key kopieren.
+2. Unter **Project Settings → API** die `Project URL` und den Publishable Key kopieren.
 3. `.env.example` nach `.env` kopieren und die Werte eintragen:
 
 ```env
 VITE_SUPABASE_URL=https://dein-projekt.supabase.co
-VITE_SUPABASE_ANON_KEY=dein-anon-key
+VITE_SUPABASE_PUBLISHABLE_KEY=dein-publishable-key
 ```
 
-> Es werden **keine Tabellen** benötigt – die App nutzt ausschließlich Realtime-Broadcasts. Ohne `.env` startet die App trotzdem, aber die Räume (Echtzeit-Synchronisation) funktionieren nicht.
-
-> **Geplanter Umbau (noch nicht aktiv):** `supabase/migrations/` enthält bereits eine vorbereitete Migration für einen künftigen persistierten Raum-/Fortschritts-Zustand (robuster gegenüber WLAN-Aussetzern im Klassenzimmer). Solange diese Migration nicht angewendet und im App-Code nicht angebunden ist, gilt die obige Aussage unverändert – die laufende App nutzt weiterhin ausschließlich Broadcasts. Verifikation der Migration nach dem Anwenden: `npm run verify:rooms`.
+> Die SQL-Dateien unter `supabase/migrations/` richten die abgesicherten Räume,
+> Fortschritte und gerätebezogenen Teilnehmertokens ein. Ohne `.env` startet die
+> App trotzdem, aber die Raumfunktionen sind inaktiv.
 
 ### Entwicklungsserver
 
@@ -75,7 +75,7 @@ Die App ist ein statischer Build und läuft auf Cloudflare Pages:
 
 - **Build-Befehl:** `npm run build`
 - **Ausgabeverzeichnis:** `dist`
-- **Umgebungsvariablen:** `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY` in den Projekt-Einstellungen von Cloudflare Pages hinterlegen.
+- **Umgebungsvariablen:** `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` in den Projekt-Einstellungen von Cloudflare Pages hinterlegen. Der bisherige `VITE_SUPABASE_ANON_KEY` funktioniert vorübergehend als Fallback.
 - **SPA-Routing:** Da die App client-seitiges Routing nutzt, müssen unbekannte Pfade auf `index.html` umgeleitet werden. Das übernimmt `public/_redirects` (`/* /index.html 200`), das bereits im Projekt liegt.
 
 Jeder Push auf `main` löst ein neues Deployment aus. Die `APP_VERSION` in `src/pwa.ts` (aktuell passend zu `package.json`) steuert das Update-Verhalten der PWA; die Versionsanzeige unten rechts leuchtet rot, wenn ein Update verfügbar ist.
@@ -84,8 +84,9 @@ Jeder Push auf `main` löst ein neues Deployment aus. Die `APP_VERSION` in `src/
 
 Die App ist bewusst **datensparsam** aufgebaut:
 
-- **Keine dauerhafte Speicherung.** Es gibt keine Datenbank-Tabellen; die Synchronisation läuft über flüchtige Supabase-Broadcasts, die nur während einer laufenden Sitzung existieren.
+- **Kurzzeitige Speicherung.** Raumkonfiguration und pseudonyme Fortschritte werden für Reconnects in Supabase gespeichert und anschließend bereinigt.
 - **Keine Accounts, kein Login** für Schüler. Beim Beitritt wird ein **zufälliger Tiername** vergeben (z. B. „Schlauer Igel").
+- Jedes Gerät erhält intern einen zufälligen, nur für den jeweiligen Raum gültigen Teilnehmertoken; in der Datenbank wird davon nur ein Hash gespeichert.
 - **Empfehlung:** Keine echten Klarnamen von Schülerinnen und Schülern eingeben – die zufälligen Tiernamen genügen für die Zuordnung im Unterricht.
 - Impressum und Datenschutzhinweise sind in der App unter `/legal` verlinkt.
 

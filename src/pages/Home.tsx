@@ -1,17 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Dices, Camera, LogIn, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, CircleAlert, Dices, Camera, LogIn, Moon, Sun } from 'lucide-react';
 import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
 import { checkForUpdateReady, applyUpdate } from '../pwa';
-import { savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
+import { clearPendingJoin, savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useTheme } from '../hooks/shared/useTheme';
-import { findActiveRoom } from '../utils/rooms/roomApi';
+import { joinRoom } from '../utils/rooms/roomApi';
+import { logDevError } from '../utils/shared/logging';
 
 const CODE_LENGTH = 4;
+type JoinError = 'missing-code' | 'wrong-code' | 'generic';
+
+const JOIN_ERROR_COPY: Record<JoinError, { title: string; description: string }> = {
+  'missing-code': {
+    title: 'Raumcode fehlt',
+    description: 'Bitte gib den vierstelligen Raumcode deiner Lehrkraft ein.',
+  },
+  'wrong-code': {
+    title: 'Falscher Raumcode',
+    description: 'Zu diesem Code wurde kein aktiver Raum gefunden. Prüfe den Code oder frage deine Lehrkraft.',
+  },
+  generic: {
+    title: 'Ups, hier lief wohl etwas falsch',
+    description: 'Der Raumbeitritt ist gerade nicht möglich. Prüfe deine Internetverbindung und versuche es erneut.',
+  },
+};
+
 const toCodeChars = (raw: string): string[] => {
   const digits = raw.replace(/\D/g, '').slice(0, CODE_LENGTH).split('');
   return Array.from({ length: CODE_LENGTH }, (_, i) => digits[i] ?? '');
@@ -63,6 +81,7 @@ export const Home = () => {
   const [studentName, setStudentName] = useState(getRandomName);
   const [scanning, setScanning] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<JoinError | null>(null);
   const resetGameData = useGameStore((s) => s.resetGameData);
   const { dark, toggleTheme } = useTheme();
 
@@ -71,29 +90,32 @@ export const Home = () => {
   // die Version passt und die Sitzung wirklich übernommen wurde. Sonst ginge
   // der Raumcode verloren, falls ein Versions-Mismatch noch einen Reload auslöst.
   //
-  // Prüft vorab per findActiveRoom(), ob der Code überhaupt zu einem
-  // beitrittsfähigen Raum gehört -- vorher landete ein falscher/veralteter
-  // Code kommentarlos auf dem endlosen "Warte auf Lehrer..."-Screen. Ein
-  // eindeutiges "kein Raum gefunden" bricht sofort ab; ein Fehler bei der
-  // Anfrage selbst (Netzwerk, Migration noch nicht angewendet) blockiert
-  // NICHT -- dann greift wie bisher der reine Broadcast-Pfad als Fallback.
-  // roomId (nie das schreibfähige access_token, siehe roomApi.ts) wandert
-  // mit in den Navigations-State, damit Game.tsx/useGameRoom.ts bei Bedarf
-  // selbst den aktuellen Raum-Zustand nachlesen können.
-  const enterGame = useCallback(async (code: string, name: string) => {
+  // Der sichere Beitritt registriert das Gerät im Raum und gibt ein zufälliges
+  // Teilnehmertoken zurück. Dieses Token ist unsichtbar für den Nutzer und
+  // berechtigt ausschließlich zum eigenen Fortschritt in diesem Raum.
+  const enterGame = useCallback(async (code: string, name: string, existingToken?: string) => {
     resetGameData();
-    let roomId: string | undefined;
     try {
-      const room = await findActiveRoom(code);
+      const room = await joinRoom(code, name, existingToken);
       if (room === null) {
-        alert('Kein Raum mit diesem Code gefunden. Bitte Code prüfen oder bei der Lehrkraft nachfragen.');
+        clearPendingJoin();
+        setJoinError('wrong-code');
         return;
       }
-      roomId = room.roomId;
+      savePendingJoin(code, room.studentName, room.participantToken);
+      navigate('/game', {
+        state: {
+          roomCode: code,
+          studentName: room.studentName,
+          roomId: room.roomId,
+          participantToken: room.participantToken,
+        },
+      });
     } catch (err) {
-      console.error('[Room] find_active_room() fehlgeschlagen, fahre ohne Vorab-Prüfung fort', err);
+      logDevError('[Room] Sicherer Raumbeitritt fehlgeschlagen', err);
+      clearPendingJoin();
+      setJoinError('generic');
     }
-    navigate('/game', { state: { roomCode: code, studentName: name, roomId } });
   }, [navigate, resetGameData]);
 
   // Beim Öffnen der Startseite prüfen, ob ein Beitritt über einen
@@ -101,7 +123,9 @@ export const Home = () => {
   useEffect(() => {
     const pending = readPendingJoin();
     if (pending) {
-      enterGame(pending.code, pending.name);
+      queueMicrotask(() => {
+        void enterGame(pending.code, pending.name, pending.participantToken);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -119,7 +143,9 @@ export const Home = () => {
   // Beitrittswunsch wird dafür in sessionStorage gemerkt und nach einem
   // Update-Reload oben automatisch fortgesetzt.
   const joinGame = useCallback(async (code: string, name: string) => {
-    savePendingJoin(code, name);
+    const previous = readPendingJoin();
+    const existingToken = previous?.code === code ? previous.participantToken : undefined;
+    savePendingJoin(code, name, existingToken);
 
     setJoining(true);
     const updateReady = await checkForUpdateReady();
@@ -128,7 +154,7 @@ export const Home = () => {
       return;
     }
     setJoining(false);
-    enterGame(code, name);
+    enterGame(code, name, existingToken);
   }, [enterGame]);
 
   // QR-Code-Ergebnis: Raum-Code aus der URL (?room=) extrahieren, sonst
@@ -156,11 +182,19 @@ export const Home = () => {
   };
 
   const handleStartDictation = () => {
-    if (roomCode.trim().length > 0 && studentName.trim().length > 0) {
+    if (roomCode.length === CODE_LENGTH && studentName.trim().length > 0) {
+      setJoinError(null);
       joinGame(roomCode, studentName);
     } else {
-      alert("Bitte gib einen Raum-Code ein und wähle einen Namen");
+      setJoinError('missing-code');
     }
+  };
+
+  const returnToCodeEntry = () => {
+    if (joinError !== 'generic') setCodeChars(toCodeChars(''));
+    setJoinError(null);
+    setJoining(false);
+    requestAnimationFrame(() => digitRefs.current[0]?.focus());
   };
 
   // Raum-Code als vier Einzelfelder: Eingabe eines Ziffer springt automatisch
@@ -218,6 +252,42 @@ export const Home = () => {
       </button>
 
       {/* Main Card */}
+      {joinError ? (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="z-10 bg-surface rounded-[28px] p-7 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.03)] flex flex-col items-center text-center w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-300"
+        >
+          <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full flex items-center justify-center mb-6 ${joinError === 'generic' ? 'bg-danger/10 text-danger' : 'bg-accent-soft'}`}>
+            {joinError === 'generic' ? (
+              <CircleAlert className="w-14 h-14" strokeWidth={1.8} aria-hidden="true" />
+            ) : (
+              <img
+                src="/face-expectation.svg"
+                alt=""
+                className="h-[78%] w-auto"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-black text-ink tracking-tight">
+            {JOIN_ERROR_COPY[joinError].title}
+          </h1>
+          <p className="mt-3 text-sm sm:text-base text-ink-muted leading-relaxed max-w-[310px]">
+            {JOIN_ERROR_COPY[joinError].description}
+          </p>
+
+          <button
+            type="button"
+            onClick={returnToCodeEntry}
+            className="mt-7 w-full bg-accent hover:opacity-90 text-white text-base font-extrabold py-3.5 px-6 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer inline-flex items-center justify-center gap-2"
+          >
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+            Zur Code-Eingabe
+          </button>
+        </div>
+      ) : (
       <div className="z-10 bg-surface rounded-[28px] p-5 sm:p-8 md:p-10 [@media(max-height:700px)]:p-4 shadow-[0_10px_35px_rgba(0,0,0,0.03)] flex flex-col items-center text-center space-y-4 sm:space-y-6 [@media(max-height:700px)]:space-y-2 w-full max-w-[420px] animate-in fade-in zoom-in-95 duration-500">
         <div className="space-y-1 sm:space-y-1.5">
           <h1 className="text-2.5xl sm:text-3.5xl font-black text-ink tracking-tight">
@@ -289,6 +359,7 @@ export const Home = () => {
           </button>
         </div>
       </div>
+      )}
 
       {/* Lehrer-Login + Impressum – bewusst im normalen Fluss (nicht absolut
           positioniert), damit auf kleinen Höhen nichts überlappt, sondern die
