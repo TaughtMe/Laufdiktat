@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Activity, XCircle } from 'lucide-react';
+import { Activity, X, XCircle } from 'lucide-react';
 import { AnimalAvatar } from '../shared/AnimalAvatar';
 
 interface LobbyStepProps {
@@ -62,6 +63,10 @@ export const LobbyStep = ({
   hadTwoConnections,
   onRetry,
 }: LobbyStepProps) => {
+  const [showLargeQrCode, setShowLargeQrCode] = useState(false);
+  const studentCountLabel = `${connectedStudents.length} Schüler`;
+  const joinUrl = `${window.location.origin}/?room=${roomCode}`;
+
   const retryButton = (
     <button
       type="button"
@@ -76,17 +81,23 @@ export const LobbyStep = ({
     <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-5 flex-1 min-h-[420px] pt-2.5">
       {/* Linke Spalte: QR + Raumcode */}
       <div className="flex flex-col gap-3.5">
-        <div className="bg-surface border border-line rounded-[22px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px] flex flex-col items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => setShowLargeQrCode(true)}
+          aria-label="QR-Code groß anzeigen"
+          className="bg-surface border border-line rounded-[22px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px] flex flex-col items-center gap-2.5 cursor-zoom-in transition-all hover:border-accent/40 hover:shadow-md active:scale-[0.98]"
+        >
           <div className="w-full aspect-square rounded-[14px] bg-white border border-line flex items-center justify-center p-2">
             <QRCodeSVG
-              value={`${window.location.origin}/?room=${roomCode}`}
+              value={joinUrl}
               size={160}
               level="H"
               className="w-full h-full"
             />
           </div>
           <span className="text-xs font-bold text-ink text-center leading-snug">Mit Schülergerät scannen</span>
-        </div>
+          <span className="text-[10px] font-bold text-accent-strong">Zum Vergrößern anklicken</span>
+        </button>
         <div className="bg-accent-soft rounded-[22px] p-4 text-center">
           <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-accent-strong opacity-80">
             oder Raum-Code eingeben
@@ -167,6 +178,57 @@ export const LobbyStep = ({
           </div>
         )}
       </div>
+
+      {showLargeQrCode && (
+        <div
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-5 cursor-zoom-out"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vergrößerter QR-Code für den Raumbeitritt"
+          onClick={() => setShowLargeQrCode(false)}
+        >
+          <div
+            className="relative bg-surface rounded-[28px] shadow-2xl p-5 sm:p-7 flex flex-col items-center gap-4 max-h-[94dvh] cursor-default"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowLargeQrCode(false)}
+              className="absolute top-3 right-3 w-10 h-10 rounded-full bg-surface-2 hover:bg-line text-ink-muted hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Großen QR-Code schließen"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="bg-white rounded-[20px] p-3 sm:p-4 mt-7">
+              <QRCodeSVG
+                value={joinUrl}
+                size={520}
+                level="H"
+                className="w-[min(68vw,58vh,520px)] h-[min(68vw,58vh,520px)]"
+              />
+            </div>
+
+            <div className="text-center">
+              <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.1em] text-ink-muted">
+                Raum-Code
+              </div>
+              <div className="font-mono font-extrabold text-3xl sm:text-4xl tracking-[0.16em] text-accent-strong mt-1 pl-[0.16em]">
+                {roomCode}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 bg-ok-soft text-ok rounded-full px-4 py-2 text-sm sm:text-base font-extrabold">
+              <span className="w-2 h-2 rounded-full bg-ok" />
+              {studentCountLabel} angemeldet
+            </div>
+
+            <p className="text-[11px] text-ink-muted text-center">
+              Neben den QR-Code klicken, um zur Lobby zurückzukehren.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
