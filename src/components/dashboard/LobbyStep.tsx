@@ -185,7 +185,7 @@ export const LobbyStep = ({
 
       {showLargeQrCode && (
         <div
-          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-5 cursor-zoom-out"
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-5 cursor-default"
           role="dialog"
           aria-modal="true"
           aria-label="Vergrößerter QR-Code für den Raumbeitritt"
