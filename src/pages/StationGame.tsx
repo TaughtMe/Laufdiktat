@@ -8,7 +8,8 @@ import { LegalLink } from '../components/shared/LegalLink';
 import { buildStationOrder } from '../utils/game/stationShuffle';
 import { MathDisplay } from '../components/shared/MathDisplay';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
-import { upsertProgress, getRoomState } from '../utils/rooms/roomApi';
+import { upsertProgress, getRoomState, getMyProgress } from '../utils/rooms/roomApi';
+import { logDevError } from '../utils/shared/logging';
 
 type StationView = 'GRID' | 'ACTIVE';
 
@@ -17,9 +18,12 @@ export const StationGame = () => {
   const location = useLocation();
   // Einmalig festhalten (überlebt den popstate des Zurück-Guards).
   const [roomCode] = useState<string | undefined>(() => (location.state as { roomCode?: string } | null)?.roomCode);
-  // Von Home.tsx (findActiveRoom) – für upsertProgress() unten (dauerhafte
+  // Von Home.tsx (joinRoom) – für upsertProgress() unten (dauerhafte
   // Ablage, ergänzend zu den bestehenden Broadcasts).
   const [roomId] = useState<string | undefined>(() => (location.state as { roomId?: string } | null)?.roomId);
+  const [participantToken] = useState<string | undefined>(
+    () => (location.state as { participantToken?: string } | null)?.participantToken
+  );
   const words = useGameStore((s) => s.words);
   const setWords = useGameStore((s) => s.setWords);
   const stationCount = useGameStore((s) => s.stationCount);
@@ -61,93 +65,63 @@ export const StationGame = () => {
   const hasSeenCurrent = seenKey !== '' && seenKeys.has(seenKey);
 
   useEffect(() => {
-    if (!roomCode) return;
+    if (!roomCode || !roomId || !participantToken) return;
     hasFetchedRoomStateRef.current = false;
-    channelRef.current = supabase.channel(`room-${roomCode}`);
-    channelRef.current.on('broadcast', { event: 'sync-station-state' }, (payload) => {
-      const d = payload.payload;
-      if (d.studentNumber === studentNumber) {
-        setCurrentIndex(d.currentIndex);
-        setPeeks(d.peeks);
-        setFinished(!!d.finished);
-      }
-    }).on('broadcast', { event: 'session-start' }, (payload) => {
-      const {
-        stationCount: newStationCount,
-        isTtsEnabled: newTts,
-        strictTypingMode: newStrict,
-        stationShuffle: newStationShuffle,
-        sessionId: newSessionId,
-        targetStudent,
-      } = payload.payload;
-      // Gezielter Resync für ein einzelnes (anderes) Gerät, das gerade neu
-      // verbunden hat (siehe useDashboardRoom/useGameRoom) – betrifft nicht
-      // die Stationen-Ansicht. Ohne diese Prüfung würde JEDES Tablet im Raum
-      // bei jedem Reconnect eines beliebigen anderen Geräts zurück auf die
-      // Nummernauswahl springen, obwohl der eigene Fortschritt (zentral beim
-      // Lehrer in stationStates) nie verloren ging.
-      if (targetStudent) return;
-      if (newStationCount !== undefined) {
-        setStationCount(newStationCount);
-      }
-      if (newTts !== undefined) {
-        setTtsEnabled(newTts);
-      }
-      // Kein Eingabefeld in den Stationen (Schüler schreiben auf Papier) – nur
-      // Store-Konsistenz mit der Schüler-App, falls später doch ein Feld dazukommt.
-      if (newStrict !== undefined) {
-        setStrictTypingMode(newStrict);
-      }
-      if (newStationShuffle !== undefined) {
-        setStationShuffle(newStationShuffle);
-      }
-      setSessionId(newSessionId ?? '');
-      // Neue Sitzung -> evtl. "Sitzung beendet"-Hinweis verlassen, frisch zur Auswahl.
-      setSessionEnded(false);
-      setView('GRID');
-      setStudentNumber(null);
-    }).on('broadcast', { event: 'session-ended' }, () => {
-      setSessionEnded(true);
-    });
-    channelRef.current.subscribe(async (status) => {
-      if (status !== 'SUBSCRIBED' || !roomId || hasFetchedRoomStateRef.current) return;
+    const syncAuthoritativeRoomState = async () => {
       try {
-        const room = await getRoomState(roomId);
-        // Erst nach einem erfolgreichen Aufruf als "erledigt" markieren --
-        // schlaegt der Versuch fehl, darf der naechste Reconnect es erneut
-        // probieren (siehe useGameRoom.ts, gleiches Prinzip).
+        const room = await getRoomState(roomId, { participantToken });
         hasFetchedRoomStateRef.current = true;
-        if (room && room.status === 'live') {
+        if (room?.status === 'live') {
           const config = room.config as Record<string, unknown>;
           if (Array.isArray(config.words)) setWords(config.words as typeof words);
           if (typeof config.stationCount === 'number') setStationCount(config.stationCount);
           if (typeof config.isTtsEnabled === 'boolean') setTtsEnabled(config.isTtsEnabled);
           if (typeof config.strictTypingMode === 'boolean') setStrictTypingMode(config.strictTypingMode);
           if (typeof config.stationShuffle === 'boolean') setStationShuffle(config.stationShuffle);
-          if (room.sessionId) setSessionId(room.sessionId);
+          if (room.sessionId && room.sessionId !== sessionId) {
+            setSessionId(room.sessionId);
+            setView('GRID');
+            setStudentNumber(null);
+          }
+          setSessionEnded(false);
+        } else if (room?.status === 'ended') {
+          setSessionEnded(true);
         }
       } catch (err) {
-        console.error('[Room] get_room_state() (Stationsfallback) fehlgeschlagen, naechster Reconnect versucht es erneut', err);
+        logDevError('[Room] Autoritativer Stationsabgleich fehlgeschlagen', err);
       }
+    };
+    channelRef.current = supabase.channel(`room-${roomCode}`);
+    channelRef.current.on('broadcast', { event: 'sync-station-state' }, (payload) => {
+      const d = payload.payload;
+      if (d.studentNumber === studentNumber && studentNumber && sessionId) {
+        getMyProgress(roomId, sessionId, participantToken, `station-${studentNumber}`)
+          .then((progress) => {
+            if (!progress) return;
+            setCurrentIndex(progress.currentIndex);
+            setPeeks(progress.peeks);
+            setFinished(progress.finished);
+          })
+          .catch((err) => logDevError('[Room] Sichere Stationswiederherstellung fehlgeschlagen', err));
+      }
+    }).on('broadcast', { event: 'session-start' }, () => {
+      void syncAuthoritativeRoomState();
+    }).on('broadcast', { event: 'session-ended' }, () => {
+      void syncAuthoritativeRoomState();
+    });
+    channelRef.current.subscribe(async (status) => {
+      if (status !== 'SUBSCRIBED' || hasFetchedRoomStateRef.current) return;
+      await syncAuthoritativeRoomState();
     });
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [roomCode, roomId, studentNumber, setWords, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
+  }, [roomCode, roomId, participantToken, studentNumber, sessionId, setWords, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
 
   const sendUpdate = useCallback((idx: number, p: number, isFinished: boolean) => {
-    if (!channelRef.current || !studentNumber) return;
-    channelRef.current.send({
-      type: 'broadcast',
-      event: 'update-station-state',
-      payload: { studentNumber, currentIndex: idx, peeks: p, finished: isFinished },
-    });
-    // Zusätzlich dauerhaft ablegen (station-<n> als student_key, siehe
-    // Migration) -- Broadcast bleibt der schnelle Live-Pfad, das hier ist nur
-    // das Sicherheitsnetz für einen Dashboard-Reload beim Lehrer (siehe
-    // useDashboardRoom.ts: request-station-state-Fallback).
-    if (roomId && sessionId) {
-      upsertProgress({
+    if (!channelRef.current || !studentNumber || !roomId || !participantToken || !sessionId) return;
+    upsertProgress({
         roomId,
         sessionId,
+        participantToken,
         studentKey: `station-${studentNumber}`,
         stationNumber: studentNumber,
         currentIndex: idx,
@@ -155,9 +129,14 @@ export const StationGame = () => {
         attempts: 0,
         errors: 0,
         finished: isFinished,
-      }).catch((err) => console.error('[Room] upsert_progress() (Station) fehlgeschlagen', err));
-    }
-  }, [studentNumber, roomId, sessionId]);
+      })
+      .then(() => channelRef.current?.send({
+        type: 'broadcast',
+        event: 'update-station-state',
+        payload: { studentNumber },
+      }))
+      .catch((err) => logDevError('[Room] Sicheres Stationsupdate fehlgeschlagen', err));
+  }, [studentNumber, roomId, participantToken, sessionId]);
 
   const resetTimeout = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);

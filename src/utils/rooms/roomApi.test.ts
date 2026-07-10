@@ -6,7 +6,7 @@ vi.mock('../supabaseClient', () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
 }));
 
-const { openRoom, findActiveRoom, getRoomState, updateSession, endRoom, upsertProgress, getMyProgress, getRoomStudents } =
+const { openRoom, joinRoom, getRoomState, updateSession, endRoom, upsertProgress, getMyProgress, getRoomStudents } =
   await import('./roomApi');
 
 describe('roomApi', () => {
@@ -21,7 +21,7 @@ describe('roomApi', () => {
         error: null,
       });
       const result = await openRoom({ foo: 'bar' });
-      expect(rpcMock).toHaveBeenCalledWith('open_room', { p_config: { foo: 'bar' } });
+      expect(rpcMock).toHaveBeenCalledWith('open_room_secure', { p_config: { foo: 'bar' } });
       expect(result).toEqual({ roomId: 'r1', code: '4821', accessToken: 'tok' });
     });
 
@@ -36,35 +36,37 @@ describe('roomApi', () => {
     });
   });
 
-  describe('findActiveRoom', () => {
-    it('mappt einen gefundenen Raum ohne access_token', async () => {
+  describe('joinRoom', () => {
+    it('mappt Raum, zugewiesenen Namen und Teilnehmertoken', async () => {
       rpcMock.mockResolvedValue({
-        data: [{ room_id: 'r1', station_mode: false, status: 'lobby' }],
+        data: [{ room_id: 'r1', station_mode: false, status: 'lobby', assigned_student_key: 'Schlauer Igel', participant_token: 'ptok' }],
         error: null,
       });
-      const result = await findActiveRoom('4821');
-      expect(rpcMock).toHaveBeenCalledWith('find_active_room', { p_code: '4821' });
-      expect(result).toEqual({ roomId: 'r1', stationMode: false, status: 'lobby' });
+      const result = await joinRoom('4821', 'Schlauer Igel', 'alt');
+      expect(rpcMock).toHaveBeenCalledWith('join_room_secure', {
+        p_code: '4821', p_student_key: 'Schlauer Igel', p_participant_token: 'alt',
+      });
+      expect(result).toEqual({ roomId: 'r1', stationMode: false, status: 'lobby', studentName: 'Schlauer Igel', participantToken: 'ptok' });
       expect(result).not.toHaveProperty('accessToken');
     });
 
     it('gibt null zurück, wenn kein Raum existiert', async () => {
       rpcMock.mockResolvedValue({ data: [], error: null });
-      expect(await findActiveRoom('9999')).toBeNull();
+      expect(await joinRoom('9999', 'Igel')).toBeNull();
     });
 
     it('wirft bei einem Fehler statt still null zurückzugeben', async () => {
       rpcMock.mockResolvedValue({ data: null, error: { message: 'network' } });
-      await expect(findActiveRoom('4821')).rejects.toThrow('network');
+      await expect(joinRoom('4821', 'Igel')).rejects.toThrow('network');
     });
 
     it('versucht es nach einem einzelnen transienten Fehler erneut, statt sofort aufzugeben', async () => {
       rpcMock
         .mockRejectedValueOnce(new Error('kurzer WLAN-Aussetzer'))
-        .mockResolvedValueOnce({ data: [{ room_id: 'r1', station_mode: false, status: 'lobby' }], error: null });
-      const result = await findActiveRoom('4821');
+        .mockResolvedValueOnce({ data: [{ room_id: 'r1', station_mode: false, status: 'lobby', assigned_student_key: 'Igel', participant_token: 'ptok' }], error: null });
+      const result = await joinRoom('4821', 'Igel');
       expect(rpcMock).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ roomId: 'r1', stationMode: false, status: 'lobby' });
+      expect(result?.participantToken).toBe('ptok');
     });
   });
 
@@ -74,14 +76,16 @@ describe('roomApi', () => {
         data: [{ status: 'live', session_id: 's1', config: { gameMode: 'LAUFDIKTAT' } }],
         error: null,
       });
-      const result = await getRoomState('r1');
-      expect(rpcMock).toHaveBeenCalledWith('get_room_state', { p_room_id: 'r1' });
+      const result = await getRoomState('r1', { participantToken: 'ptok' });
+      expect(rpcMock).toHaveBeenCalledWith('get_room_state_secure', {
+        p_room_id: 'r1', p_participant_token: 'ptok', p_access_token: null,
+      });
       expect(result).toEqual({ status: 'live', sessionId: 's1', config: { gameMode: 'LAUFDIKTAT' } });
     });
 
     it('gibt null zurück, wenn der Raum nicht existiert', async () => {
       rpcMock.mockResolvedValue({ data: [], error: null });
-      expect(await getRoomState('unbekannt')).toBeNull();
+      expect(await getRoomState('unbekannt', { accessToken: 'teacher' })).toBeNull();
     });
   });
 
@@ -89,7 +93,7 @@ describe('roomApi', () => {
     it('sendet alle Parameter an update_session', async () => {
       rpcMock.mockResolvedValue({ error: null });
       await updateSession('r1', 'tok', 's1', { gameMode: 'LAUFDIKTAT' });
-      expect(rpcMock).toHaveBeenCalledWith('update_session', {
+      expect(rpcMock).toHaveBeenCalledWith('update_session_secure', {
         p_room_id: 'r1',
         p_access_token: 'tok',
         p_session_id: 's1',
@@ -107,7 +111,7 @@ describe('roomApi', () => {
     it('sendet room_id und Token', async () => {
       rpcMock.mockResolvedValue({ error: null });
       await endRoom('r1', 'tok');
-      expect(rpcMock).toHaveBeenCalledWith('end_room', { p_room_id: 'r1', p_access_token: 'tok' });
+      expect(rpcMock).toHaveBeenCalledWith('end_room_secure', { p_room_id: 'r1', p_access_token: 'tok' });
     });
 
     it('wirft bei einem Fehler', async () => {
@@ -122,6 +126,7 @@ describe('roomApi', () => {
       await upsertProgress({
         roomId: 'r1',
         sessionId: 's1',
+        participantToken: 'ptok',
         studentKey: 'Schlauer Igel',
         currentIndex: 3,
         peeks: 1,
@@ -129,9 +134,10 @@ describe('roomApi', () => {
         errors: 0,
         finished: false,
       });
-      expect(rpcMock).toHaveBeenCalledWith('upsert_progress', {
+      expect(rpcMock).toHaveBeenCalledWith('upsert_progress_secure', {
         p_room_id: 'r1',
         p_session_id: 's1',
+        p_participant_token: 'ptok',
         p_student_key: 'Schlauer Igel',
         p_current_index: 3,
         p_peeks: 1,
@@ -150,6 +156,7 @@ describe('roomApi', () => {
       await upsertProgress({
         roomId: 'r1',
         sessionId: 's1',
+        participantToken: 'ptok',
         studentKey: 'station-3',
         currentIndex: 1,
         peeks: 0,
@@ -161,7 +168,7 @@ describe('roomApi', () => {
         appVersion: '3.1.0',
         stationNumber: 3,
       });
-      expect(rpcMock).toHaveBeenCalledWith('upsert_progress', expect.objectContaining({
+      expect(rpcMock).toHaveBeenCalledWith('upsert_progress_secure', expect.objectContaining({
         p_duration_ms: 5000,
         p_word_errors: { Haus: 2 },
         p_app_version: '3.1.0',
@@ -172,7 +179,7 @@ describe('roomApi', () => {
     it('wirft bei einem Fehler', async () => {
       rpcMock.mockResolvedValue({ error: { message: 'boom' } });
       await expect(
-        upsertProgress({ roomId: 'r1', sessionId: 's1', studentKey: 'x', currentIndex: 0, peeks: 0, attempts: 0, errors: 0, finished: false })
+        upsertProgress({ roomId: 'r1', sessionId: 's1', participantToken: 'ptok', studentKey: 'x', currentIndex: 0, peeks: 0, attempts: 0, errors: 0, finished: false })
       ).rejects.toThrow('boom');
     });
   });
@@ -183,10 +190,11 @@ describe('roomApi', () => {
         data: [{ current_index: 2, peeks: 1, attempts: 3, errors: 1, finished: false }],
         error: null,
       });
-      const result = await getMyProgress('r1', 's1', 'Schlauer Igel');
-      expect(rpcMock).toHaveBeenCalledWith('get_my_progress', {
+      const result = await getMyProgress('r1', 's1', 'ptok', 'Schlauer Igel');
+      expect(rpcMock).toHaveBeenCalledWith('get_my_progress_secure', {
         p_room_id: 'r1',
         p_session_id: 's1',
+        p_participant_token: 'ptok',
         p_student_key: 'Schlauer Igel',
       });
       expect(result).toEqual({ currentIndex: 2, peeks: 1, attempts: 3, errors: 1, finished: false });
@@ -194,12 +202,12 @@ describe('roomApi', () => {
 
     it('gibt null zurück, wenn noch kein Fortschritt existiert', async () => {
       rpcMock.mockResolvedValue({ data: [], error: null });
-      expect(await getMyProgress('r1', 's1', 'x')).toBeNull();
+      expect(await getMyProgress('r1', 's1', 'ptok', 'x')).toBeNull();
     });
 
     it('wirft bei einem Fehler', async () => {
       rpcMock.mockResolvedValue({ data: null, error: { message: 'boom' } });
-      await expect(getMyProgress('r1', 's1', 'x')).rejects.toThrow('boom');
+      await expect(getMyProgress('r1', 's1', 'ptok', 'x')).rejects.toThrow('boom');
     });
   });
 
@@ -225,7 +233,7 @@ describe('roomApi', () => {
         error: null,
       });
       const result = await getRoomStudents('r1', 'tok');
-      expect(rpcMock).toHaveBeenCalledWith('get_room_students', { p_room_id: 'r1', p_access_token: 'tok' });
+      expect(rpcMock).toHaveBeenCalledWith('get_room_students_secure', { p_room_id: 'r1', p_access_token: 'tok' });
       expect(result).toEqual([{
         roomId: 'r1',
         sessionId: 's1',

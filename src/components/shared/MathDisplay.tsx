@@ -21,7 +21,14 @@ export const MathDisplay = ({ text, isLatex, displayMode = false, className }: M
   const html = useMemo(() => {
     if (!isLatex) return null;
     try {
-      return katex.renderToString(text, { throwOnError: false, displayMode, strict: false });
+      return katex.renderToString(text, {
+        throwOnError: false,
+        displayMode,
+        strict: false,
+        trust: false,
+        maxExpand: 1000,
+        maxSize: 50,
+      });
     } catch {
       return null;
     }

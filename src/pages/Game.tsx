@@ -20,6 +20,7 @@ import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitiz
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
 import { MathDisplay } from '../components/shared/MathDisplay';
 import { Check } from 'lucide-react';
+import { logDevError } from '../utils/shared/logging';
 
 export const Game = () => {
   const navigate = useNavigate();
@@ -28,9 +29,12 @@ export const Game = () => {
   // bei dem location.state (und damit der Raum-Code) verloren ginge.
   const [roomCode] = useState<string | undefined>(() => (location.state as { roomCode?: string } | null)?.roomCode);
   const [studentName] = useState<string | undefined>(() => (location.state as { studentName?: string } | null)?.studentName);
-  // Von Home.tsx (findActiveRoom) – nur für den DB-Fallback-Fetch in
+  // Von Home.tsx (joinRoom) – nur für den autorisierten DB-Abgleich in
   // useGameRoom.ts, kein Ersatz für roomCode/studentName oben.
   const [roomId] = useState<string | undefined>(() => (location.state as { roomId?: string } | null)?.roomId);
+  const [participantToken] = useState<string | undefined>(
+    () => (location.state as { participantToken?: string } | null)?.participantToken
+  );
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -93,18 +97,19 @@ export const Game = () => {
   // localStorage-Lösung (sessionProgress.ts): die überlebte keinen
   // Gerätewechsel, die DB-Zeile schon.
   useEffect(() => {
-    if (!roomId || !studentName || !sessionIdRef.current || gameState === 'FINISHED') return;
+    if (!roomId || !participantToken || !studentName || !sessionIdRef.current || gameState === 'FINISHED') return;
     upsertProgress({
       roomId,
       sessionId: sessionIdRef.current,
+      participantToken,
       studentKey: studentName,
       currentIndex: currentWordIndex,
       peeks: metrics.peeks,
       attempts: metrics.attempts,
       errors: errorsRef.current,
       finished: false,
-    }).catch((err) => console.error('[Room] upsert_progress() fehlgeschlagen (Broadcast-Pfad bleibt Grundlage)', err));
-  }, [roomId, studentName, currentWordIndex, gameState, metrics.peeks, metrics.attempts]);
+    }).catch((err) => logDevError('[Room] Sicheres Fortschrittsupdate fehlgeschlagen', err));
+  }, [roomId, participantToken, studentName, currentWordIndex, gameState, metrics.peeks, metrics.attempts]);
 
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
@@ -179,8 +184,8 @@ export const Game = () => {
       // innerhalb derselben Sitzung, siehe utils/rooms/roomApi.ts).
       setCurrentWordIndex(0);
       const restoreSessionId = data.sessionId;
-      if (roomId && studentName && restoreSessionId) {
-        getMyProgress(roomId, restoreSessionId, studentName)
+      if (roomId && participantToken && studentName && restoreSessionId) {
+        getMyProgress(roomId, restoreSessionId, participantToken, studentName)
           .then((progress) => {
             // Zwischenzeitlich schon eine neuere Sitzung gestartet -> diese
             // veraltete Antwort nicht mehr anwenden.
@@ -191,7 +196,7 @@ export const Game = () => {
               errorsRef.current = progress.errors;
             }
           })
-          .catch((err) => console.error('[Room] get_my_progress() fehlgeschlagen (Startwert bleibt bei Wort 1)', err));
+          .catch((err) => logDevError('[Room] Fortschrittswiederherstellung fehlgeschlagen', err));
       }
     }
     setGameMode(newMode);
@@ -202,7 +207,7 @@ export const Game = () => {
     if (newMaxAttempts !== undefined) setUebungMaxAttempts(newMaxAttempts);
     if (newShowStars !== undefined) setShowStars(newShowStars);
     if (newStrictTypingMode !== undefined) setStrictTypingMode(newStrictTypingMode);
-  }, [roomCode, studentName, roomId, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars, setStrictTypingMode]);
+  }, [roomCode, studentName, roomId, participantToken, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars, setStrictTypingMode]);
 
   const onSessionEnded = useCallback(() => {
     setSessionEnded(true);
@@ -218,6 +223,7 @@ export const Game = () => {
     roomCode,
     studentName,
     roomId,
+    participantToken,
     currentWordIndexRef,
     onSessionStart,
     onSessionEnded,
@@ -267,25 +273,14 @@ export const Game = () => {
     // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
     const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
     setFinalDurationMs(durationMs);
-    // Ergebnis ans Lehrer-Dashboard senden (no-op, falls kein Channel/Raum).
-    sendFinished({
-      name: studentName,
-      peeks: metrics.peeks,
-      attempts: metrics.attempts,
-      errors: errorsRef.current,
-      durationMs,
-      totalLength,
-      wordCount: words.length,
-      wordErrors: wordErrorsRef.current,
-    });
-    // Zusätzlich dauerhaft ablegen (finished=true, Zeile bleibt bestehen) --
-    // das Lehrer-Dashboard kann Ergebnisse dadurch auch nach einem eigenen
-    // Reload noch aus der DB lesen, statt nur aus während der Sitzung
-    // akkumulierten Broadcasts (siehe useDashboardRoom.ts).
-    if (roomId && studentName && sessionIdRef.current) {
+    const notifyFinished = () => sendFinished({ name: studentName });
+    // Erst tokengeprueft speichern, danach nur ein inhaltsarmes Realtime-Signal
+    // senden. Das Lehrer-Dashboard liest daraufhin den autoritativen DB-Stand.
+    if (roomId && participantToken && studentName && sessionIdRef.current) {
       upsertProgress({
         roomId,
         sessionId: sessionIdRef.current,
+        participantToken,
         studentKey: studentName,
         currentIndex: currentWordIndexRef.current,
         peeks: metrics.peeks,
@@ -295,9 +290,11 @@ export const Game = () => {
         durationMs,
         wordErrors: wordErrorsRef.current,
         appVersion: APP_VERSION,
-      }).catch((err) => console.error('[Room] upsert_progress() (Abschluss) fehlgeschlagen', err));
+      })
+        .then(notifyFinished)
+        .catch((err) => logDevError('[Room] Sicheres Abschlussupdate fehlgeschlagen', err));
     }
-  }, [gameState, studentName, roomId, metrics.peeks, metrics.attempts, totalLength, words.length, sendFinished]);
+  }, [gameState, studentName, roomId, participantToken, metrics.peeks, metrics.attempts, totalLength, words.length, sendFinished]);
 
   // Geräte-/Browser-Zurück abfangen, solange das Spiel läuft.
   const requestExit = useCallback(() => setShowExitConfirm(true), []);

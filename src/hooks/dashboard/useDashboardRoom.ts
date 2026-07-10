@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { useGameStore } from '../../store/gameStore';
 import { APP_VERSION } from '../../pwa';
-import { setStationProgress } from '../../utils/dashboard/stationProgress';
 import type { StationStudentState, WordItem } from '../../types/game';
 import {
   openRoom,
@@ -10,7 +9,6 @@ import {
   endRoom,
   getRoomState,
   getRoomStudents,
-  getMyProgress,
   type RoomStudentRow,
 } from '../../utils/rooms/roomApi';
 import {
@@ -18,6 +16,7 @@ import {
   readDashboardRoomSession,
   clearDashboardRoomSession,
 } from '../../utils/dashboard/dashboardRoomSession';
+import { logDevError } from '../../utils/shared/logging';
 
 export interface StudentResult {
   name?: string;
@@ -36,9 +35,8 @@ type DashboardStep = 'IMPORT' | 'SETTINGS' | 'LOBBY' | 'LIVE';
 // deaktivierter Ton oder geänderte Optionen garantiert frisch beim Schüler an
 // (keine veralteten Werte aus alten Closures).
 // Enthält nur die Felder, die auch dauerhaft in rooms.config landen sollen
-// (siehe roomApi.ts/updateSession) – sessionId/appVersion/targetStudent sind
-// reine Broadcast-Zusatzfelder und gehören nicht in die persistierte Config
-// (sessionId bekommt in der DB eine eigene Spalte, siehe Migration).
+// (siehe roomApi.ts/updateSession). sessionId bekommt in der DB eine eigene
+// Spalte; appVersion liegt absichtlich in der autorisierten Config.
 const buildRoomConfig = () => {
   const s = useGameStore.getState();
   return {
@@ -57,6 +55,10 @@ const buildRoomConfig = () => {
     // Stations-Variante: pro Schülernummer gemischt (siehe utils/game/stationShuffle.ts),
     // nur relevant und aktivierbar im Stationsmodus.
     stationShuffle: s.stationMode ? s.stationShuffle : false,
+    // Wird mit der restlichen Konfiguration serverseitig gespeichert. Schüler
+    // übernehmen die Version dadurch aus dem autorisierten DB-Zustand statt
+    // aus einem fälschbaren Realtime-Broadcast.
+    appVersion: APP_VERSION,
   };
 };
 
@@ -64,13 +66,12 @@ const buildRoomConfig = () => {
 // wird für den deterministischen Pro-Schüler-Shuffle gebraucht: derselbe
 // Schüler bekommt beim Reconnect innerhalb derselben Sitzung dieselbe
 // Reihenfolge, eine neue Sitzung (erneutes "Diktat starten") mischt neu.
-const buildSessionPayload = (sessionId: string, targetStudent?: string) => ({
-  ...buildRoomConfig(),
+const buildSessionPayload = (_sessionId: string, targetStudent?: string) => ({
+  // Keine Aufgaben oder Lösungen mehr im öffentlichen Broadcast. Der Event
+  // weckt nur die Clients; diese lesen die Konfiguration anschließend mit
+  // ihrem Teilnehmertoken aus get_room_state_secure(). appVersion bleibt als
+  // Update-Hinweis für noch geöffnete 4.0.3-Clients erhalten.
   appVersion: APP_VERSION,
-  sessionId,
-  // Gesetzt beim Resync eines einzelnen (wieder-)beitretenden Schülers
-  // während einer laufenden Sitzung (siehe unten) – alle anderen Schüler
-  // ignorieren das Broadcast dann (siehe useGameRoom.ts).
   targetStudent,
 });
 
@@ -173,6 +174,7 @@ export const useDashboardRoom = ({
   // hier im Dashboard (siehe roomApi.ts: Schüler bekommen es nie).
   const roomIdRef = useRef<string>('');
   const accessTokenRef = useRef<string>('');
+  const refreshStudentsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Station mode RAM state
   const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
@@ -181,6 +183,48 @@ export const useDashboardRoom = ({
   useEffect(() => {
     stationStatesRef.current = stationStates;
   }, [stationStates]);
+
+  const applyAuthoritativeStudents = (students: RoomStudentRow[]) => {
+    const currentStudents = sessionIdRef.current
+      ? students.filter((student) => student.sessionId === sessionIdRef.current)
+      : students;
+    setResults(resultsFromStudents(currentStudents));
+    setStationStates(stationStatesFromStudents(currentStudents));
+    setStudentsInLobby((prev) => {
+      const next = [...prev];
+      for (const key of currentStudents.map((s) => s.studentKey)) {
+        if (!next.includes(key)) next.push(key);
+      }
+      return next;
+    });
+    setLiveProgress((prev) => ({
+      ...prev,
+      ...Object.fromEntries(currentStudents.map((s) => [s.studentKey, s.currentIndex])),
+    }));
+  };
+
+  const refreshAuthoritativeStudents = async (): Promise<RoomStudentRow[]> => {
+    if (!roomIdRef.current || !accessTokenRef.current) return [];
+    const students = await getRoomStudents(roomIdRef.current, accessTokenRef.current);
+    applyAuthoritativeStudents(students);
+    return students;
+  };
+
+  // Broadcasts dienen nur als schneller Aenderungshinweis. Der Inhalt selbst
+  // wird nicht vertraut; nach kurzem Debounce lesen wir den tokengebundenen
+  // Datenbankstand. So erzeugt ein gefaelschtes Broadcast keine Fake-Ergebnisse.
+  const scheduleAuthoritativeRefresh = () => {
+    if (refreshStudentsTimerRef.current) clearTimeout(refreshStudentsTimerRef.current);
+    refreshStudentsTimerRef.current = setTimeout(() => {
+      refreshAuthoritativeStudents().catch((err) => {
+        logDevError('[Room] Autoritativer Ergebnisabgleich fehlgeschlagen', err);
+      });
+    }, 300);
+  };
+
+  useEffect(() => () => {
+    if (refreshStudentsTimerRef.current) clearTimeout(refreshStudentsTimerRef.current);
+  }, []);
 
   // Baut den Realtime-Channel für einen Code auf (Listener, keine
   // Subscribe-Reaktion – die unterscheidet sich zwischen echtem Lobby-Öffnen
@@ -240,30 +284,14 @@ export const useDashboardRoom = ({
       }
     });
 
-    channel.on('broadcast', { event: 'student-finished' }, (payload) => {
-      const result = payload.payload as StudentResult;
-      setResults((prev) => [...prev, result]);
-      // Absicherung gegen verpasste/verzögerte Presence-Events (siehe unten
-      // bei student-progress): wer fertig wird, MUSS im Grid auftauchen,
-      // unabhängig davon, ob dessen Presence-Sync je bei uns ankam.
-      if (result.name) {
-        setStudentsInLobby((prev) => (prev.includes(result.name!) ? prev : [...prev, result.name!]));
-      }
+    channel.on('broadcast', { event: 'student-finished' }, () => {
+      scheduleAuthoritativeRefresh();
     });
 
     // Live-Fortschritt der Schüler mitschreiben (für die Schüler-Übersicht).
     channel.on('broadcast', { event: 'student-progress' }, (payload) => {
-      const { name, index } = payload.payload;
-      if (typeof name === 'string' && typeof index === 'number') {
-        setLiveProgress((prev) => ({ ...prev, [name]: index }));
-        // Presence ("sync"/"join") ist der Regelfall, um einen Schüler in die
-        // Liste aufzunehmen -- kommt sie aber verzögert oder gar nicht durch
-        // (z. B. kurzer Verbindungsabbruch direkt nach dem Beitritt), sendet
-        // der Schüler trotzdem laufend seinen Fortschritt. Ohne diesen
-        // Fallback bliebe er unsichtbar im Grid, obwohl er mitspielt und am
-        // Ende sogar als "fertig" gezählt würde (siehe student-finished oben).
-        setStudentsInLobby((prev) => (prev.includes(name) ? prev : [...prev, name]));
-      }
+      const { index } = payload.payload;
+      if (typeof index === 'number') scheduleAuthoritativeRefresh();
     });
 
     // Station mode listeners
@@ -271,18 +299,15 @@ export const useDashboardRoom = ({
       const { studentNumber } = payload.payload;
       const current = stationStatesRef.current.get(studentNumber);
       if (current) {
-        channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber, ...current } });
+          channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber } });
         return;
       }
       // RAM-Map hat (noch) nichts -- z. B. weil das Dashboard zwischenzeitlich
       // neu geladen wurde (siehe restoreDashboardSession unten). Fallback auf
       // die DB, bevor wir dem Tablet einfach einen leeren Stand zurückgeben.
-      getMyProgress(roomIdRef.current, sessionIdRef.current, `station-${studentNumber}`)
-        .then((progress) => {
-          // progress === null heisst hier "in der DB bestaetigt noch nie
-          // gespielt" -- 0/0/false ist dann tatsaechlich korrekt, kein Fehlerfall.
-          const fallback = progress ?? { currentIndex: 0, peeks: 0, finished: false };
-          channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber, ...fallback } });
+      refreshAuthoritativeStudents()
+        .then(() => {
+          channel.send({ type: 'broadcast', event: 'sync-station-state', payload: { studentNumber } });
         })
         .catch((err) => {
           // Anders als oben: hier ist unbekannt, ob schon Fortschritt existiert
@@ -291,13 +316,13 @@ export const useDashboardRoom = ({
           // bestaetigen -- das Tablet behaelt seinen eigenen (bereits optimistisch
           // auf 0 gesetzten) lokalen Stand, statt dass wir aktiv vorhandenen
           // Fortschritt vortaeuschen zu haben geloescht.
-          console.error('[Room] get_my_progress() (Stationsfallback) fehlgeschlagen -- kein Ersatzwert gesendet', err);
+          logDevError('[Room] Stationswiederherstellung fehlgeschlagen', err);
         });
     });
 
     channel.on('broadcast', { event: 'update-station-state' }, (payload) => {
-      const { studentNumber, currentIndex, peeks, finished } = payload.payload;
-      setStationStates((prev) => setStationProgress(prev, studentNumber, { currentIndex, peeks, finished }));
+      const { studentNumber } = payload.payload;
+      if (typeof studentNumber === 'number') scheduleAuthoritativeRefresh();
     });
 
     return channel;
@@ -315,9 +340,9 @@ export const useDashboardRoom = ({
     (async () => {
       let room;
       try {
-        room = await getRoomState(saved.roomId);
+        room = await getRoomState(saved.roomId, { accessToken: saved.accessToken });
       } catch (err) {
-        console.error('[Room] Wiederherstellung nach Reload fehlgeschlagen (get_room_state)', err);
+        logDevError('[Room] Raumwiederherstellung nach Reload fehlgeschlagen', err);
         clearDashboardRoomSession();
         return;
       }
@@ -336,28 +361,11 @@ export const useDashboardRoom = ({
 
       try {
         const students = await getRoomStudents(saved.roomId, saved.accessToken);
-        setResults(resultsFromStudents(students));
-        setStationStates(stationStatesFromStudents(students));
-        // Zusammenführen statt ersetzen: falls die Presence-"sync" aus
-        // attachChannel() (siehe unten) bereits vor diesem Fetch gefeuert hat,
-        // darf ein schon verbundener Schüler ohne eigene DB-Zeile (z. B. gerade
-        // erst beigetreten, noch keine Antwort abgegeben) nicht wieder aus der
-        // Liste verschwinden.
-        setStudentsInLobby((prev) => {
-          const next = [...prev];
-          for (const key of students.map((s) => s.studentKey)) {
-            if (!next.includes(key)) next.push(key);
-          }
-          return next;
-        });
-        setLiveProgress((prev) => ({
-          ...prev,
-          ...Object.fromEntries(students.map((s) => [s.studentKey, s.currentIndex])),
-        }));
+        applyAuthoritativeStudents(students);
       } catch (err) {
         // Nicht fatal -- der Raum selbst ist wiederhergestellt, nur die
         // Detail-Ergebnisse fehlen dann bis zum nächsten Broadcast.
-        console.error('[Room] Rehydrierung der Schülerdaten fehlgeschlagen', err);
+        logDevError('[Room] Wiederherstellung der Ergebnisdaten fehlgeschlagen', err);
       }
 
       const channel = await attachChannel(saved.roomCode);
@@ -392,7 +400,7 @@ export const useDashboardRoom = ({
     try {
       room = await openRoom({});
     } catch (err) {
-      console.error('[Room] open_room() fehlgeschlagen', err);
+      logDevError('[Room] Sicheres Oeffnen des Raums fehlgeschlagen', err);
       setOpenLobbyError(
         'Der Raum konnte nicht angelegt werden. Bitte Internetverbindung prüfen und erneut versuchen.'
       );
@@ -428,14 +436,15 @@ export const useDashboardRoom = ({
     // (bei erneutem "Diktat starten" bekommen Schüler eine neue Reihenfolge).
     sessionIdRef.current = crypto.randomUUID();
 
-    // Persistieren ist ein Best-Effort-Sicherheitsnetz für Resyncs, nicht
-    // Voraussetzung fürs Starten -- der bewährte Broadcast-Pfad direkt danach
-    // funktioniert unabhängig davon (z. B. wenn Phase-0-Migration auf diesem
-    // Supabase-Projekt noch nicht angewendet wurde).
+    // Der tokengepruefte DB-Zustand ist die Sicherheitsquelle. Erst wenn er
+    // erfolgreich auf "live" steht, wird das oeffentliche Realtime-Signal
+    // verschickt. Andernfalls duerfte ein Broadcast die Sitzung nicht starten.
     try {
       await updateSession(roomIdRef.current, accessTokenRef.current, sessionIdRef.current, buildRoomConfig());
     } catch (err) {
-      console.error('[Room] update_session() fehlgeschlagen (Sitzung startet trotzdem)', err);
+      logDevError('[Room] Sicheres Starten der Sitzung fehlgeschlagen', err);
+      alert('Die Sitzung konnte serverseitig nicht gestartet werden. Bitte Internetverbindung prüfen und erneut versuchen.');
+      return;
     }
 
     await channelRef.current.send({
@@ -451,15 +460,15 @@ export const useDashboardRoom = ({
       try {
         await endRoom(roomIdRef.current, accessTokenRef.current);
       } catch (err) {
-        console.error('[Room] end_room() fehlgeschlagen (Code bleibt evtl. länger reserviert)', err);
+        logDevError('[Room] Sicheres Beenden des Raums fehlgeschlagen', err);
         // Anders als beim Broadcast unten (der Raum ist für die Schüler so
         // oder so vorbei) ist das hier ein stiller DB-Fehler, den sonst
         // niemand bemerken würde -- der Lehrkraft sichtbar machen, auch wenn
         // die lokale Ansicht trotzdem zu IMPORT zurückkehrt.
         alert(
-          'Der Raum konnte serverseitig nicht sauber beendet werden (Internetverbindung?). ' +
-          'Der Raum-Code bleibt dadurch noch eine Weile reserviert, ist aber sonst kein Problem.'
+          'Der Raum konnte serverseitig nicht beendet werden. Bitte Internetverbindung prüfen und erneut versuchen.'
         );
+        return;
       }
     }
     if (channelRef.current) {

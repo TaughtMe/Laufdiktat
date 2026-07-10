@@ -28,6 +28,11 @@ describe('pendingJoin', () => {
     expect(readPendingJoin()).toEqual({ code: '1234', name: 'Schlauer Igel' });
   });
 
+  it('speichert den unsichtbaren Teilnehmertoken über einen Update-Reload', () => {
+    savePendingJoin('1234', 'Schlauer Igel', 'ptok');
+    expect(readPendingJoin()).toEqual({ code: '1234', name: 'Schlauer Igel', participantToken: 'ptok' });
+  });
+
   it('räumt den gespeicherten Beitritt', () => {
     savePendingJoin('1234', 'Schlauer Igel');
     clearPendingJoin();

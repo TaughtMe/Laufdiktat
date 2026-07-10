@@ -1,7 +1,7 @@
 {
   "name": "laufdiktat",
   "private": true,
-  "version": "4.0.3",
+  "version": "4.0.4",
   "license": "UNLICENSED",
   "author": "Toby Bryson",
   "type": "module",
@@ -11,8 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "verify:rooms": "node --env-file=.env scripts/verify-phase0-schema.mjs",
-    "verify:progress": "node --env-file=.env scripts/verify-phase3-schema.mjs"
+    "verify:rooms": "node --env-file=.env scripts/verify-security-schema.mjs",
+    "verify:progress": "node --env-file=.env scripts/verify-security-schema.mjs"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",

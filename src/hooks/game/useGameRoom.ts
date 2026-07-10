@@ -3,6 +3,7 @@ import { supabase } from '../../utils/supabaseClient';
 import { APP_VERSION } from '../../pwa';
 import { getRoomState } from '../../utils/rooms/roomApi';
 import type { WordItem, GameMode, BattleOptions, AttackType } from '../../types/game';
+import { logDevError } from '../../utils/shared/logging';
 
 export interface SessionStartData {
   words: WordItem[];
@@ -34,8 +35,9 @@ export interface SessionStartData {
 interface UseGameRoomArgs {
   roomCode: string | undefined;
   studentName: string | undefined;
-  /** Aus Home.tsx (findActiveRoom) – für den einmaligen DB-Fallback-Fetch unten. */
+  /** Aus Home.tsx (joinRoom) – für den autorisierten DB-Abgleich unten. */
   roomId: string | undefined;
+  participantToken: string | undefined;
   currentWordIndexRef: RefObject<number>;
   onSessionStart: (data: SessionStartData) => void;
   onSessionEnded: () => void;
@@ -62,6 +64,7 @@ export const useGameRoom = ({
   roomCode,
   studentName,
   roomId,
+  participantToken,
   currentWordIndexRef,
   onSessionStart,
   onSessionEnded,
@@ -71,14 +74,33 @@ export const useGameRoom = ({
   const [connectionWarning, setConnectionWarning] = useState(false);
   const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const lastIncomingAttackAtRef = useRef(0);
   // Einmaliger DB-Fallback-Fetch pro Mount (siehe unten) – nicht bei jedem
   // Reconnect nötig, da ein bereits laufender Reconnect-Resync über den
   // bestehenden targetStudent-Broadcast abgedeckt ist (siehe oben).
   const hasFetchedRoomStateRef = useRef(false);
 
   useEffect(() => {
-    if (!roomCode || !enabled) return;
+    if (!roomCode || !roomId || !participantToken || !enabled) return;
     hasFetchedRoomStateRef.current = false;
+
+    // Broadcasts sind nur noch ein schneller Hinweis, niemals die Quelle der
+    // Sitzungswahrheit. Zustand und Konfiguration werden mit dem unsichtbaren
+    // Teilnehmertoken aus der DB gelesen. Ein gefaelschtes session-start/-ended
+    // kann dadurch weder Antworten einschleusen noch eine Sitzung beenden.
+    const syncAuthoritativeRoomState = async () => {
+      try {
+        const room = await getRoomState(roomId, { participantToken });
+        hasFetchedRoomStateRef.current = true;
+        if (room?.status === 'live' && room.sessionId) {
+          onSessionStart({ ...(room.config as unknown as SessionStartData), sessionId: room.sessionId });
+        } else if (room?.status === 'ended') {
+          onSessionEnded();
+        }
+      } catch (err) {
+        logDevError('[Room] Autoritativer Raumabgleich fehlgeschlagen', err);
+      }
+    };
 
     // Presence-Key = Tiername, damit die Lehrkraft join/leave eindeutig
     // demselben Schüler zuordnen kann (siehe useDashboardRoom.ts). Ohne
@@ -93,18 +115,15 @@ export const useGameRoom = ({
     channelRef.current = channel;
 
     channel
-      .on('broadcast', { event: 'session-start' }, (payload) => {
-        const data = payload.payload as SessionStartData;
-        // Gezielter Resync für einen anderen Schüler -> für uns nicht relevant.
-        if (data.targetStudent && data.targetStudent !== studentName) return;
-        onSessionStart(data);
+      .on('broadcast', { event: 'session-start' }, () => {
+        void syncAuthoritativeRoomState();
       })
       .on('broadcast', { event: 'session-ended' }, () => {
-        onSessionEnded();
+        void syncAuthoritativeRoomState();
       })
       .on('broadcast', { event: 'student-progress' }, (payload) => {
         const { name, index } = payload.payload;
-        if (typeof name === 'string' && name !== studentName) {
+        if (typeof name === 'string' && typeof index === 'number' && index >= 0 && index <= 10000 && name !== studentName) {
           setRoster((prev) => ({ ...prev, [name]: index }));
         }
       })
@@ -120,7 +139,10 @@ export const useGameRoom = ({
       })
       .on('broadcast', { event: 'attack' }, (payload) => {
         const { to, type } = payload.payload as { to: string; type: AttackType };
-        if (to !== studentName) return;
+        if (to !== studentName || (type !== 'ink' && type !== 'flicker')) return;
+        const now = Date.now();
+        if (now - lastIncomingAttackAtRef.current < 1000) return;
+        lastIncomingAttackAtRef.current = now;
         onAttack(type);
       })
       .subscribe(async (status) => {
@@ -151,21 +173,8 @@ export const useGameRoom = ({
           // beigetreten sind (oder das session-start-Broadcast verpasst
           // wurde), holen wir den aktuellen Stand direkt statt endlos auf
           // einen Broadcast zu warten, der nie mehr kommt.
-          if (roomId && !hasFetchedRoomStateRef.current) {
-            try {
-              const room = await getRoomState(roomId);
-              // Erst NACH einem erfolgreichen Aufruf als "erledigt" markieren --
-              // schlaegt genau dieser erste Versuch fehl (z. B. derselbe kurze
-              // WLAN-Aussetzer, der den Reconnect ueberhaupt erst ausgeloest hat),
-              // bleibt der Fallback fuer den naechsten Reconnect innerhalb
-              // desselben Mounts nutzbar, statt dauerhaft deaktiviert zu sein.
-              hasFetchedRoomStateRef.current = true;
-              if (room && room.status === 'live' && room.sessionId) {
-                onSessionStart({ ...(room.config as unknown as SessionStartData), sessionId: room.sessionId });
-              }
-            } catch (err) {
-              console.error('[Room] get_room_state() fehlgeschlagen (Broadcast-Pfad bleibt Grundlage, naechster Reconnect versucht es erneut)', err);
-            }
+          if (!hasFetchedRoomStateRef.current) {
+            await syncAuthoritativeRoomState();
           }
         }
       });
@@ -174,7 +183,7 @@ export const useGameRoom = ({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [roomCode, studentName, roomId, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
+  }, [roomCode, studentName, roomId, participantToken, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
 
   const sendProgress = useCallback((index: number) => {
     if (studentName) {

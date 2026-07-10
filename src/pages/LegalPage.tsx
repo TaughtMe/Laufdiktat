@@ -128,9 +128,11 @@ export const LegalPage: React.FC = () => {
               <li>Als Anzeigename dient ein zufällig erzeugter Tiername (z. B. „Flinker Dackel").</li>
               <li>Raum-Codes zum Verbinden von Lehrer- und Schülergeräten.</li>
               <li>
-                Spieleingaben (eingetippte Wörter, Fortschritt) werden ausschließlich in Echtzeit zwischen
-                den Geräten übertragen und nicht dauerhaft in einer Datenbank gespeichert.
+                Raumkonfiguration und pseudonyme Fortschrittsdaten (z. B. aktueller Abschnitt,
+                Fehler- und Spickerzahl) werden für Reconnects kurzzeitig gespeichert. Tatsächlich
+                eingetippte Antworten werden nicht dauerhaft gespeichert.
               </li>
+              <li>Beendete Räume und zugehörige Fortschritte werden automatisiert nach spätestens 24 Stunden gelöscht.</li>
             </ul>
           </div>
 
@@ -139,6 +141,7 @@ export const LegalPage: React.FC = () => {
             <ul className="list-disc pl-5 space-y-1">
               <li><span className="font-bold text-ink">Cloudflare Pages</span> – Auslieferung der Web-App.</li>
               <li><span className="font-bold text-ink">Supabase Realtime</span> – Echtzeit-Übertragung der Raum-Nachrichten (Broadcast).</li>
+              <li><span className="font-bold text-ink">Supabase Database</span> – kurzzeitige Speicherung pseudonymer Raum- und Fortschrittsdaten.</li>
             </ul>
             <p className="text-xs text-ink-faint">
               Beim Aufruf können technisch notwendige Verbindungsdaten (z. B. IP-Adresse) durch diese
@@ -166,9 +169,9 @@ export const LegalPage: React.FC = () => {
               Keine Tracking-Cookies und kein Analyse-Tool. Lokal im Browser wird gespeichert, ob die
               Funktionsübersicht bereits gezeigt wurde und ob helles oder dunkles Design gewählt wurde
               (bleibt jeweils dauerhaft erhalten). Beim Beitritt eines Schülers werden Raum-Code und
-              Tiername zusätzlich kurzzeitig im Sitzungsspeicher (sessionStorage) abgelegt, um den Beitritt
-              nach einem automatischen App-Update fortzusetzen – das wird spätestens beim Schließen des
-              Tabs automatisch gelöscht.
+              Tiername sowie ein zufälliger, raumbezogener Teilnehmertoken zusätzlich kurzzeitig im
+              Sitzungsspeicher (sessionStorage) abgelegt, um den Beitritt nach einem automatischen
+              App-Update fortzusetzen – das wird spätestens beim Schließen des Tabs automatisch gelöscht.
             </p>
           </div>
 
