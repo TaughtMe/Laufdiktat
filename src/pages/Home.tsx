@@ -240,7 +240,7 @@ export const Home = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center px-4 py-6 sm:py-8 [@media(max-height:700px)]:py-3 bg-page transition-colors duration-300 relative overflow-x-hidden">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center [@media(max-width:639px)_and_(orientation:portrait)]:justify-center px-4 py-6 sm:py-8 [@media(max-height:700px)]:py-3 bg-page transition-colors duration-300 relative overflow-x-hidden">
       <button
         type="button"
         onClick={toggleTheme}
