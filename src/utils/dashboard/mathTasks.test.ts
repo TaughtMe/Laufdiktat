@@ -27,10 +27,11 @@ describe('parseMathLine', () => {
     expect(parseMathLine('')).toBeNull();
   });
 
-  it('rechnet mit negativen Zahlen', () => {
-    expect(parseMathLine('-4 + 7')).toMatchObject({ prompt: '-4 + 7', targetWord: '3' });
+  it('rechnet mit negativen Zahlen und setzt sie im Prompt in Klammern', () => {
+    expect(parseMathLine('-4 + 7')).toMatchObject({ prompt: '(-4) + 7', targetWord: '3' });
     expect(parseMathLine('3 - 10')).toMatchObject({ targetWord: '-7' });
-    expect(parseMathLine('-3 * -2')).toMatchObject({ targetWord: '6' });
+    expect(parseMathLine('-5 + -3')).toMatchObject({ prompt: '(-5) + (-3)', targetWord: '-8' });
+    expect(parseMathLine('-3 * -2')).toMatchObject({ prompt: '(-3) · (-2)', targetWord: '6' });
   });
 
   it('rechnet mit Dezimalzahlen (Komma oder Punkt)', () => {
@@ -64,6 +65,11 @@ describe('buildGapTask (Lückenaufgaben)', () => {
   it('funktioniert auch mit Mal/Geteilt', () => {
     expect(buildGapTask(parseMathExpr('6 · 7')!, 'a')).toMatchObject({ prompt: '_ · 7 = 42', targetWord: '6' });
     expect(buildGapTask(parseMathExpr('20 : 4')!, 'b')).toMatchObject({ prompt: '20 : _ = 5', targetWord: '4' });
+  });
+
+  it('zeigt negative Operanden OHNE Klammern (Schüler sollen keine eingeben müssen)', () => {
+    expect(buildGapTask(parseMathExpr('-5 + -3')!, 'b')).toMatchObject({ prompt: '-5 + _ = -8', targetWord: '-3' });
+    expect(buildGapTask(parseMathExpr('-5 + -3')!, 'result')).toMatchObject({ prompt: '-5 + -3 = _', targetWord: '-8' });
   });
 });
 

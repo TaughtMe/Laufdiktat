@@ -17,7 +17,21 @@ const round = (n: number): number => Math.round(n * 1e9) / 1e9;
 /** Zeigt eine Zahl im deutschen Format an (Komma statt Punkt, keine unnötigen Nachkommastellen). */
 export const displayNum = (n: number): string => round(n).toString().replace('.', ',');
 
+/**
+ * Wie displayNum, aber setzt negative Operanden in Klammern, damit Aufgaben
+ * eindeutig lesbar sind: "(-5) + (-3)" statt des irritierenden "-5 + -3".
+ * Nur für die Anzeige der Operanden gedacht (nicht fürs Ergebnis nach "=").
+ */
+export const displayOperand = (n: number): string => {
+  const s = displayNum(n);
+  return s.startsWith('-') ? `(${s})` : s;
+};
+
+// Zum erneuten Parsen (Generator): schlichtes, klammerfreies "a op b".
 const format = (a: number, op: MathOp, b: number) => `${displayNum(a)} ${sym(op)} ${displayNum(b)}`;
+
+// Zur Anzeige (Prompt): negative Operanden in Klammern.
+const formatPrompt = (a: number, op: MathOp, b: number) => `${displayOperand(a)} ${sym(op)} ${displayOperand(b)}`;
 
 const compute = (a: number, op: MathOp, b: number): number | null => {
   switch (op) {
@@ -68,7 +82,7 @@ export const parseMathExpr = (line: string): MathExpr | null => {
 /** Normale Aufgabe aus einem geparsten Ausdruck (Aufgabe zeigen, Ergebnis = Antwort). */
 export const normalMathWord = (e: MathExpr): WordItem => ({
   id: uid(),
-  prompt: format(e.a, e.op, e.b),
+  prompt: formatPrompt(e.a, e.op, e.b),
   targetWord: String(e.result),
   isCompleted: false,
 });
@@ -110,6 +124,10 @@ export const parseManualMathLine = (line: string, gap?: GapSlot): WordItem | nul
  * Zahl ist die Antwort. Beispiel: gap 'b' -> "4 + _ = 7", Antwort "3".
  */
 export const buildGapTask = (e: MathExpr, gap: GapSlot): WordItem => {
+  // Bewusst OHNE Klammern um negative Operanden: die Lücke ist ein Eingabefeld,
+  // und Klammern würden Schüler verleiten, sie in die Antwort zu tippen. Die
+  // Antwort ist stets die schlichte Zahl (z. B. "-5"), also bleibt auch die
+  // Anzeige klammerfrei: "-5 + _ = -8".
   const aS = gap === 'a' ? '_' : displayNum(e.a);
   const bS = gap === 'b' ? '_' : displayNum(e.b);
   const rS = gap === 'result' ? '_' : displayNum(e.result);

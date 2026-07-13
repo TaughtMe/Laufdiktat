@@ -151,8 +151,6 @@ export const Game = () => {
     clearPendingJoin();
 
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars, strictTypingMode: newStrictTypingMode } = data;
-    setSessionEnded(false);
-    setGameState('IDLE');
     // Erkennt einen doppelten Trigger für dieselbe Sitzung -- z. B. wenn nach
     // einem Reconnect sowohl das gezielte session-start-Broadcast als auch
     // der DB-Fallback in useGameRoom.ts fast gleichzeitig onSessionStart
@@ -165,6 +163,13 @@ export const Game = () => {
     sessionIdRef.current = data.sessionId ?? '';
 
     if (isNewSession) {
+      // gameState/sessionEnded NUR bei echter neuer Sitzung zurücksetzen.
+      // Ein doppelter Trigger für dieselbe Sitzung darf einen Schüler, der
+      // bereits fertig ist (FINISHED) oder mitten im Schreiben steckt, nicht
+      // wieder auf IDLE werfen -- sonst erscheint z. B. nach dem "Geschafft!"-
+      // Screen hin und wieder die letzte Aufgabe erneut.
+      setSessionEnded(false);
+      setGameState('IDLE');
       // Auswertung für die neue Runde zurücksetzen.
       startedAtRef.current = 0;
       errorsRef.current = 0;

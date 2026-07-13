@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { RefreshCw, X, Plus } from 'lucide-react';
-import { parseMathExpr, opSymbol, displayNum } from '../../utils/dashboard/mathTasks';
+import { parseMathExpr, opSymbol, displayNum, displayOperand } from '../../utils/dashboard/mathTasks';
 import { evaluateLatexExpr } from '../../utils/dashboard/latexMath';
 import { moveArrayItem } from '../../utils/dashboard/reorder';
 import { EmptyChips } from './EmptyChips';
@@ -231,7 +231,7 @@ export const MathTaskList = ({ mathInput, validCount, onChangeLines, generateSin
                   className={`font-mono text-[13.5px] font-bold text-left cursor-text rounded px-1 -mx-1 hover:bg-line/40 transition-colors ${expr || latexValue !== null ? 'text-ink' : 'text-danger'}`}
                 >
                   {expr ? (
-                    `${displayNum(expr.a)} ${opSymbol(expr.op)} ${displayNum(expr.b)} = ${displayNum(expr.result)}`
+                    `${displayOperand(expr.a)} ${opSymbol(expr.op)} ${displayOperand(expr.b)} = ${displayNum(expr.result)}`
                   ) : latexValue !== null ? (
                     <span className="inline-flex items-center gap-1.5">
                       <MathDisplay text={line} isLatex /> <span>= {displayNum(latexValue)}</span>
