@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { StationGame } from './StationGame';
 import { ExitConfirm, SessionEndedOverlay, VersionMismatchOverlay } from '../components/game/GameOverlays';
+import { BattleChargeIcons } from '../components/game/BattleChargeIcons';
 import { useExitGuard } from '../hooks/game/useExitGuard';
 import { useGameRoom, type SessionStartData } from '../hooks/game/useGameRoom';
 import { useBattleMode } from '../hooks/battle/useBattleMode';
@@ -561,62 +562,17 @@ export const Game = () => {
         </div>
       </header>
 
-      {/* Battle-HUD: Aufladebalken + Angriffe/Schild (oben) */}
+      {/* Battle-HUD: drei runde Icons, die sich mit der Ladung farbig auffüllen */}
       {gameMode === 'BATTLE' && gameState !== 'FINISHED' && (
-        <div className="px-6 pb-3 z-20">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-3 backdrop-blur-sm flex flex-col gap-2.5">
-            {/* Aufladebalken */}
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-14 shrink-0">Ladung</span>
-              <div className="flex-1 h-3 rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${chargeReady ? 'bg-[#5efcc2]' : 'bg-brand-500'}`}
-                  style={{ width: `${charge}%` }}
-                />
-              </div>
-              <span className="text-[11px] font-bold text-slate-300 w-9 text-right">{Math.round(charge)}%</span>
-            </div>
-
-            {/* Aktions-Buttons */}
-            <div className="flex items-center gap-2">
-              {availableAttacks.includes('ink') && (
-                <button
-                  type="button"
-                  disabled={!chargeReady}
-                  onClick={(e) => { e.stopPropagation(); setPicker('ink'); }}
-                  className="flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:bg-white/20 enabled:active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-                >
-                  🖋️ Tinte
-                </button>
-              )}
-              {availableAttacks.includes('flicker') && (
-                <button
-                  type="button"
-                  disabled={!chargeReady}
-                  onClick={(e) => { e.stopPropagation(); setPicker('flicker'); }}
-                  className="flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed enabled:hover:bg-white/20 enabled:active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-                >
-                  ✨ Flimmern
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={!chargeReady || shieldActive}
-                onClick={(e) => { e.stopPropagation(); raiseShield(); }}
-                className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed enabled:active:scale-95 cursor-pointer flex items-center justify-center gap-1 ${shieldActive ? 'bg-[#5efcc2] text-[#004730]' : 'bg-white/10 text-white enabled:hover:bg-white/20'}`}
-              >
-                🛡️ {shieldActive ? 'Schild aktiv' : 'Schild'}
-              </button>
-            </div>
-
-            {/* Statusanzeige */}
-            {activeAttack && (
-              <div className="text-center text-[11px] font-bold text-red-300 animate-pulse">
-                {activeAttack.type === 'ink' ? 'Tinten-Angriff aktiv!' : 'Flimmer-Angriff aktiv!'}
-              </div>
-            )}
-          </div>
-        </div>
+        <BattleChargeIcons
+          charge={charge}
+          chargeReady={chargeReady}
+          shieldActive={shieldActive}
+          availableAttacks={availableAttacks}
+          activeAttack={activeAttack}
+          onPickAttack={setPicker}
+          onRaiseShield={raiseShield}
+        />
       )}
 
       {/* Kurze Battle-Hinweise */}

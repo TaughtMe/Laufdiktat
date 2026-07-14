@@ -124,6 +124,14 @@
     80% { opacity: 0.4; filter: blur(3px); transform: translateX(2px); }
   }
 
+  /* Dezentes Pulsieren für voll aufgeladene Battle-Icons. */
+  --animate-charge-pulse: charge-pulse 1.6s ease-in-out infinite;
+
+  @keyframes charge-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.09); }
+  }
+
   --animate-run-ping-pong: run-ping-pong 3.5s infinite ease-in-out;
 
   @keyframes run-ping-pong {
