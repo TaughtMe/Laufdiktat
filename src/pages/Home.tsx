@@ -5,7 +5,6 @@ import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
-import { checkForUpdateReady, applyUpdate } from '../pwa';
 import { clearPendingJoin, savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useTheme } from '../hooks/shared/useTheme';
@@ -99,6 +98,7 @@ export const Home = () => {
       const room = await joinRoom(code, name, existingToken);
       if (room === null) {
         clearPendingJoin();
+        setJoining(false);
         setJoinError('wrong-code');
         return;
       }
@@ -114,6 +114,7 @@ export const Home = () => {
     } catch (err) {
       logDevError('[Room] Sicherer Raumbeitritt fehlgeschlagen', err);
       clearPendingJoin();
+      setJoining(false);
       setJoinError('generic');
     }
   }, [navigate, resetGameData]);
@@ -136,25 +137,22 @@ export const Home = () => {
   // ohne dass der Schüler erst einen Raum betreten muss.
   useUpdatePoller({ enabled: true, intervalMs: 3 * 60 * 1000, autoApply: true });
 
-  // Beitritt: zuerst zuverlässig auf ein fertig installiertes Update warten
-  // (checkForUpdateReady wartet – anders als ein reines reg.update() – auch
-  // auf das asynchrone "needRefresh") und es ggf. anwenden, damit Schülergeräte
-  // nicht mit einer veralteten PWA-Version ins Spiel starten. Der
-  // Beitrittswunsch wird dafür in sessionStorage gemerkt und nach einem
-  // Update-Reload oben automatisch fortgesetzt.
-  const joinGame = useCallback(async (code: string, name: string) => {
+  // Beitritt: sofort in den Warteraum, ohne auf den PWA-Update-Check zu warten
+  // (das frühere blockierende `checkForUpdateReady` kostete bis zu 2s bei JEDEM
+  // Beitritt, auch wenn das Gerät längst aktuell war). Die neue Version wird
+  // bereits beim Öffnen der Startseite im Hintergrund eingespielt
+  // (useUpdatePoller mit autoApply prüft sofort beim Mount und dann alle 3 Min);
+  // ein echter Versionsunterschied zum Lehrer wird beim Rundenstart endgültig
+  // abgefangen (session-start-Vergleich + VersionMismatchOverlay in Game.tsx).
+  // Der Beitrittswunsch bleibt in sessionStorage gemerkt und wird nach einem
+  // eventuellen Update-Reload oben automatisch fortgesetzt.
+  const joinGame = useCallback((code: string, name: string) => {
     const previous = readPendingJoin();
     const existingToken = previous?.code === code ? previous.participantToken : undefined;
     savePendingJoin(code, name, existingToken);
 
     setJoining(true);
-    const updateReady = await checkForUpdateReady();
-    if (updateReady) {
-      applyUpdate(); // lädt neu; der Beitritt wird oben automatisch fortgesetzt
-      return;
-    }
-    setJoining(false);
-    enterGame(code, name, existingToken);
+    void enterGame(code, name, existingToken);
   }, [enterGame]);
 
   // QR-Code-Ergebnis: Raum-Code aus der URL (?room=) extrahieren, sonst
@@ -355,7 +353,7 @@ export const Home = () => {
             disabled={joining}
             className="w-full bg-accent hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed text-white text-base font-extrabold py-3 sm:py-3.5 px-6 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer mt-3 sm:mt-4"
           >
-            {joining ? 'Suche nach Update…' : 'Beitreten'}
+            {joining ? 'Trete bei…' : 'Beitreten'}
           </button>
         </div>
       </div>
