@@ -5,7 +5,6 @@ import type { StudentResult } from '../../hooks/dashboard/useDashboardRoom';
 import type { StationStudentState } from '../../types/game';
 
 interface LiveStepProps {
-  roomCode: string;
   wordsCount: number;
   showStars: boolean;
   stationMode: boolean;
@@ -34,14 +33,13 @@ const StatCard = ({ dotClass, label, value }: { dotClass: string; label: string;
 );
 
 /**
- * Schritt 4 nach dem Redesign: Live-Kopfzeile mit Raum-Code, drei
+ * Schritt 4 nach dem Redesign: Live-Kopfzeile, drei
  * Stat-Karten (Aktiv/Fertig/Gesamtfortschritt), Schüler-Grid mit
  * Fortschrittsbalken bzw. Fertig-Chips und das Häufigste-Fehler-Panel.
  * Stations-Modus zeigt Stationskarten statt Schülerkarten; der
  * CSV-Export bleibt erhalten.
  */
 export const LiveStep = ({
-  roomCode,
   wordsCount,
   showStars,
   stationMode,
@@ -80,18 +78,15 @@ export const LiveStep = ({
 
   return (
     <div className="flex flex-col gap-5 pt-2.5">
-      {/* Live-Kopfzeile */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="relative flex w-[7px] h-[7px]">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ok opacity-75" />
-            <span className="relative inline-flex rounded-full w-[7px] h-[7px] bg-ok" />
-          </span>
-          <span className="text-xs font-bold text-ink-muted uppercase tracking-[0.05em]">Live-Sitzung</span>
-        </div>
-        <span className="text-xs text-ink-muted">
-          Raum-Code: <span className="font-mono font-extrabold text-ink">{roomCode}</span>
+      {/* Live-Kopfzeile. Der Raum-Code steht in der Live-Sitzung im festen
+          Footer (WizardFooter → FooterRoomCode) statt hier – dort ist er
+          dauerhaft sichtbar und per Klick als großer QR-Code aufrufbar. */}
+      <div className="flex items-center gap-2">
+        <span className="relative flex w-[7px] h-[7px]">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ok opacity-75" />
+          <span className="relative inline-flex rounded-full w-[7px] h-[7px] bg-ok" />
         </span>
+        <span className="text-xs font-bold text-ink-muted uppercase tracking-[0.05em]">Live-Sitzung</span>
       </div>
 
       {/* Stat-Karten */}

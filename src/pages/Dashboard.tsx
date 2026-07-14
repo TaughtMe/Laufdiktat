@@ -281,6 +281,10 @@ export const Dashboard = () => {
       nextLabel: 'Sitzung beenden',
       nextVariant: 'danger',
       onNext: handleEndSession,
+      // In der Live-Sitzung zeigt der Footer statt der Versionsnummer den
+      // Raum-Code (klickbar → großer QR-Code für Nachzügler).
+      roomCode,
+      showRoomCode: true,
     },
   };
 
@@ -366,7 +370,6 @@ export const Dashboard = () => {
 
           {currentStep === 'LIVE' && (
             <LiveStep
-              roomCode={roomCode}
               wordsCount={words.length}
               showStars={showStars}
               stationMode={stationMode}

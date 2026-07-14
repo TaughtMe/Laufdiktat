@@ -1,4 +1,4 @@
-import { ChevronLeft, Moon, Sun, Check } from 'lucide-react';
+import { Home, Moon, Sun, Check } from 'lucide-react';
 import { useTheme } from '../../hooks/shared/useTheme';
 import { STEP_ORDER, STEP_META, type DashboardStep } from './stepMeta';
 
@@ -24,14 +24,15 @@ export const DashboardHeader = ({ currentStep, stepsUnlocked, onStepSelect, onBa
   return (
     <header className="px-5 sm:px-9 pt-3 pb-2.5 bg-surface border-b border-line shrink-0">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={onBackToHome}
-            className="p-1.5 -ml-2 rounded-full text-ink-faint hover:text-ink-muted hover:bg-surface-2 transition-colors cursor-pointer"
+            className="p-1.5 -ml-1 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
             title="Zurück zur Startseite"
+            aria-label="Zurück zur Startseite"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <Home className="w-7 h-7" strokeWidth={2} />
           </button>
           <div>
             <div className="font-extrabold text-[15px] tracking-tight text-ink leading-tight">Laufdiktat</div>

@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { QrCode } from 'lucide-react';
 import { VersionBadge } from '../shared/VersionBadge';
+import { RoomQrOverlay } from '../shared/RoomQrOverlay';
 
 interface WizardFooterProps {
   canBack: boolean;
@@ -8,12 +11,43 @@ interface WizardFooterProps {
   nextVariant?: 'accent' | 'ok' | 'danger';
   nextDisabled?: boolean;
   onNext: () => void;
+  /** Raum-Code der laufenden Sitzung (nur relevant, wenn showRoomCode gesetzt ist). */
+  roomCode?: string;
+  /** In der Live-Sitzung statt der Versionsnummer den klickbaren Raum-Code zeigen. */
+  showRoomCode?: boolean;
 }
 
 const VARIANT_CLASS: Record<NonNullable<WizardFooterProps['nextVariant']>, string> = {
   accent: 'bg-accent hover:opacity-90',
   ok: 'bg-ok hover:opacity-90',
   danger: 'bg-danger hover:opacity-90',
+};
+
+/**
+ * Klickbarer Raum-Code für die Live-Sitzung (mittig im Footer, wo sonst die
+ * Versionsnummer steht). Ein Klick öffnet den großen QR-Code (RoomQrOverlay),
+ * damit sich Nachzügler jederzeit erneut anmelden können – genau wie in der
+ * Lobby.
+ */
+const FooterRoomCode = ({ roomCode }: { roomCode: string }) => {
+  const [showQr, setShowQr] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowQr(true)}
+        aria-label="Raum-Code groß mit QR-Code anzeigen"
+        className="group flex items-center gap-2.5 rounded-[14px] border border-line bg-surface-2 px-4 py-1.5 hover:border-accent/50 transition-colors cursor-pointer"
+      >
+        <div className="flex flex-col items-start leading-none">
+          <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">Raum-Code</span>
+          <span className="font-mono text-xl font-extrabold tracking-[0.14em] text-ink mt-0.5">{roomCode}</span>
+        </div>
+        <QrCode className="w-5 h-5 text-ink-muted group-hover:text-accent-strong transition-colors" />
+      </button>
+      {showQr && <RoomQrOverlay roomCode={roomCode} onClose={() => setShowQr(false)} />}
+    </>
+  );
 };
 
 /**
@@ -29,6 +63,8 @@ export const WizardFooter = ({
   nextVariant = 'accent',
   nextDisabled = false,
   onNext,
+  roomCode,
+  showRoomCode = false,
 }: WizardFooterProps) => (
   <footer className="px-5 sm:px-9 py-4 border-t border-line bg-surface flex items-center justify-between gap-4 shrink-0">
     <button
@@ -43,7 +79,7 @@ export const WizardFooter = ({
     >
       ← Zurück
     </button>
-    <VersionBadge fixed={false} />
+    {showRoomCode && roomCode ? <FooterRoomCode roomCode={roomCode} /> : <VersionBadge fixed={false} />}
     <button
       type="button"
       onClick={onNext}

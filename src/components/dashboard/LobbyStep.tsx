@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Activity, Maximize2, X, XCircle } from 'lucide-react';
+import { Activity, Maximize2, XCircle } from 'lucide-react';
 import { AnimalAvatar } from '../shared/AnimalAvatar';
+import { RoomQrOverlay } from '../shared/RoomQrOverlay';
 
 interface LobbyStepProps {
   roomCode: string;
@@ -184,54 +185,11 @@ export const LobbyStep = ({
       </div>
 
       {showLargeQrCode && (
-        <div
-          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-5 cursor-default"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Vergrößerter QR-Code für den Raumbeitritt"
-          onClick={() => setShowLargeQrCode(false)}
-        >
-          <div
-            className="relative bg-surface rounded-[28px] shadow-2xl p-5 sm:p-7 flex flex-col items-center gap-4 max-h-[94dvh] cursor-default"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setShowLargeQrCode(false)}
-              className="absolute top-3 right-3 w-10 h-10 rounded-full bg-surface-2 hover:bg-line text-ink-muted hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-              aria-label="Großen QR-Code schließen"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="bg-white rounded-[20px] p-3 sm:p-4 mt-7">
-              <QRCodeSVG
-                value={joinUrl}
-                size={520}
-                level="H"
-                className="w-[min(68vw,58vh,520px)] h-[min(68vw,58vh,520px)]"
-              />
-            </div>
-
-            <div className="text-center">
-              <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.1em] text-ink-muted">
-                Raum-Code
-              </div>
-              <div className="font-mono font-extrabold text-3xl sm:text-4xl tracking-[0.16em] text-accent-strong mt-1 pl-[0.16em]">
-                {roomCode}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 bg-ok-soft text-ok rounded-full px-4 py-2 text-sm sm:text-base font-extrabold">
-              <span className="w-2 h-2 rounded-full bg-ok" />
-              {studentCountLabel} angemeldet
-            </div>
-
-            <p className="text-[11px] text-ink-muted text-center">
-              Neben den QR-Code klicken, um zur Lobby zurückzukehren.
-            </p>
-          </div>
-        </div>
+        <RoomQrOverlay
+          roomCode={roomCode}
+          onClose={() => setShowLargeQrCode(false)}
+          status={`${studentCountLabel} angemeldet`}
+        />
       )}
     </div>
   );
