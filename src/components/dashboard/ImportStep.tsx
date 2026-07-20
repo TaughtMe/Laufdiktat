@@ -1,14 +1,15 @@
-import React from 'react';
-import { Upload } from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, Highlighter } from 'lucide-react';
 import type { useMathImport } from '../../hooks/dashboard/useMathImport';
 import type { WordItem } from '../../types/game';
-import type { TextSplitConfig } from '../../utils/dashboard/textSections';
+import type { TextSplitConfig, TextSection, ManualRange } from '../../utils/dashboard/textSections';
 import { generateMathLines } from '../../utils/dashboard/mathTasks';
 import { EmptyChips } from './EmptyChips';
 import { MathQuickBar } from './MathQuickBar';
 import { MathTaskList } from './MathTaskList';
 import { MathSettingsPanel } from './MathSettingsPanel';
 import { TextSplitControls } from './TextSplitControls';
+import { TextMarkerEditor } from './TextMarkerEditor';
 
 export type ImportMode = 'text' | 'math';
 
@@ -21,6 +22,13 @@ interface ImportStepProps {
   splitConfig: TextSplitConfig;
   onSplitConfigChange: (config: TextSplitConfig) => void;
   words: WordItem[];
+  /** Aktuelle Abschnitte (mit Positionen/Quelle) für die Marker-Ansicht. */
+  sections: TextSection[];
+  manualRanges: ManualRange[];
+  manualResetNotice: boolean;
+  onAddSection: (start: number, end: number) => void;
+  onRemoveManualSection: (section: TextSection) => void;
+  onClearManual: () => void;
   /** Komplette Rückgabe von useMathImport – reine Durchreichung. */
   math: ReturnType<typeof useMathImport>;
 }
@@ -46,8 +54,16 @@ export const ImportStep = ({
   splitConfig,
   onSplitConfigChange,
   words,
+  sections,
+  manualRanges,
+  manualResetNotice,
+  onAddSection,
+  onRemoveManualSection,
+  onClearManual,
   math,
 }: ImportStepProps) => {
+  const [isMarkerMode, setIsMarkerMode] = useState(false);
+  const canMark = rawText.trim().length > 0;
   return (
     <div className="flex flex-col h-full min-h-[600px]">
       {/* Reiter-Zeile + Upload-Pill */}
@@ -137,17 +153,57 @@ export const ImportStep = ({
           </>
         ) : (
           <>
-            {/* Linke Spalte: Rohtext (einzige Quelle) */}
-            <div className="flex flex-col min-h-0">
-              <textarea
-                value={rawText}
-                onChange={onRawTextChange}
-                className="w-full flex-1 min-h-[11rem] p-3 bg-transparent text-ink leading-[1.7] text-[15px] outline-none resize-none rounded-[14px]"
-                placeholder={'Der schnelle Fuchs springt über den Zaun. Der Igel schläft im Laub.'}
-              />
-              <p className="text-[11.5px] text-ink-faint mt-2 leading-relaxed shrink-0">
-                Text einmal eingeben oder hochladen – die Aufteilung steuerst du rechts.
-              </p>
+            {/* Linke Spalte: Rohtext (einzige Quelle) bzw. Marker-Bearbeitung */}
+            <div className="flex flex-col min-h-0 gap-2">
+              {manualResetNotice && (
+                <div className="text-[12px] font-semibold text-warn bg-warn-soft rounded-[10px] px-3 py-2 shrink-0">
+                  Der Text wurde verändert. Manuelle Anpassungen wurden zurückgesetzt.
+                </div>
+              )}
+
+              {isMarkerMode && canMark ? (
+                <TextMarkerEditor
+                  rawText={rawText}
+                  sections={sections}
+                  onAddSection={onAddSection}
+                  onRemoveManualSection={onRemoveManualSection}
+                />
+              ) : (
+                <div className="flex flex-col min-h-0">
+                  <textarea
+                    value={rawText}
+                    onChange={onRawTextChange}
+                    className="w-full flex-1 min-h-[11rem] p-3 bg-transparent text-ink leading-[1.7] text-[15px] outline-none resize-none rounded-[14px]"
+                    placeholder={'Der schnelle Fuchs springt über den Zaun. Der Igel schläft im Laub.'}
+                  />
+                  <p className="text-[11.5px] text-ink-faint mt-2 leading-relaxed shrink-0">
+                    Text einmal eingeben oder hochladen – die Aufteilung steuerst du rechts.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <button
+                  type="button"
+                  disabled={!canMark}
+                  onClick={() => setIsMarkerMode((m) => !m)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12.5px] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    isMarkerMode ? 'bg-accent text-white' : 'bg-surface-2 text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  <Highlighter className="w-3.5 h-3.5" />
+                  <span>{isMarkerMode ? 'Bearbeitung beenden' : 'Abschnitte manuell bearbeiten'}</span>
+                </button>
+                {isMarkerMode && manualRanges.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={onClearManual}
+                    className="px-3.5 py-2 rounded-full text-[12.5px] font-bold text-ink-faint hover:text-danger cursor-pointer transition-colors"
+                  >
+                    Manuelle Änderungen zurücksetzen
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Rechte Spalte: Trennregeln + Live-Vorschau */}

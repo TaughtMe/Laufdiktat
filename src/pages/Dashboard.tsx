@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
-import { buildTextSections, DEFAULT_SPLIT_CONFIG, type TextSplitConfig } from '../utils/dashboard/textSections';
+import {
+  buildTextSections,
+  DEFAULT_SPLIT_CONFIG,
+  type TextSplitConfig,
+  type ManualRange,
+  type TextSection,
+} from '../utils/dashboard/textSections';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
@@ -53,6 +59,12 @@ export const Dashboard = () => {
   const [rawText, setRawText] = useState('');
   const [importMode, setImportMode] = useState<'text' | 'math'>('text');
   const [splitConfig, setSplitConfig] = useState<TextSplitConfig>(DEFAULT_SPLIT_CONFIG);
+  // Manuelle Bereiche (P3): überschreiben einzelne automatische Grenzen. Werden
+  // bei Textänderung zurückgesetzt, bei reiner Regeländerung aber beibehalten
+  // (Feinkonzept, Reset-Matrix).
+  const [manualRanges, setManualRanges] = useState<ManualRange[]>([]);
+  // Kurzer Hinweis, dass eine Textänderung die manuellen Bereiche verworfen hat.
+  const [manualResetNotice, setManualResetNotice] = useState(false);
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -107,14 +119,43 @@ export const Dashboard = () => {
 
   const math = useMathImport({ importMode, setWords });
 
-  // Im Text-Modus die Abschnitte reproduzierbar aus Rohtext + Regeln bauen
-  // (siehe buildTextSections). Läuft bei Text- UND Regeländerung; der
-  // Mathe-Modus schreibt die Wörter über seinen eigenen Effekt (useMathImport).
+  // Abschnitte reproduzierbar aus Rohtext + Regeln + manuellen Bereichen bauen
+  // (siehe buildTextSections). Einzige Quelle für die Vorschau und den Marker.
+  const textSections: TextSection[] = useMemo(
+    () => (importMode === 'text' ? buildTextSections(rawText, splitConfig, manualRanges) : []),
+    [importMode, rawText, splitConfig, manualRanges]
+  );
+
+  // Im Text-Modus die Wörter aus den Abschnitten spiegeln; der Mathe-Modus
+  // schreibt die Wörter über seinen eigenen Effekt (useMathImport).
   useEffect(() => {
     if (importMode !== 'text') return;
-    const sections = buildTextSections(rawText, splitConfig);
-    setWords(sections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false })));
-  }, [importMode, rawText, splitConfig, setWords]);
+    setWords(textSections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false })));
+  }, [importMode, textSections, setWords]);
+
+  // Auswahl → genau ein Abschnitt. Überlappende manuelle Bereiche weichen dem
+  // neuen (Feinkonzept: Überschneidungen ersetzen den alten Bereich).
+  const handleAddSection = (start: number, end: number) => {
+    setManualRanges((prev) => [
+      ...prev.filter((r) => Math.max(start, r.start) >= Math.min(end, r.end)),
+      { id: crypto.randomUUID(), type: 'section', start, end },
+    ]);
+  };
+
+  const handleRemoveManualSection = (section: TextSection) => {
+    setManualRanges((prev) =>
+      prev.filter((r) => Math.max(section.start, r.start) >= Math.min(section.end, r.end))
+    );
+  };
+
+  const handleClearManual = () => setManualRanges([]);
+
+  // Reset-Hinweis nach kurzer Zeit wieder ausblenden.
+  useEffect(() => {
+    if (!manualResetNotice) return;
+    const t = setTimeout(() => setManualResetNotice(false), 4000);
+    return () => clearTimeout(t);
+  }, [manualResetNotice]);
 
   const handleExportCSV = () => {
     if (stationMode) {
@@ -149,10 +190,16 @@ export const Dashboard = () => {
     }
   };
 
+  // Textänderung verwirft manuelle Bereiche (deren Positionen passen danach
+  // evtl. nicht mehr) – anders als eine reine Regeländerung (Feinkonzept).
+  const applyNewRawText = (value: string) => {
+    if (manualRanges.length > 0) setManualResetNotice(true);
+    setManualRanges([]);
+    setRawText(value.replace(/\r\n?/g, '\n'));
+  };
+
   const handleRawTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    // Zeilenumbrüche früh vereinheitlichen, damit Positionen konsistent bleiben
-    // (Feinkonzept, Abschnitt 1 – relevant ab P3 für manuelle Bereiche).
-    setRawText(e.target.value.replace(/\r\n?/g, '\n'));
+    applyNewRawText(e.target.value);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,8 +207,7 @@ export const Dashboard = () => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = (event.target?.result as string) ?? '';
-      setRawText(text.replace(/\r\n?/g, '\n'));
+      applyNewRawText((event.target?.result as string) ?? '');
     };
     reader.readAsText(file);
   };
@@ -278,6 +324,12 @@ export const Dashboard = () => {
               splitConfig={splitConfig}
               onSplitConfigChange={setSplitConfig}
               words={words}
+              sections={textSections}
+              manualRanges={manualRanges}
+              manualResetNotice={manualResetNotice}
+              onAddSection={handleAddSection}
+              onRemoveManualSection={handleRemoveManualSection}
+              onClearManual={handleClearManual}
               math={math}
             />
           )}
