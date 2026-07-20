@@ -1,5 +1,13 @@
 import { useRef, useState } from 'react';
 import type { TextSection } from '../../utils/dashboard/textSections';
+import { buildEditorPieces, type EditorPiece } from '../../utils/dashboard/editorPieces';
+import {
+  EDITOR_MIN_HEIGHT,
+  EDITOR_TEXT_CLASSES,
+  SEGMENT_AUTO_EVEN,
+  SEGMENT_AUTO_ODD,
+  SEGMENT_MANUAL,
+} from './editorFrame';
 
 interface TextMarkerEditorProps {
   rawText: string;
@@ -8,13 +16,6 @@ interface TextMarkerEditorProps {
   onAddSection: (start: number, end: number) => void;
   /** Klick auf einen manuellen Abschnitt → dessen manuelle Markierung entfernen. */
   onRemoveManualSection: (section: TextSection) => void;
-}
-
-interface Piece {
-  text: string;
-  start: number;
-  kind: 'gap' | 'auto' | 'manual';
-  section?: TextSection;
 }
 
 interface Token {
@@ -40,31 +41,29 @@ const tokenize = (text: string, base: number): Token[] => {
 };
 
 /**
- * Nicht-editierbare Bearbeitungsansicht des Rohtexts (P3/P5). Der VOLLE Rohtext
- * wird abschnittsweise eingefärbt dargestellt (Auto- vs. manuelle Abschnitte).
+ * Schreibgeschützter Marker-Zustand desselben Editors. Der VOLLE Rohtext wird
+ * abschnittsweise eingefärbt dargestellt (automatisch vs. manuell).
  *
  * Zwei Wege, einen Bereich zu einem Abschnitt zu machen:
  *  - Ziehen (Desktop): Auswahl → Abschnitt (onMouseUp).
- *  - Antippen (Tablet): erstes Wort = Anker, zweites Wort = Ende → Abschnitt.
+ *  - Antippen (Tablet, P5): erstes Wort = Anker, zweites Wort = Ende → Abschnitt.
  * Ein Klick auf einen manuellen Abschnitt löst ihn wieder.
  *
- * Wichtig: Es werden KEINE zusätzlichen Zeichen eingefügt – Grenzen entstehen rein
- * über Styling. So bleibt der Textinhalt identisch zum Rohtext, und die aus der
- * Auswahl berechneten Zeichen-Indizes stimmen.
+ * Wichtig: Es werden KEINE zusätzlichen Zeichen eingefügt – Grenzen entstehen
+ * rein über Styling. So bleibt der Textinhalt identisch zum Rohtext, und die aus
+ * der Auswahl berechneten Zeichen-Indizes stimmen.
+ *
+ * Typografie und Innenabstände kommen aus EDITOR_TEXT_CLASSES, die Einfärbung
+ * aus denselben SEGMENT_*-Konstanten wie im Mirror-Editor. Zusammen mit dem
+ * gemeinsamen, montiert bleibenden EditorFrame ergibt das beim Umschalten
+ * keinen Layout-Sprung.
  */
 export const TextMarkerEditor = ({ rawText, sections, onAddSection, onRemoveManualSection }: TextMarkerEditorProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   // Erstes angetipptes Wort (Tablet-Auswahl); null = kein Anker gesetzt.
   const [anchor, setAnchor] = useState<{ start: number; end: number } | null>(null);
 
-  const pieces: Piece[] = [];
-  let prev = 0;
-  for (const s of sections) {
-    if (s.start > prev) pieces.push({ text: rawText.slice(prev, s.start), start: prev, kind: 'gap' });
-    pieces.push({ text: rawText.slice(s.start, s.end), start: s.start, kind: s.source, section: s });
-    prev = s.end;
-  }
-  if (prev < rawText.length) pieces.push({ text: rawText.slice(prev), start: prev, kind: 'gap' });
+  const pieces = buildEditorPieces(rawText, sections);
 
   const handleWordTap = (tok: Token) => {
     // Eine echte Auswahl (Ziehen) wird über onMouseUp behandelt – Klick ignorieren.
@@ -105,7 +104,12 @@ export const TextMarkerEditor = ({ rawText, sections, onAddSection, onRemoveManu
     if (start < end) onAddSection(start, end);
   };
 
-  const renderTokens = (piece: Piece) =>
+  /**
+   * Wort-Tipp-Ziele. Die Hervorhebung läuft ausschließlich über Hintergrund und
+   * `ring` (ein Box-Shadow) – beides nimmt keinen Platz ein, der Text bleibt
+   * exakt an derselben Stelle wie im Mirror-Editor.
+   */
+  const renderTokens = (piece: EditorPiece) =>
     tokenize(piece.text, piece.start).map((tok, ti) => {
       if (!tok.isWord) return <span key={ti}>{tok.text}</span>;
       const anchored = anchor !== null && tok.start === anchor.start && tok.end === anchor.end;
@@ -113,8 +117,8 @@ export const TextMarkerEditor = ({ rawText, sections, onAddSection, onRemoveManu
         <span
           key={ti}
           onClick={() => handleWordTap(tok)}
-          className={`cursor-pointer rounded px-0.5 transition-colors ${
-            anchored ? 'ring-2 ring-accent-strong bg-accent/20' : 'hover:bg-accent/15'
+          className={`cursor-pointer rounded-[0.2rem] transition-colors ${
+            anchored ? 'bg-accent/40 ring-2 ring-accent-strong' : 'hover:bg-accent/15'
           }`}
         >
           {tok.text}
@@ -123,42 +127,39 @@ export const TextMarkerEditor = ({ rawText, sections, onAddSection, onRemoveManu
     });
 
   return (
-    <div className="flex flex-col min-h-0">
-      <div
-        ref={containerRef}
-        onMouseUp={handleMouseUp}
-        className="w-full flex-1 min-h-[11rem] overflow-y-auto p-4 text-ink leading-[2.1] text-[15px] select-text break-words whitespace-pre-wrap rounded-[14px] bg-surface-2"
-      >
-        {pieces.map((p, idx) => {
-          if (p.kind === 'gap') {
-            return (
-              <span key={idx} className="text-ink-faint">
-                {renderTokens(p)}
-              </span>
-            );
-          }
-          if (p.kind === 'manual') {
-            return (
-              <span
-                key={idx}
-                onClick={() => { setAnchor(null); onRemoveManualSection(p.section!); }}
-                title="Klicken zum Entfernen der manuellen Markierung"
-                className="rounded-[6px] px-1 py-0.5 mx-px box-decoration-clone bg-accent text-white font-semibold cursor-pointer hover:bg-danger transition-colors"
-              >
-                {p.text}
-              </span>
-            );
-          }
+    <div
+      ref={containerRef}
+      onMouseUp={handleMouseUp}
+      className={`select-text text-ink ${EDITOR_MIN_HEIGHT} ${EDITOR_TEXT_CLASSES}`}
+    >
+      {pieces.map((piece, idx) => {
+        if (piece.kind === 'gap') return <span key={idx}>{renderTokens(piece)}</span>;
+
+        if (piece.kind === 'manual') {
           return (
-            <span key={idx} className="rounded-[6px] px-1 py-0.5 mx-px box-decoration-clone bg-accent-soft text-accent-strong">
-              {renderTokens(p)}
+            <span
+              key={idx}
+              onClick={() => {
+                setAnchor(null);
+                onRemoveManualSection(piece.section!);
+              }}
+              title="Antippen, um die manuelle Markierung zu entfernen"
+              className={`cursor-pointer transition-colors hover:bg-danger/25 ${SEGMENT_MANUAL}`}
+            >
+              {piece.text}
             </span>
           );
-        })}
-      </div>
-      <p className="text-[11.5px] text-ink-faint mt-2 leading-relaxed shrink-0">
-        Text markieren – oder zwei Wörter antippen (Anfang und Ende) – um einen Bereich zu einem Abschnitt zusammenzufassen. Einen manuellen Abschnitt antippen löst ihn wieder.
-      </p>
+        }
+
+        return (
+          <span
+            key={idx}
+            className={piece.autoIndex % 2 === 0 ? SEGMENT_AUTO_EVEN : SEGMENT_AUTO_ODD}
+          >
+            {renderTokens(piece)}
+          </span>
+        );
+      })}
     </div>
   );
 };

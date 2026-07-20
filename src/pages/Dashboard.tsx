@@ -6,6 +6,7 @@ import { useMathImport } from '../hooks/dashboard/useMathImport';
 import {
   buildTextSections,
   applyResultEdits,
+  sectionsToWords,
   DEFAULT_SPLIT_CONFIG,
   type TextSplitConfig,
   type ManualRange,
@@ -17,6 +18,7 @@ import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileW
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { WizardFooter } from '../components/dashboard/WizardFooter';
 import { ImportStep } from '../components/dashboard/ImportStep';
+import { SectionManager } from '../components/dashboard/SectionManager';
 import { SettingsStep } from '../components/dashboard/SettingsStep';
 import { LobbyStep } from '../components/dashboard/LobbyStep';
 import { LiveStep } from '../components/dashboard/LiveStep';
@@ -72,6 +74,11 @@ export const Dashboard = () => {
   // bei jeder Text-/Regel-/Bereichsänderung zurückgesetzt (Feinkonzept E).
   const [excludedSectionIds, setExcludedSectionIds] = useState<string[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
+  // Frühere Stände der manuellen Bereiche für „letzte Änderung rückgängig".
+  const [manualHistory, setManualHistory] = useState<ManualRange[][]>([]);
+  // Die Abschnittsverwaltung ersetzt die frühere dauerhafte Chipliste und ist
+  // deshalb standardmäßig geschlossen.
+  const [isSectionManagerOpen, setSectionManagerOpen] = useState(false);
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -134,10 +141,17 @@ export const Dashboard = () => {
   );
 
   // Ergebnis-Ebene anwenden: Ausschlüsse + benutzerdefinierte Reihenfolge
-  // (Rohtext bleibt unangetastet). Speist Vorschau UND Wortliste.
+  // (Rohtext bleibt unangetastet). Speist die Wortliste.
   const displaySections: TextSection[] = useMemo(
     () => applyResultEdits(textSections, excludedSectionIds, customOrder),
     [textSections, excludedSectionIds, customOrder]
+  );
+
+  // Für die Verwaltung: dieselbe Reihenfolge, aber MIT den ausgeschlossenen
+  // Abschnitten – dort sollen sie sichtbar bleiben und wieder aufnehmbar sein.
+  const orderedSections: TextSection[] = useMemo(
+    () => applyResultEdits(textSections, [], customOrder),
+    [textSections, customOrder]
   );
 
   // Ausschlüsse/Reihenfolge bei jeder Text-/Regel-/Bereichsänderung verwerfen
@@ -151,22 +165,32 @@ export const Dashboard = () => {
   // Mathe-Modus schreibt die Wörter über seinen eigenen Effekt (useMathImport).
   useEffect(() => {
     if (importMode !== 'text') return;
-    setWords(displaySections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false })));
+    setWords(sectionsToWords(displaySections));
   }, [importMode, displaySections, setWords]);
 
-  // Löschen = Ausschluss (Text bleibt stehen). Umsortieren = nur Reihenfolge.
-  const handleDeleteSection = (id: string) => setExcludedSectionIds((prev) => [...prev, id]);
+  // Ausschließen = nur aus der Wortliste nehmen, der Rohtext bleibt vollständig.
+  const handleToggleExclude = (id: string) =>
+    setExcludedSectionIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
 
+  const handleRestoreExcluded = () => setExcludedSectionIds([]);
+
+  // Umsortieren wirkt ausschließlich auf die Reihenfolge der Wortliste. Basis ist
+  // die vollständige Liste inklusive ausgeschlossener Abschnitte, weil die
+  // Verwaltung genau diese anzeigt – sonst zeigten die Indizes ins Leere.
   const handleReorderSections = (fromIndex: number, toIndex: number) => {
-    const ids = displaySections.map((s) => s.id);
+    const ids = orderedSections.map((s) => s.id);
     setCustomOrder(moveArrayItem(ids, fromIndex, toIndex));
   };
 
-  const handleRestoreExcluded = () => setExcludedSectionIds([]);
+  /** Merkt den aktuellen Stand der manuellen Bereiche für „rückgängig". */
+  const pushManualHistory = () => setManualHistory((prev) => [...prev, manualRanges]);
 
   // Auswahl → genau ein Abschnitt. Überlappende manuelle Bereiche weichen dem
   // neuen (Feinkonzept: Überschneidungen ersetzen den alten Bereich).
   const handleAddSection = (start: number, end: number) => {
+    pushManualHistory();
     setManualRanges((prev) => [
       ...prev.filter((r) => Math.max(start, r.start) >= Math.min(end, r.end)),
       { id: crypto.randomUUID(), type: 'section', start, end },
@@ -175,6 +199,7 @@ export const Dashboard = () => {
   };
 
   const handleRemoveManualSection = (section: TextSection) => {
+    pushManualHistory();
     setManualRanges((prev) =>
       prev.filter((r) => Math.max(section.start, r.start) >= Math.min(section.end, r.end))
     );
@@ -182,7 +207,28 @@ export const Dashboard = () => {
   };
 
   const handleClearManual = () => {
+    pushManualHistory();
     setManualRanges([]);
+    resetResultEdits();
+  };
+
+  // Nur die manuelle Ebene zurücknehmen – Rohtext sowie Zeichen- und
+  // Enter-Einstellungen bleiben ausdrücklich unberührt.
+  const handleUndoManual = () => {
+    setManualHistory((prev) => {
+      if (prev.length === 0) return prev;
+      setManualRanges(prev[prev.length - 1]);
+      resetResultEdits();
+      return prev.slice(0, -1);
+    });
+  };
+
+  // „Text leeren": Rohtext und alles daraus Abgeleitete. Die Regeln bleiben.
+  const handleClearText = () => {
+    setRawText('');
+    setManualRanges([]);
+    setManualHistory([]);
+    setManualResetNotice(false);
     resetResultEdits();
   };
 
@@ -238,6 +284,9 @@ export const Dashboard = () => {
   const applyNewRawText = (value: string) => {
     if (manualRanges.length > 0) setManualResetNotice(true);
     setManualRanges([]);
+    // Die Historie bezieht sich auf Positionen im alten Text und wäre danach
+    // nicht mehr sinnvoll anwendbar.
+    setManualHistory([]);
     resetResultEdits();
     setRawText(value.replace(/\r\n?/g, '\n'));
   };
@@ -345,6 +394,16 @@ export const Dashboard = () => {
   return (
     <div className="flex flex-col h-[100dvh] bg-page text-ink overflow-x-hidden">
       {showOnboarding && <DashboardOnboarding onClose={dismissOnboarding} />}
+      {isSectionManagerOpen && importMode === 'text' && (
+        <SectionManager
+          orderedSections={orderedSections}
+          excludedIds={excludedSectionIds}
+          onToggleExclude={handleToggleExclude}
+          onReorder={handleReorderSections}
+          onRestoreAll={handleRestoreExcluded}
+          onClose={() => setSectionManagerOpen(false)}
+        />
+      )}
       {connectionWarning && (
         <div className="bg-danger text-white text-center py-2 text-sm font-medium z-50 shrink-0">
           Verbindung zum Server verloren. Echtzeit-Updates sind derzeit nicht möglich.
@@ -365,19 +424,19 @@ export const Dashboard = () => {
               rawText={rawText}
               onRawTextChange={handleRawTextChange}
               onFileUpload={handleFileUpload}
+              onClearText={handleClearText}
               splitConfig={splitConfig}
               onSplitConfigChange={handleSplitConfigChange}
-              words={words}
               sections={textSections}
+              sectionCount={displaySections.length}
               manualRanges={manualRanges}
               manualResetNotice={manualResetNotice}
-              excludedCount={excludedSectionIds.length}
+              canUndoManual={manualHistory.length > 0}
               onAddSection={handleAddSection}
               onRemoveManualSection={handleRemoveManualSection}
+              onUndoManual={handleUndoManual}
               onClearManual={handleClearManual}
-              onDeleteSection={handleDeleteSection}
-              onReorderSections={handleReorderSections}
-              onRestoreExcluded={handleRestoreExcluded}
+              onOpenSectionManager={() => setSectionManagerOpen(true)}
               math={math}
             />
           )}

@@ -10,7 +10,9 @@
  * manuelle Bereiche und Abschnittspositionen im selben Koordinatensystem liegen.
  */
 
-export type NewlineMode = 'none' | 'line' | 'paragraph';
+import type { WordItem } from '../../types/game';
+
+export type NewlineMode = 'line' | 'paragraph';
 
 export interface CustomDelimiter {
   id: string;
@@ -19,10 +21,18 @@ export interface CustomDelimiter {
 }
 
 export interface TextSplitConfig {
-  newlineMode: NewlineMode;
+  /**
+   * Hauptschalter der Regel „Zeichen" (Satzzeichen UND benutzerdefinierte
+   * Trenner). Ist er aus, bleiben `punctuation`/`customDelimiters` erhalten –
+   * die Auswahl der Lehrkraft überlebt das Aus- und Wiedereinschalten.
+   */
+  punctuationEnabled: boolean;
   /** Ausgewählte Einzel-Trennzeichen, je genau ein Zeichen (z. B. '.', '!', '?'). */
   punctuation: string[];
   customDelimiters: CustomDelimiter[];
+  /** Hauptschalter der Regel „Enter"; `newlineMode` bleibt dabei erhalten. */
+  newlineEnabled: boolean;
+  newlineMode: NewlineMode;
   /** Mehrere aufeinanderfolgende Separatoren zu einer Grenze zusammenfassen. */
   groupConsecutiveSeparators: boolean;
 }
@@ -47,9 +57,11 @@ export interface TextSection {
 }
 
 export const DEFAULT_SPLIT_CONFIG: TextSplitConfig = {
-  newlineMode: 'line',
+  punctuationEnabled: true,
   punctuation: ['.', '!', '?'],
   customDelimiters: [],
+  newlineEnabled: true,
+  newlineMode: 'line',
   groupConsecutiveSeparators: true,
 };
 
@@ -76,12 +88,18 @@ interface SeparatorMatch {
 /** Findet alle automatischen Separatoren in einem einzigen Links-nach-rechts-Lauf. */
 const findSeparators = (text: string, config: TextSplitConfig): SeparatorMatch[] => {
   const n = text.length;
-  const punctuation = new Set(config.punctuation.filter((c) => c.length > 0));
+  // Hauptschalter „Zeichen": deckt Satzzeichen und benutzerdefinierte Trenner ab.
+  // Die Auswahl selbst bleibt in der Config erhalten, wirkt nur nicht.
+  const punctuation = config.punctuationEnabled
+    ? new Set(config.punctuation.filter((c) => c.length > 0))
+    : new Set<string>();
   // Längster Treffer zuerst (Feinkonzept: |||, dann ||, dann |).
-  const delimiters = config.customDelimiters
-    .filter((d) => d.value.length > 0)
-    .map((d) => d.value)
-    .sort((a, b) => b.length - a.length);
+  const delimiters = config.punctuationEnabled
+    ? config.customDelimiters
+        .filter((d) => d.value.length > 0)
+        .map((d) => d.value)
+        .sort((a, b) => b.length - a.length)
+    : [];
 
   const matches: SeparatorMatch[] = [];
   let i = 0;
@@ -101,8 +119,8 @@ const findSeparators = (text: string, config: TextSplitConfig): SeparatorMatch[]
 
     const ch = text[i];
 
-    // 2. Zeilenumbrüche.
-    if (ch === '\n') {
+    // 2. Zeilenumbrüche (nur wenn die Regel „Enter" aktiv ist).
+    if (ch === '\n' && config.newlineEnabled) {
       if (config.newlineMode === 'line') {
         matches.push({ start: i, end: i + 1, kind: 'consume' });
         i += 1;
@@ -123,7 +141,7 @@ const findSeparators = (text: string, config: TextSplitConfig): SeparatorMatch[]
           continue;
         }
       }
-      // 'none' oder einzelnes \n im Absatzmodus: als normaler Text behandeln.
+      // Einzelnes \n im Absatzmodus: als normaler Text behandeln.
       i += 1;
       continue;
     }
@@ -250,6 +268,14 @@ export const buildTextSections = (
  * - order: gewünschte Reihenfolge über Abschnitts-IDs; IDs, die nicht
  *   vorkommen, behalten ihre Dokumentreihenfolge und landen dahinter.
  */
+/**
+ * Letzter Schritt der Kette: fertige Abschnitte → Spiel-Wortliste. Bewusst eine
+ * eigene reine Funktion (statt inline in Dashboard.tsx), damit Ausschluss und
+ * Reihenfolge bis zur WordItem-Ebene testbar sind.
+ */
+export const sectionsToWords = (sections: TextSection[]): WordItem[] =>
+  sections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false }));
+
 export const applyResultEdits = (
   sections: TextSection[],
   excludedIds: string[] = [],

@@ -98,10 +98,11 @@ src/
   hooks/
     game/         useGameRoom, useExitGuard
     battle/       useBattleMode
-    dashboard/    useDashboardRoom, useManualHighlighting, useMathImport
+    dashboard/    useDashboardRoom, useMathImport
+    shared/       usePopover, useTheme, useUpdatePoller
   utils/
     game/         checkAnswer, buildHint, scoring
-    dashboard/    csvParser, mathTasks, exportUtils
+    dashboard/    textSections, editorPieces, mathTasks, exportUtils
     supabaseClient.ts
   components/
     game/         GameOverlays

@@ -1,15 +1,12 @@
-import React, { useState } from 'react';
-import { Upload, Highlighter } from 'lucide-react';
+import React from 'react';
+import { Upload } from 'lucide-react';
 import type { useMathImport } from '../../hooks/dashboard/useMathImport';
-import type { WordItem } from '../../types/game';
-import type { TextSplitConfig, TextSection, ManualRange } from '../../utils/dashboard/textSections';
+import type { ManualRange, TextSection, TextSplitConfig } from '../../utils/dashboard/textSections';
 import { generateMathLines } from '../../utils/dashboard/mathTasks';
-import { EmptyChips } from './EmptyChips';
 import { MathQuickBar } from './MathQuickBar';
 import { MathTaskList } from './MathTaskList';
 import { MathSettingsPanel } from './MathSettingsPanel';
-import { TextSplitControls } from './TextSplitControls';
-import { TextMarkerEditor } from './TextMarkerEditor';
+import { TextImportPanel } from './TextImportPanel';
 
 export type ImportMode = 'text' | 'math';
 
@@ -19,21 +16,21 @@ interface ImportStepProps {
   rawText: string;
   onRawTextChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onClearText: () => void;
   splitConfig: TextSplitConfig;
   onSplitConfigChange: (config: TextSplitConfig) => void;
-  words: WordItem[];
-  /** Aktuelle Abschnitte (mit Positionen/Quelle) für die Marker-Ansicht. */
+  /** Alle Abschnitte mit Positionen (ohne Ausschluss/Sortierung). */
   sections: TextSection[];
+  /** Anzahl der Abschnitte, die tatsächlich im Laufdiktat landen. */
+  sectionCount: number;
   manualRanges: ManualRange[];
   manualResetNotice: boolean;
-  /** Anzahl aktuell ausgeschlossener Abschnitte (für den "wieder aufnehmen"-Hinweis). */
-  excludedCount: number;
+  canUndoManual: boolean;
   onAddSection: (start: number, end: number) => void;
   onRemoveManualSection: (section: TextSection) => void;
+  onUndoManual: () => void;
   onClearManual: () => void;
-  onDeleteSection: (id: string) => void;
-  onReorderSections: (fromIndex: number, toIndex: number) => void;
-  onRestoreExcluded: () => void;
+  onOpenSectionManager: () => void;
   /** Komplette Rückgabe von useMathImport – reine Durchreichung. */
   math: ReturnType<typeof useMathImport>;
 }
@@ -44,11 +41,11 @@ const TABS: Array<{ id: ImportMode; label: string }> = [
 ];
 
 /**
- * Schritt 1: zwei Reiter (Text / Mathe). Im Text-Reiter links der Rohtext
- * (einzige Quelle), rechts die Trennregeln (Schnellwahl, Chips, Zeilenmodus,
- * benutzerdefinierte Trenner) und darunter die Live-Vorschau der Abschnitte.
- * Die Aufteilung selbst macht buildTextSections (siehe Dashboard.tsx).
- * Mathe-Zweig unverändert.
+ * Schritt 1: zwei Reiter (Text / Mathe).
+ *
+ * Der Text-Reiter ist einspaltig – Eingabe und Abschnittsvorschau sind in einem
+ * gemeinsamen Editor zusammengeführt (siehe TextImportPanel). Der Mathe-Zweig
+ * ist funktional unverändert.
  */
 export const ImportStep = ({
   importMode,
@@ -56,227 +53,130 @@ export const ImportStep = ({
   rawText,
   onRawTextChange,
   onFileUpload,
+  onClearText,
   splitConfig,
   onSplitConfigChange,
-  words,
   sections,
+  sectionCount,
   manualRanges,
   manualResetNotice,
-  excludedCount,
+  canUndoManual,
   onAddSection,
   onRemoveManualSection,
+  onUndoManual,
   onClearManual,
-  onDeleteSection,
-  onReorderSections,
-  onRestoreExcluded,
+  onOpenSectionManager,
   math,
-}: ImportStepProps) => {
-  const [isMarkerMode, setIsMarkerMode] = useState(false);
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const canMark = rawText.trim().length > 0;
-  return (
-    <div className="flex flex-col h-full min-h-[600px]">
-      {/* Reiter-Zeile + Upload-Pill */}
-      <div className="flex items-end justify-between gap-3">
-        <div className="flex gap-1 items-end overflow-x-auto min-w-0 [scrollbar-width:none]">
-          {TABS.map((tab) => {
-            const active = importMode === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onImportModeChange(tab.id)}
-                className={`rounded-t-[14px] px-7 pt-[19px] pb-[17px] text-[14.5px] leading-none whitespace-nowrap shrink-0 cursor-pointer relative transition-colors ${
-                  active
-                    ? 'bg-surface text-ink font-extrabold z-[2]'
-                    : 'bg-surface-2 text-ink-faint font-semibold z-[1] hover:text-ink-muted'
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-        {importMode === 'text' && (
-          <label className="flex items-center gap-2 px-4 py-2.5 mb-2 rounded-full border border-line bg-surface text-ink-muted text-[12.5px] font-bold cursor-pointer whitespace-nowrap shrink-0 hover:bg-surface-2 transition-colors">
-            <Upload className="w-[15px] h-[15px]" />
-            <span>Dokument hochladen</span>
-            <input type="file" accept=".csv, .txt" onChange={onFileUpload} className="sr-only" />
-          </label>
-        )}
+}: ImportStepProps) => (
+  <div className="flex h-full min-h-[600px] flex-col">
+    {/* Reiter-Zeile + Upload-Pill */}
+    <div className="flex items-end justify-between gap-3">
+      <div className="flex min-w-0 items-end gap-1 overflow-x-auto [scrollbar-width:none]">
+        {TABS.map((tab) => {
+          const active = importMode === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onImportModeChange(tab.id)}
+              className={`relative shrink-0 cursor-pointer whitespace-nowrap rounded-t-[14px] px-7 pb-[17px] pt-[19px] text-[14.5px] leading-none transition-colors ${
+                active
+                  ? 'z-[2] bg-surface font-extrabold text-ink'
+                  : 'z-[1] bg-surface-2 font-semibold text-ink-faint hover:text-ink-muted'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
+      {importMode === 'text' && (
+        <label
+          className="mb-2 flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full
+            border border-line bg-surface px-4 py-2.5 text-[12.5px] font-bold text-ink-muted
+            transition-colors hover:bg-surface-2"
+        >
+          <Upload className="h-[15px] w-[15px]" />
+          <span>Dokument hochladen</span>
+          <input type="file" accept=".csv, .txt" onChange={onFileUpload} className="sr-only" />
+        </label>
+      )}
+    </div>
 
-      {/* Panel: oben links eckig (schließt an den ersten Reiter an) */}
-      <div
-        className={`bg-surface border border-line rounded-[0px_20px_20px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex-1 min-h-0 p-5 ${
-          importMode === 'math' ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-5'
-        }`}
-      >
-        {importMode === 'math' ? (
-          <>
-            <MathQuickBar
-              mathPlus={math.mathPlus}
-              setMathPlus={math.setMathPlus}
-              mathMinus={math.mathMinus}
-              setMathMinus={math.setMathMinus}
-              mathMul={math.mathMul}
-              setMathMul={math.setMathMul}
-              mathDiv={math.mathDiv}
-              setMathDiv={math.setMathDiv}
+    {/* Panel: oben links eckig (schließt an den ersten Reiter an) */}
+    <div
+      className={`min-h-0 flex-1 rounded-[0px_20px_20px_20px] border border-line bg-surface p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${
+        importMode === 'math' ? 'flex flex-col gap-4' : 'flex flex-col'
+      }`}
+    >
+      {importMode === 'math' ? (
+        <>
+          <MathQuickBar
+            mathPlus={math.mathPlus}
+            setMathPlus={math.setMathPlus}
+            mathMinus={math.mathMinus}
+            setMathMinus={math.setMathMinus}
+            mathMul={math.mathMul}
+            setMathMul={math.setMathMul}
+            mathDiv={math.mathDiv}
+            setMathDiv={math.setMathDiv}
+            mathMaxValue={math.mathMaxValue}
+            setMathMaxValue={math.setMathMaxValue}
+            mathCount={math.mathCount}
+            setMathCount={math.setMathCount}
+            onGenerate={math.handleGenerateMath}
+          />
+
+          {/* Stabil responsiv: Desktop nebeneinander, schmälere Tablets untereinander. */}
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[1.3fr_1fr]">
+            <MathTaskList
+              mathInput={math.mathInput}
+              validCount={math.mathPreviewLines.length}
+              onChangeLines={(lines) => math.handleMathInputChange(lines.join('\n'))}
+              generateSingleLine={() => generateMathLines({ ...math.buildGenOptions(), count: 1 })[0]}
+            />
+            <MathSettingsPanel
+              mathMinValue={math.mathMinValue}
+              setMathMinValue={math.setMathMinValue}
               mathMaxValue={math.mathMaxValue}
               setMathMaxValue={math.setMathMaxValue}
-              mathCount={math.mathCount}
-              setMathCount={math.setMathCount}
-              onGenerate={math.handleGenerateMath}
+              mathAllowNegative={math.mathAllowNegative}
+              setMathAllowNegative={math.setMathAllowNegative}
+              mathExcludeZeroOperand={math.mathExcludeZeroOperand}
+              setMathExcludeZeroOperand={math.setMathExcludeZeroOperand}
+              mathExcludeZeroResult={math.mathExcludeZeroResult}
+              setMathExcludeZeroResult={math.setMathExcludeZeroResult}
+              mathGap={math.mathGap}
+              setMathGap={math.setMathGap}
+              mathTables={math.mathTables}
+              setMathTables={math.setMathTables}
+              showMultiplicationTables={math.mathMul || math.mathDiv}
+              mathExprs={math.mathExprs}
+              mathPreviewLines={math.mathPreviewLines}
+              mathGaps={math.mathGaps}
+              setGapAt={math.setGapAt}
             />
-
-            {/* Stabil responsiv: Desktop nebeneinander, schmälere Tablets untereinander. */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-5 flex-1 min-h-0">
-              <MathTaskList
-                mathInput={math.mathInput}
-                validCount={math.mathPreviewLines.length}
-                onChangeLines={(lines) => math.handleMathInputChange(lines.join('\n'))}
-                generateSingleLine={() => generateMathLines({ ...math.buildGenOptions(), count: 1 })[0]}
-              />
-              <MathSettingsPanel
-                mathMinValue={math.mathMinValue}
-                setMathMinValue={math.setMathMinValue}
-                mathMaxValue={math.mathMaxValue}
-                setMathMaxValue={math.setMathMaxValue}
-                mathAllowNegative={math.mathAllowNegative}
-                setMathAllowNegative={math.setMathAllowNegative}
-                mathExcludeZeroOperand={math.mathExcludeZeroOperand}
-                setMathExcludeZeroOperand={math.setMathExcludeZeroOperand}
-                mathExcludeZeroResult={math.mathExcludeZeroResult}
-                setMathExcludeZeroResult={math.setMathExcludeZeroResult}
-                mathGap={math.mathGap}
-                setMathGap={math.setMathGap}
-                mathTables={math.mathTables}
-                setMathTables={math.setMathTables}
-                showMultiplicationTables={math.mathMul || math.mathDiv}
-                mathExprs={math.mathExprs}
-                mathPreviewLines={math.mathPreviewLines}
-                mathGaps={math.mathGaps}
-                setGapAt={math.setGapAt}
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Linke Spalte: Rohtext (einzige Quelle) bzw. Marker-Bearbeitung */}
-            <div className="flex flex-col min-h-0 gap-2">
-              {manualResetNotice && (
-                <div className="text-[12px] font-semibold text-warn bg-warn-soft rounded-[10px] px-3 py-2 shrink-0">
-                  Der Text wurde verändert. Manuelle Anpassungen wurden zurückgesetzt.
-                </div>
-              )}
-
-              {isMarkerMode && canMark ? (
-                <TextMarkerEditor
-                  rawText={rawText}
-                  sections={sections}
-                  onAddSection={onAddSection}
-                  onRemoveManualSection={onRemoveManualSection}
-                />
-              ) : (
-                <div className="flex flex-col min-h-0">
-                  <textarea
-                    value={rawText}
-                    onChange={onRawTextChange}
-                    className="w-full flex-1 min-h-[11rem] p-3 bg-transparent text-ink leading-[1.7] text-[15px] outline-none resize-none rounded-[14px]"
-                    placeholder={'Der schnelle Fuchs springt über den Zaun. Der Igel schläft im Laub.'}
-                  />
-                  <p className="text-[11.5px] text-ink-faint mt-2 leading-relaxed shrink-0">
-                    Text einmal eingeben oder hochladen – die Aufteilung steuerst du rechts.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 flex-wrap shrink-0">
-                <button
-                  type="button"
-                  disabled={!canMark}
-                  onClick={() => setIsMarkerMode((m) => !m)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12.5px] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    isMarkerMode ? 'bg-accent text-white' : 'bg-surface-2 text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  <Highlighter className="w-3.5 h-3.5" />
-                  <span>{isMarkerMode ? 'Bearbeitung beenden' : 'Abschnitte manuell bearbeiten'}</span>
-                </button>
-                {isMarkerMode && manualRanges.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={onClearManual}
-                    className="px-3.5 py-2 rounded-full text-[12.5px] font-bold text-ink-faint hover:text-danger cursor-pointer transition-colors"
-                  >
-                    Manuelle Änderungen zurücksetzen
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Rechte Spalte: Trennregeln + Live-Vorschau */}
-            <div className="flex flex-col gap-5 min-h-0 overflow-y-auto">
-              <TextSplitControls config={splitConfig} onChange={onSplitConfigChange} />
-
-              <div className="bg-surface-2 border border-line rounded-[16px] p-4 flex flex-col gap-2.5">
-                <div className="flex items-center justify-between gap-2 shrink-0">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted">
-                    {words.length} Abschnitte
-                  </span>
-                  {excludedCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={onRestoreExcluded}
-                      className="text-[11px] font-bold text-ink-faint hover:text-accent-strong cursor-pointer transition-colors"
-                    >
-                      {excludedCount} ausgeschlossen · wieder aufnehmen
-                    </button>
-                  )}
-                </div>
-                {words.length === 0 ? (
-                  <EmptyChips text="Noch keine Abschnitte." sub="Gib Text im linken Feld ein." />
-                ) : (
-                  <div className="flex flex-wrap gap-2 content-start">
-                    {words.map((word, idx) => (
-                      <div
-                        key={word.id}
-                        draggable
-                        onDragStart={(e) => {
-                          setDragIdx(idx);
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (dragIdx !== null && dragIdx !== idx) onReorderSections(dragIdx, idx);
-                          setDragIdx(null);
-                        }}
-                        onDragEnd={() => setDragIdx(null)}
-                        className={`inline-flex items-center gap-1.5 bg-accent-soft text-accent-strong px-3 py-2 rounded-[10px] text-[13px] font-bold h-fit cursor-grab active:cursor-grabbing transition-shadow ${
-                          dragIdx === idx ? 'ring-2 ring-accent-strong' : ''
-                        }`}
-                      >
-                        <span className="opacity-55 text-[11px]">{idx + 1}.</span>
-                        <span className="break-all">{word.targetWord}</span>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteSection(word.id)}
-                          className="ml-0.5 text-[13px] leading-none cursor-pointer hover:text-danger transition-colors"
-                          title="Abschnitt ausschließen (Text bleibt erhalten)"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      ) : (
+        <TextImportPanel
+          rawText={rawText}
+          onRawTextChange={onRawTextChange}
+          onClearText={onClearText}
+          sections={sections}
+          sectionCount={sectionCount}
+          splitConfig={splitConfig}
+          onSplitConfigChange={onSplitConfigChange}
+          manualRanges={manualRanges}
+          manualResetNotice={manualResetNotice}
+          canUndoManual={canUndoManual}
+          onAddSection={onAddSection}
+          onRemoveManualSection={onRemoveManualSection}
+          onUndoManual={onUndoManual}
+          onClearManual={onClearManual}
+          onOpenSectionManager={onOpenSectionManager}
+        />
+      )}
     </div>
-  );
-};
+  </div>
+);
