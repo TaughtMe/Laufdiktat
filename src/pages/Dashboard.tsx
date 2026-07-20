@@ -5,11 +5,13 @@ import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
 import {
   buildTextSections,
+  applyResultEdits,
   DEFAULT_SPLIT_CONFIG,
   type TextSplitConfig,
   type ManualRange,
   type TextSection,
 } from '../utils/dashboard/textSections';
+import { moveArrayItem } from '../utils/dashboard/reorder';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
@@ -65,6 +67,11 @@ export const Dashboard = () => {
   const [manualRanges, setManualRanges] = useState<ManualRange[]>([]);
   // Kurzer Hinweis, dass eine Textänderung die manuellen Bereiche verworfen hat.
   const [manualResetNotice, setManualResetNotice] = useState(false);
+  // Ergebnis-Ebene (P4): ausgeschlossene Abschnitte und benutzerdefinierte
+  // Reihenfolge (je über Abschnitts-IDs). Verändern nie den Rohtext und werden
+  // bei jeder Text-/Regel-/Bereichsänderung zurückgesetzt (Feinkonzept E).
+  const [excludedSectionIds, setExcludedSectionIds] = useState<string[]>([]);
+  const [customOrder, setCustomOrder] = useState<string[]>([]);
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -126,12 +133,36 @@ export const Dashboard = () => {
     [importMode, rawText, splitConfig, manualRanges]
   );
 
-  // Im Text-Modus die Wörter aus den Abschnitten spiegeln; der Mathe-Modus
-  // schreibt die Wörter über seinen eigenen Effekt (useMathImport).
+  // Ergebnis-Ebene anwenden: Ausschlüsse + benutzerdefinierte Reihenfolge
+  // (Rohtext bleibt unangetastet). Speist Vorschau UND Wortliste.
+  const displaySections: TextSection[] = useMemo(
+    () => applyResultEdits(textSections, excludedSectionIds, customOrder),
+    [textSections, excludedSectionIds, customOrder]
+  );
+
+  // Ausschlüsse/Reihenfolge bei jeder Text-/Regel-/Bereichsänderung verwerfen
+  // (Feinkonzept, Entscheidung E) – jeweils dort, wo die Änderung entsteht.
+  const resetResultEdits = () => {
+    setExcludedSectionIds([]);
+    setCustomOrder([]);
+  };
+
+  // Im Text-Modus die Wörter aus den (bearbeiteten) Abschnitten spiegeln; der
+  // Mathe-Modus schreibt die Wörter über seinen eigenen Effekt (useMathImport).
   useEffect(() => {
     if (importMode !== 'text') return;
-    setWords(textSections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false })));
-  }, [importMode, textSections, setWords]);
+    setWords(displaySections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false })));
+  }, [importMode, displaySections, setWords]);
+
+  // Löschen = Ausschluss (Text bleibt stehen). Umsortieren = nur Reihenfolge.
+  const handleDeleteSection = (id: string) => setExcludedSectionIds((prev) => [...prev, id]);
+
+  const handleReorderSections = (fromIndex: number, toIndex: number) => {
+    const ids = displaySections.map((s) => s.id);
+    setCustomOrder(moveArrayItem(ids, fromIndex, toIndex));
+  };
+
+  const handleRestoreExcluded = () => setExcludedSectionIds([]);
 
   // Auswahl → genau ein Abschnitt. Überlappende manuelle Bereiche weichen dem
   // neuen (Feinkonzept: Überschneidungen ersetzen den alten Bereich).
@@ -140,15 +171,27 @@ export const Dashboard = () => {
       ...prev.filter((r) => Math.max(start, r.start) >= Math.min(end, r.end)),
       { id: crypto.randomUUID(), type: 'section', start, end },
     ]);
+    resetResultEdits();
   };
 
   const handleRemoveManualSection = (section: TextSection) => {
     setManualRanges((prev) =>
       prev.filter((r) => Math.max(section.start, r.start) >= Math.min(section.end, r.end))
     );
+    resetResultEdits();
   };
 
-  const handleClearManual = () => setManualRanges([]);
+  const handleClearManual = () => {
+    setManualRanges([]);
+    resetResultEdits();
+  };
+
+  // Regeländerung: manuelle Bereiche bleiben (Feinkonzept), aber Ausschlüsse und
+  // Reihenfolge werden verworfen, da die Abschnittsgrenzen sich verschieben.
+  const handleSplitConfigChange = (config: TextSplitConfig) => {
+    setSplitConfig(config);
+    resetResultEdits();
+  };
 
   // Reset-Hinweis nach kurzer Zeit wieder ausblenden.
   useEffect(() => {
@@ -195,6 +238,7 @@ export const Dashboard = () => {
   const applyNewRawText = (value: string) => {
     if (manualRanges.length > 0) setManualResetNotice(true);
     setManualRanges([]);
+    resetResultEdits();
     setRawText(value.replace(/\r\n?/g, '\n'));
   };
 
@@ -322,14 +366,18 @@ export const Dashboard = () => {
               onRawTextChange={handleRawTextChange}
               onFileUpload={handleFileUpload}
               splitConfig={splitConfig}
-              onSplitConfigChange={setSplitConfig}
+              onSplitConfigChange={handleSplitConfigChange}
               words={words}
               sections={textSections}
               manualRanges={manualRanges}
               manualResetNotice={manualResetNotice}
+              excludedCount={excludedSectionIds.length}
               onAddSection={handleAddSection}
               onRemoveManualSection={handleRemoveManualSection}
               onClearManual={handleClearManual}
+              onDeleteSection={handleDeleteSection}
+              onReorderSections={handleReorderSections}
+              onRestoreExcluded={handleRestoreExcluded}
               math={math}
             />
           )}

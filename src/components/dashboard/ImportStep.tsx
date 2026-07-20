@@ -26,9 +26,14 @@ interface ImportStepProps {
   sections: TextSection[];
   manualRanges: ManualRange[];
   manualResetNotice: boolean;
+  /** Anzahl aktuell ausgeschlossener Abschnitte (für den "wieder aufnehmen"-Hinweis). */
+  excludedCount: number;
   onAddSection: (start: number, end: number) => void;
   onRemoveManualSection: (section: TextSection) => void;
   onClearManual: () => void;
+  onDeleteSection: (id: string) => void;
+  onReorderSections: (fromIndex: number, toIndex: number) => void;
+  onRestoreExcluded: () => void;
   /** Komplette Rückgabe von useMathImport – reine Durchreichung. */
   math: ReturnType<typeof useMathImport>;
 }
@@ -57,12 +62,17 @@ export const ImportStep = ({
   sections,
   manualRanges,
   manualResetNotice,
+  excludedCount,
   onAddSection,
   onRemoveManualSection,
   onClearManual,
+  onDeleteSection,
+  onReorderSections,
+  onRestoreExcluded,
   math,
 }: ImportStepProps) => {
   const [isMarkerMode, setIsMarkerMode] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
   const canMark = rawText.trim().length > 0;
   return (
     <div className="flex flex-col h-full min-h-[600px]">
@@ -211,9 +221,20 @@ export const ImportStep = ({
               <TextSplitControls config={splitConfig} onChange={onSplitConfigChange} />
 
               <div className="bg-surface-2 border border-line rounded-[16px] p-4 flex flex-col gap-2.5">
-                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted shrink-0">
-                  {words.length} Abschnitte
-                </span>
+                <div className="flex items-center justify-between gap-2 shrink-0">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted">
+                    {words.length} Abschnitte
+                  </span>
+                  {excludedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={onRestoreExcluded}
+                      className="text-[11px] font-bold text-ink-faint hover:text-accent-strong cursor-pointer transition-colors"
+                    >
+                      {excludedCount} ausgeschlossen · wieder aufnehmen
+                    </button>
+                  )}
+                </div>
                 {words.length === 0 ? (
                   <EmptyChips text="Noch keine Abschnitte." sub="Gib Text im linken Feld ein." />
                 ) : (
@@ -221,10 +242,32 @@ export const ImportStep = ({
                     {words.map((word, idx) => (
                       <div
                         key={word.id}
-                        className="inline-flex items-center gap-1.5 bg-accent-soft text-accent-strong px-3 py-2 rounded-[10px] text-[13px] font-bold h-fit"
+                        draggable
+                        onDragStart={(e) => {
+                          setDragIdx(idx);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragIdx !== null && dragIdx !== idx) onReorderSections(dragIdx, idx);
+                          setDragIdx(null);
+                        }}
+                        onDragEnd={() => setDragIdx(null)}
+                        className={`inline-flex items-center gap-1.5 bg-accent-soft text-accent-strong px-3 py-2 rounded-[10px] text-[13px] font-bold h-fit cursor-grab active:cursor-grabbing transition-shadow ${
+                          dragIdx === idx ? 'ring-2 ring-accent-strong' : ''
+                        }`}
                       >
                         <span className="opacity-55 text-[11px]">{idx + 1}.</span>
                         <span className="break-all">{word.targetWord}</span>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteSection(word.id)}
+                          className="ml-0.5 text-[13px] leading-none cursor-pointer hover:text-danger transition-colors"
+                          title="Abschnitt ausschließen (Text bleibt erhalten)"
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>

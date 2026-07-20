@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildTextSections,
+  applyResultEdits,
   DEFAULT_SPLIT_CONFIG,
   type TextSplitConfig,
   type CustomDelimiter,
@@ -178,5 +179,34 @@ describe('buildTextSections – stabile IDs', () => {
     const second = buildTextSections('Haus. Baum.', cfg());
     expect(first).toEqual(second);
     expect(first.map((s) => s.id)).toEqual(['s-0-5', 's-6-11']);
+  });
+});
+
+describe('applyResultEdits – Ausschluss und Reihenfolge', () => {
+  const sections = buildTextSections('Eins. Zwei. Drei.', cfg());
+
+  it('gibt ohne Bearbeitung die Abschnitte in Dokumentreihenfolge zurück', () => {
+    expect(applyResultEdits(sections).map((s) => s.text)).toEqual(['Eins.', 'Zwei.', 'Drei.']);
+  });
+
+  it('schließt Abschnitte per ID aus', () => {
+    const excluded = [sections[1].id];
+    expect(applyResultEdits(sections, excluded).map((s) => s.text)).toEqual(['Eins.', 'Drei.']);
+  });
+
+  it('ordnet nach der benutzerdefinierten Reihenfolge um', () => {
+    const order = [sections[2].id, sections[0].id, sections[1].id];
+    expect(applyResultEdits(sections, [], order).map((s) => s.text)).toEqual(['Drei.', 'Eins.', 'Zwei.']);
+  });
+
+  it('hängt nicht gelistete IDs stabil hinten an', () => {
+    const order = [sections[2].id];
+    expect(applyResultEdits(sections, [], order).map((s) => s.text)).toEqual(['Drei.', 'Eins.', 'Zwei.']);
+  });
+
+  it('kombiniert Ausschluss und Reihenfolge', () => {
+    const order = [sections[2].id, sections[0].id];
+    const excluded = [sections[0].id];
+    expect(applyResultEdits(sections, excluded, order).map((s) => s.text)).toEqual(['Drei.', 'Zwei.']);
   });
 });

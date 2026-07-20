@@ -240,3 +240,31 @@ export const buildTextSections = (
 
   return sections;
 };
+
+/**
+ * Ergebnis-Ebene (P4): wendet Ausschlüsse und eine benutzerdefinierte
+ * Reihenfolge auf die Abschnitte an, OHNE Rohtext/Positionen anzufassen. Rein,
+ * damit die Vorschau und die spätere Wortliste identisch bleiben.
+ *
+ * - excludedIds: diese Abschnitte fallen aus dem Ergebnis (bleiben im Text).
+ * - order: gewünschte Reihenfolge über Abschnitts-IDs; IDs, die nicht
+ *   vorkommen, behalten ihre Dokumentreihenfolge und landen dahinter.
+ */
+export const applyResultEdits = (
+  sections: TextSection[],
+  excludedIds: string[] = [],
+  order: string[] = []
+): TextSection[] => {
+  const excluded = new Set(excludedIds);
+  const visible = sections.filter((s) => !excluded.has(s.id));
+  if (order.length === 0) return visible;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return visible
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => {
+      const ra = rank.has(a.s.id) ? (rank.get(a.s.id) as number) : Infinity;
+      const rb = rank.has(b.s.id) ? (rank.get(b.s.id) as number) : Infinity;
+      return ra - rb || a.i - b.i;
+    })
+    .map((x) => x.s);
+};
