@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
-import { useManualHighlighting } from '../hooks/dashboard/useManualHighlighting';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
-import { parseCSV } from '../utils/dashboard/csvParser';
-import { moveArrayItem } from '../utils/dashboard/reorder';
+import { buildTextSections, DEFAULT_SPLIT_CONFIG, type TextSplitConfig } from '../utils/dashboard/textSections';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
@@ -52,8 +50,9 @@ export const Dashboard = () => {
     stepRef.current = currentStep;
   }, [currentStep]);
 
-  const [manualInput, setManualInput] = useState('');
-  const [importMode, setImportMode] = useState<'lines' | 'sentences' | 'manual' | 'math'>('lines');
+  const [rawText, setRawText] = useState('');
+  const [importMode, setImportMode] = useState<'text' | 'math'>('text');
+  const [splitConfig, setSplitConfig] = useState<TextSplitConfig>(DEFAULT_SPLIT_CONFIG);
 
   const words = useGameStore((state) => state.words);
   const setWords = useGameStore((state) => state.setWords);
@@ -106,12 +105,16 @@ export const Dashboard = () => {
     if (openLobbyError) alert(openLobbyError);
   }, [openLobbyError]);
 
-  // Ganze Hook-Rückgaben werden an die Step-Komponenten durchgereicht
-  // (reine Präsentation); hier nur destrukturieren, was Handler brauchen.
-  const highlighting = useManualHighlighting({ manualInput, importMode, setWords, setManualInput });
-  const { resetChunks, applyChunksToWords, handleResetChunks } = highlighting;
-
   const math = useMathImport({ importMode, setWords });
+
+  // Im Text-Modus die Abschnitte reproduzierbar aus Rohtext + Regeln bauen
+  // (siehe buildTextSections). Läuft bei Text- UND Regeländerung; der
+  // Mathe-Modus schreibt die Wörter über seinen eigenen Effekt (useMathImport).
+  useEffect(() => {
+    if (importMode !== 'text') return;
+    const sections = buildTextSections(rawText, splitConfig);
+    setWords(sections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false })));
+  }, [importMode, rawText, splitConfig, setWords]);
 
   const handleExportCSV = () => {
     if (stationMode) {
@@ -146,64 +149,21 @@ export const Dashboard = () => {
     }
   };
 
-  const handleManualInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    setManualInput(value);
-    resetChunks(); // Reset manual highlighting when raw text changes
-    const parsed = parseCSV(value, importMode === 'sentences' ? 'sentences' : 'lines');
-    setWords(parsed);
+  const handleRawTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // Zeilenumbrüche früh vereinheitlichen, damit Positionen konsistent bleiben
+    // (Feinkonzept, Abschnitt 1 – relevant ab P3 für manuelle Bereiche).
+    setRawText(e.target.value.replace(/\r\n?/g, '\n'));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      setManualInput(text);
-      resetChunks(); // Reset manual highlighting when raw text changes
-      const parsed = parseCSV(text, importMode === 'sentences' ? 'sentences' : 'lines');
-      setWords(parsed);
+      const text = (event.target?.result as string) ?? '';
+      setRawText(text.replace(/\r\n?/g, '\n'));
     };
     reader.readAsText(file);
-  };
-
-  const handleImportModeChange = (mode: 'lines' | 'sentences' | 'manual' | 'math') => {
-    setImportMode(mode);
-    if (mode === 'math') {
-      // Mathe-Aufgaben werden aus mathInput/mathGap/mathGaps per Effekt gebaut.
-      return;
-    } else if (mode === 'manual') {
-      applyChunksToWords();
-    } else {
-      const parsed = parseCSV(manualInput, mode);
-      setWords(parsed);
-    }
-  };
-
-  // Löschen eines einzelnen Abschnitts im Panel: im Manuell-Modus muss der
-  // zugehörige Chunk entfernt werden (sonst bleibt er im Text markiert),
-  // sonst reicht ein direkter Eingriff in die Wörter-Liste.
-  const handleDeleteWord = (id: string) => {
-    if (importMode === 'manual') {
-      highlighting.handleDeleteChunk(id);
-    } else {
-      setWords(words.filter((w) => w.id !== id));
-    }
-  };
-
-  // Umsortieren per Drag & Drop im Abschnitte-Panel: im Manuell-Modus wandern
-  // die Textinhalte der Chunks (moveChunk), sonst wird die Wörter-Liste direkt
-  // umgestellt.
-  const handleReorderWords = (fromIndex: number, toIndex: number) => {
-    if (importMode === 'manual') {
-      const from = words[fromIndex];
-      const to = words[toIndex];
-      if (from && to) highlighting.moveChunk(from.id, to.id);
-    } else {
-      setWords(moveArrayItem(words, fromIndex, toIndex));
-    }
   };
 
   const getStationStatus = (num: number): 'idle' | 'active' | 'done' => {
@@ -311,15 +271,13 @@ export const Dashboard = () => {
           {currentStep === 'IMPORT' && (
             <ImportStep
               importMode={importMode}
-              onImportModeChange={handleImportModeChange}
-              manualInput={manualInput}
-              onManualInputChange={handleManualInputChange}
+              onImportModeChange={setImportMode}
+              rawText={rawText}
+              onRawTextChange={handleRawTextChange}
               onFileUpload={handleFileUpload}
+              splitConfig={splitConfig}
+              onSplitConfigChange={setSplitConfig}
               words={words}
-              onResetChunks={handleResetChunks}
-              onDeleteWord={handleDeleteWord}
-              onReorderWords={handleReorderWords}
-              highlighting={highlighting}
               math={math}
             />
           )}

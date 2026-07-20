@@ -14,7 +14,7 @@ import {
 import { evaluateLatexExpr } from '../../utils/dashboard/latexMath';
 import type { WordItem } from '../../types/game';
 
-type ImportMode = 'lines' | 'sentences' | 'manual' | 'math';
+type ImportMode = 'text' | 'math';
 
 /** Eine gültige Vorschau-Zeile in Dokument-Reihenfolge: entweder einfaches
  * "a op b"-Format oder eine komplexere LaTeX-Zeile (Bruch/Potenz/Wurzel). */
