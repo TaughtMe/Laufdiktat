@@ -7,9 +7,9 @@ describe('parseCSV (Zeilen)', () => {
     expect(words.map((w) => w.targetWord)).toEqual(['Haus', 'Baum', 'Schule']);
   });
 
-  it('ignoriert leere Zeilen und nimmt nur den Teil vor dem Semikolon', () => {
+  it('ignoriert leere Zeilen und behält Semikolons als normalen Text', () => {
     const words = parseCSV('Wort;Hinweis\n\n  \nZweites', 'lines');
-    expect(words.map((w) => w.targetWord)).toEqual(['Wort', 'Zweites']);
+    expect(words.map((w) => w.targetWord)).toEqual(['Wort;Hinweis', 'Zweites']);
   });
 
   it('gibt [] bei leerem Text', () => {

@@ -17,20 +17,14 @@ export const parseCSV = (text: string, mode: 'lines' | 'sentences'): WordItem[] 
   const parsedWords: WordItem[] = [];
 
   for (const segment of segments) {
-    const trimmedSegment = segment.trim();
-    if (!trimmedSegment) continue;
+    const targetWord = segment.trim();
+    if (!targetWord) continue;
 
-    // Support CSV style ";" separation
-    const parts = trimmedSegment.split(';');
-    const targetWord = parts[0].trim();
-
-    if (targetWord) {
-      parsedWords.push({
-        id: crypto.randomUUID(),
-        targetWord: targetWord,
-        isCompleted: false,
-      });
-    }
+    parsedWords.push({
+      id: crypto.randomUUID(),
+      targetWord,
+      isCompleted: false,
+    });
   }
 
   return parsedWords;

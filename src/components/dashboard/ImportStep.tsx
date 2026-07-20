@@ -259,7 +259,7 @@ export const ImportStep = ({
                 {hint(
                   importMode === 'sentences'
                     ? 'Der Text wird automatisch bei Satzzeichen (. ! ?) in Abschnitte aufgeteilt.'
-                    : 'Jede Zeile wird ein eigener Abschnitt (optional mit Semikolon für Hinweise: Wort;Hinweis).'
+                    : 'Jede Zeile wird ein eigener Abschnitt.'
                 )}
               </div>
             )}
