@@ -52,6 +52,9 @@ export const StationGame = () => {
   // auch wenn danach zurückgeblättert wird (siehe StationStudentState).
   const [finished, setFinished] = useState(false);
   const [showFinishedToast, setShowFinishedToast] = useState(false);
+  // Wird beim (Wieder-)Wählen einer Nummer gesetzt, solange der gespeicherte
+  // Stand aus der DB geladen wird – verhindert, dass kurz "Wort 1" aufblitzt.
+  const [isRestoring, setIsRestoring] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishedToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -60,6 +63,17 @@ export const StationGame = () => {
   // (oder das session-start-Broadcast verpasst wurde) -- ohne das blieb ein
   // Stationen-Tablet sonst dauerhaft auf "Warte auf Lehrer" hängen.
   const hasFetchedRoomStateRef = useRef(false);
+  // Aktuelle Nummer/Sitzung zusätzlich als Ref, damit der Realtime-Kanal EINMAL
+  // aufgebaut bleibt (statt bei jeder Nummernwahl neu abonniert zu werden) und die
+  // Handler trotzdem den frischen Wert sehen. Behebt das Re-Subscribe-Rennen, das
+  // die Wiederherstellung des Fortschritts verschluckte.
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+  // Weitester bereits erreichter Wortindex dieser Sitzung. Der gespeicherte Stand
+  // darf nie darunter fallen (Monotonie) – so kann eine Neuauswahl derselben
+  // Nummer (auch auf einem anderen Gerät) vorhandenen Fortschritt nicht auf 0
+  // zurücksetzen. Lokales Zurückblättern bleibt davon unberührt.
+  const reachedIndexRef = useRef(0);
 
   const seenKey = studentNumber !== null ? `${studentNumber}:${currentIndex}` : '';
   const hasSeenCurrent = seenKey !== '' && seenKeys.has(seenKey);
@@ -78,7 +92,7 @@ export const StationGame = () => {
           if (typeof config.isTtsEnabled === 'boolean') setTtsEnabled(config.isTtsEnabled);
           if (typeof config.strictTypingMode === 'boolean') setStrictTypingMode(config.strictTypingMode);
           if (typeof config.stationShuffle === 'boolean') setStationShuffle(config.stationShuffle);
-          if (room.sessionId && room.sessionId !== sessionId) {
+          if (room.sessionId && room.sessionId !== sessionIdRef.current) {
             setSessionId(room.sessionId);
             setView('GRID');
             setStudentNumber(null);
@@ -92,19 +106,11 @@ export const StationGame = () => {
       }
     };
     channelRef.current = supabase.channel(`room-${roomCode}`);
-    channelRef.current.on('broadcast', { event: 'sync-station-state' }, (payload) => {
-      const d = payload.payload;
-      if (d.studentNumber === studentNumber && studentNumber && sessionId) {
-        getMyProgress(roomId, sessionId, participantToken, `station-${studentNumber}`)
-          .then((progress) => {
-            if (!progress) return;
-            setCurrentIndex(progress.currentIndex);
-            setPeeks(progress.peeks);
-            setFinished(progress.finished);
-          })
-          .catch((err) => logDevError('[Room] Sichere Stationswiederherstellung fehlgeschlagen', err));
-      }
-    }).on('broadcast', { event: 'session-start' }, () => {
+    // Kein Broadcast-basiertes Wiederherstellen des Fortschritts mehr: Der Stand
+    // wird beim Wählen einer Nummer direkt aus der DB geladen (handleSelectNumber).
+    // Dadurch kann eine Fremdauswahl derselben Nummer diesen Bildschirm nicht mehr
+    // auf ein anderes Wort "ziehen" (früher: sync-station-state → getMyProgress).
+    channelRef.current.on('broadcast', { event: 'session-start' }, () => {
       void syncAuthoritativeRoomState();
     }).on('broadcast', { event: 'session-ended' }, () => {
       void syncAuthoritativeRoomState();
@@ -114,7 +120,10 @@ export const StationGame = () => {
       await syncAuthoritativeRoomState();
     });
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [roomCode, roomId, participantToken, studentNumber, sessionId, setWords, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
+    // Bewusst OHNE studentNumber/sessionId: der Kanal bleibt über die ganze
+    // Sitzung bestehen; frische Werte kommen über sessionIdRef bzw. direkt beim
+    // Nummernwechsel.
+  }, [roomCode, roomId, participantToken, setWords, setStationCount, setTtsEnabled, setStrictTypingMode, setStationShuffle, navigate]);
 
   const sendUpdate = useCallback((idx: number, p: number, isFinished: boolean) => {
     if (!channelRef.current || !studentNumber || !roomId || !participantToken || !sessionId) return;
@@ -124,7 +133,10 @@ export const StationGame = () => {
         participantToken,
         studentKey: `station-${studentNumber}`,
         stationNumber: studentNumber,
-        currentIndex: idx,
+        // Nie unter den weitesten erreichten Stand schreiben (Monotonie). So kann
+        // weder Zurückblättern noch eine Fremdauswahl der Nummer den gespeicherten
+        // Fortschritt senken. Die lokale Anzeige (currentIndex) bleibt frei.
+        currentIndex: Math.max(idx, reachedIndexRef.current),
         peeks: p,
         attempts: 0,
         errors: 0,
@@ -149,16 +161,31 @@ export const StationGame = () => {
     }, 3000);
   }, []);
 
-  const handleSelectNumber = (num: number) => {
+  const handleSelectNumber = async (num: number) => {
     setStudentNumber(num);
     setCurrentIndex(0);
     setPeeks(0);
-    // Neuer Durchlauf -> erstmal nicht fertig (ein sync-station-state direkt
-    // danach übernimmt ggf. den Stand, falls derselbe Schüler fortsetzt).
     setFinished(false);
     setView('ACTIVE');
-    if (channelRef.current) {
-      channelRef.current.send({ type: 'broadcast', event: 'request-station-state', payload: { studentNumber: num } });
+    // Fortschritt direkt und tokengebunden aus der DB laden, statt auf einen
+    // flatterigen Broadcast-Rundlauf zu warten. So steigt der Schüler zuverlässig
+    // am weitesten erreichten Wort wieder ein und nicht versehentlich bei Wort 1.
+    reachedIndexRef.current = 0;
+    if (roomId && sessionId && participantToken) {
+      setIsRestoring(true);
+      try {
+        const progress = await getMyProgress(roomId, sessionId, participantToken, `station-${num}`);
+        if (progress) {
+          setCurrentIndex(progress.currentIndex);
+          setPeeks(progress.peeks);
+          setFinished(progress.finished);
+          reachedIndexRef.current = progress.currentIndex;
+        }
+      } catch (err) {
+        logDevError('[Room] Stationsfortschritt laden fehlgeschlagen', err);
+      } finally {
+        setIsRestoring(false);
+      }
     }
     resetTimeout();
   };
@@ -177,6 +204,7 @@ export const StationGame = () => {
     if (!hasSeenCurrent) return;
     const next = currentIndex + 1;
     setCurrentIndex(next);
+    reachedIndexRef.current = Math.max(reachedIndexRef.current, next);
     sendUpdate(next, peeks, finished);
     resetTimeout();
   };
@@ -346,7 +374,7 @@ export const StationGame = () => {
             </svg>
           </button>
           <h1 className="text-lg font-bold text-darkteal-800 dark:text-white truncate">
-            Nr. {studentNumber} — {currentItem?.prompt ? 'Aufgabe' : 'Wort'} {currentIndex + 1}/{words.length}
+            Nr. {studentNumber} — {currentItem?.prompt ? 'Aufgabe' : 'Wort'} {isRestoring ? '…' : `${currentIndex + 1}/${words.length}`}
           </h1>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -392,7 +420,11 @@ export const StationGame = () => {
         </div>
 
         <div className="z-10 w-full max-w-md flex flex-col items-center">
-          {bimanualLocked ? (
+          {isRestoring ? (
+            <div className="text-center pointer-events-none">
+              <p className="text-darkteal-800 dark:text-slate-300 font-bold text-base sm:text-lg">Lade Fortschritt…</p>
+            </div>
+          ) : bimanualLocked ? (
             <div
               ref={revealContainerRef}
               className="w-[92vw] max-w-2xl h-[38vh] max-h-[420px] flex items-center justify-center pointer-events-none"

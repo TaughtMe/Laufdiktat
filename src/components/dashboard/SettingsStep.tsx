@@ -329,8 +329,10 @@ export const SettingsStep = ({
 
             {ttsRow}
             {shuffleRow}
-            {strictTypingRow}
-            {starsRow}
+            {/* Im Stationsmodus tippen die Schüler nicht am eigenen Gerät und es
+                werden keine Sterne vergeben – beide Optionen sind dort sinnlos. */}
+            {selected !== 'STATION' && strictTypingRow}
+            {selected !== 'STATION' && starsRow}
           </div>
         </div>
       </div>
