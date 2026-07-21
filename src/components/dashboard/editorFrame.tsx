@@ -38,11 +38,21 @@ export const EDITOR_MIN_HEIGHT = 'min-h-[13rem]';
  */
 const CLONE = '[box-decoration-break:clone] [-webkit-box-decoration-break:clone] rounded-[0.2rem]';
 
-/** Automatische Abschnitte: dezent, abwechselnd zur Unterscheidung benachbarter. */
-export const SEGMENT_AUTO_EVEN = `bg-accent/10 ${CLONE}`;
-export const SEGMENT_AUTO_ODD = `bg-accent/20 ${CLONE}`;
-/** Manuelle Abschnitte: deutlicher, zusätzlich gestrichelte Outline. */
-export const SEGMENT_MANUAL = `bg-accent/30 [outline:1px_dashed_var(--color-accent-strong)] ${CLONE}`;
+/**
+ * Automatische Abschnitte: abwechselnd schwächer/stärker, damit zwei benachbarte
+ * Abschnitte auch ohne sichtbaren Trenner auseinanderzuhalten sind. Der Wechsel
+ * liegt bewusst auf BEIDEN Kanälen – Fläche und Umrandung: die Fläche allein
+ * verschwimmt im Fließtext, die Umrandung allein ist auf den Schul-iPads bei
+ * seitlichem Blickwinkel kaum zu sehen.
+ *
+ * `accent` vs. `accent-strong` für die Umrandung funktioniert in beiden Themes:
+ * im Hellen ist accent-strong dunkler, im Dunklen heller – in beiden Fällen also
+ * der kontrastreichere der beiden Töne.
+ */
+export const SEGMENT_AUTO_EVEN = `bg-accent/20 [outline:1.5px_solid_var(--color-accent)] ${CLONE}`;
+export const SEGMENT_AUTO_ODD = `bg-accent/38 [outline:1.5px_solid_var(--color-accent-strong)] ${CLONE}`;
+/** Manuelle Abschnitte: kräftigste Fläche, gestrichelte Outline als Merkmal. */
+export const SEGMENT_MANUAL = `bg-accent/45 [outline:2px_dashed_var(--color-accent-strong)] ${CLONE}`;
 
 interface EditorFrameProps {
   children: ReactNode;

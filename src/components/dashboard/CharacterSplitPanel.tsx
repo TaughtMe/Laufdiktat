@@ -2,8 +2,12 @@ import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { TextSplitConfig } from '../../utils/dashboard/textSections';
 
-/** Häufige Trennzeichen als direkt anwählbare Chips (Feinkonzept, Abschnitt 3). */
-const COMMON_PUNCTUATION = ['.', '!', '?', ';', ':', '…', ','];
+/**
+ * Nur die vier alltäglichen Satzzeichen als Chips. Alles Weitere (; : … –) ist
+ * selten genug, dass es über „Eigener Trenner" eingegeben werden kann, statt die
+ * Reihe dauerhaft zu verlängern.
+ */
+const COMMON_PUNCTUATION = ['.', ',', '!', '?'];
 
 interface CharacterSplitPanelProps {
   config: TextSplitConfig;
@@ -20,6 +24,11 @@ interface CharacterSplitPanelProps {
  */
 export const CharacterSplitPanel = ({ config, onChange }: CharacterSplitPanelProps) => {
   const [draft, setDraft] = useState('');
+
+  // Zeichen, die früher Chips waren (oder aus einer gespeicherten Konfiguration
+  // stammen) und noch aktiv sind, bekommen weiter einen Chip – sonst ließen sie
+  // sich nicht mehr abwählen.
+  const chips = [...COMMON_PUNCTUATION, ...config.punctuation.filter((c) => !COMMON_PUNCTUATION.includes(c))];
 
   const togglePunctuation = (ch: string) => {
     const has = config.punctuation.includes(ch);
@@ -55,7 +64,7 @@ export const CharacterSplitPanel = ({ config, onChange }: CharacterSplitPanelPro
       </span>
 
       <div className="flex flex-wrap gap-1.5">
-        {COMMON_PUNCTUATION.map((ch) => {
+        {chips.map((ch) => {
           const active = config.punctuation.includes(ch);
           return (
             <button
@@ -75,6 +84,8 @@ export const CharacterSplitPanel = ({ config, onChange }: CharacterSplitPanelPro
         })}
       </div>
 
+      {/* h-10 und border-2 wie die Zeichen-Chips darüber: die Zeile liest sich als
+          Fortsetzung derselben Reihe, nicht als angehängtes Extra. */}
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -87,16 +98,16 @@ export const CharacterSplitPanel = ({ config, onChange }: CharacterSplitPanelPro
             }
           }}
           placeholder="Eigener Trenner …"
-          className="min-w-0 flex-1 rounded-[9px] border border-line bg-surface px-2.5 py-2 font-mono
+          className="h-10 min-w-0 flex-1 rounded-[10px] border-2 border-line bg-surface px-3 font-mono
             text-[13px] text-ink outline-none focus:border-accent"
         />
         <button
           type="button"
           onClick={addDelimiter}
           disabled={!draft.trim()}
-          className="flex shrink-0 cursor-pointer items-center gap-1 rounded-[9px] bg-surface px-2.5 py-2
-            text-[12px] font-bold text-ink-muted transition-colors hover:text-ink
-            disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 shrink-0 cursor-pointer items-center gap-1 rounded-[10px] border-2
+            border-line bg-surface px-3 text-[12px] font-bold text-ink-muted transition-colors
+            hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus className="h-3.5 w-3.5" />
           <span>Hinzufügen</span>
