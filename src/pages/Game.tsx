@@ -16,6 +16,7 @@ import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '
 import { clearPendingJoin } from '../utils/game/pendingJoin';
 import { getMyProgress, upsertProgress } from '../utils/rooms/roomApi';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
+import { useWakeLock } from '../hooks/shared/useWakeLock';
 import { seededShuffle } from '../utils/shared/seededShuffle';
 import { STRICT_INPUT_ATTRS, isBlockedInputType, isSuspiciousBulkInsert, sanitizeMathInput } from '../utils/game/strictTyping';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
@@ -225,7 +226,7 @@ export const Game = () => {
   const onAttackRef = useRef<(type: AttackType) => void>(() => {});
   const dispatchAttack = useCallback((type: AttackType) => onAttackRef.current(type), []);
 
-  const { connectionWarning, roster, sendProgress, sendFinished, sendAttack } = useGameRoom({
+  const { connectionWarning, presenceOk, roster, sendProgress, sendFinished, sendAttack } = useGameRoom({
     roomCode,
     studentName,
     roomId,
@@ -260,6 +261,14 @@ export const Game = () => {
   } = useBattleMode({ studentName, currentWordIndex, battleOptions, bimanualLocked, roster, sendAttack });
 
   useEffect(() => { onAttackRef.current = onAttack; }, [onAttack]);
+
+  // Bildschirm während der ganzen Raum-Sitzung wachhalten (Warten auf den
+  // Lehrer, laufendes Diktat, Stationsmodus -- StationGame wird von hier aus
+  // gerendert, der Lock deckt es mit ab). Ein einschlafender Bildschirm
+  // trennt sonst die Realtime-Verbindung und der Schüler verschwindet aus
+  // der Lehrer-Lobby, obwohl sein Gerät angemeldet bleibt. Nach Spielende
+  // bzw. beendeter Sitzung darf das Gerät wieder normal in den Standby.
+  useWakeLock(!!roomCode && !sessionEnded && gameState !== 'FINISHED');
 
   useEffect(() => {
     if (bimanualLocked) {
@@ -484,6 +493,26 @@ export const Game = () => {
             <p className="text-slate-400 mb-6">
               Raum-Code: <span className="font-mono font-bold text-brand-400">{roomCode}</span>
             </p>
+            {/* Live-Verbindungsstatus: bisher zeigte dieser Bildschirm auch bei
+                abgerissener Verbindung ein unauffälliges "Warte auf Lehrer...",
+                während der Schüler in der Lehrer-Lobby fehlte. Jetzt sieht man
+                beim Rumgehen sofort, welches Gerät wirklich verbunden ist. */}
+            {connectionWarning ? (
+              <div className="flex items-center justify-center gap-2 text-sm font-semibold text-red-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                Keine Verbindung – verbinde neu...
+              </div>
+            ) : presenceOk ? (
+              <div className="flex items-center justify-center gap-2 text-sm font-semibold text-emerald-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
+                Verbunden – du bist in der Lobby sichtbar
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-sm font-semibold text-amber-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-pulse shrink-0" />
+                Verbinde...
+              </div>
+            )}
           </div>
           {showExitConfirm && (
             <ExitConfirm onConfirm={leaveToHome} onCancel={() => setShowExitConfirm(false)} />

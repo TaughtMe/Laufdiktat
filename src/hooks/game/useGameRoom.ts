@@ -72,6 +72,11 @@ export const useGameRoom = ({
   enabled = true,
 }: UseGameRoomArgs) => {
   const [connectionWarning, setConnectionWarning] = useState(false);
+  // Eigene Presence-Anmeldung bestätigt: erst wenn track() mit 'ok' quittiert
+  // wurde, ist der Schüler in der Lehrer-Lobby wirklich sichtbar. Wird auf dem
+  // Wartebildschirm angezeigt (siehe Game.tsx), damit ein hängendes Gerät
+  // sofort auffällt statt still in der Lobby zu fehlen.
+  const [presenceOk, setPresenceOk] = useState(false);
   const [roster, setRoster] = useState<Record<string, number>>({}); // Name -> aktueller Wortindex
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const lastIncomingAttackAtRef = useRef(0);
@@ -114,6 +119,45 @@ export const useGameRoom = ({
     );
     channelRef.current = channel;
 
+    // Presence-Anmeldung mit Quittungsprüfung und Retry: track() kann
+    // 'timed out' oder 'rate limited' zurückgeben. Ohne Retry bliebe der
+    // Schüler dann dauerhaft unsichtbar in der Lehrer-Lobby (Channel
+    // verbunden, aber nie in der Presence), während sein Gerät den ganz
+    // normalen Wartebildschirm zeigt -- genau der "18 angemeldet, 17
+    // sichtbar"-Fall aus dem Unterricht.
+    const trackPresence = async (): Promise<void> => {
+      if (!studentName) return;
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        // Kanal wurde zwischenzeitlich abgebaut (Unmount/Neuaufbau) -- der
+        // nächste SUBSCRIBED-Durchlauf des neuen Kanals übernimmt dann.
+        if (channelRef.current !== channel) return;
+        const result = await channel.track({ name: studentName, appVersion: APP_VERSION });
+        if (result === 'ok') {
+          setPresenceOk(true);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
+      setPresenceOk(false);
+      logDevError('[Room] Presence-Anmeldung wiederholt fehlgeschlagen', null);
+    };
+
+    // Gerät wacht aus dem Standby auf / Tab kommt zurück in den Vordergrund:
+    // nicht passiv auf den Auto-Reconnect-Backoff warten, sondern sofort
+    // anstoßen. Steht der Kanal noch, genügt eine frische Presence-Anmeldung;
+    // war der Socket getrennt (Bildschirmsperre), beschleunigt connect() den
+    // Wiederaufbau -- das folgende SUBSCRIBED-Event erledigt track/Resync dann
+    // wie beim Erstbeitritt.
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (channel.state === 'joined') {
+        void trackPresence();
+      } else {
+        supabase.realtime.connect();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     channel
       .on('broadcast', { event: 'session-start' }, () => {
         void syncAuthoritativeRoomState();
@@ -148,6 +192,9 @@ export const useGameRoom = ({
       .subscribe(async (status) => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setConnectionWarning(true);
+          setPresenceOk(false);
+        } else if (status === 'CLOSED') {
+          setPresenceOk(false);
         } else if (status === 'SUBSCRIBED') {
           setConnectionWarning(false);
           if (studentName) {
@@ -158,7 +205,7 @@ export const useGameRoom = ({
             // Das ersetzt die frühere hasAnnouncedJoinRef-Gating-Logik –
             // Supabase unterscheidet echten Erstbeitritt und Reconnect jetzt
             // selbst, zuverlässiger als unser eigenes Heuristik-Flag.
-            await channel.track({ name: studentName, appVersion: APP_VERSION });
+            await trackPresence();
             // Eigenen Fortschritt ankündigen und den der anderen abfragen –
             // unschädlich, auch nach einem bloßen Reconnect erneut zu senden.
             await channel.send({
@@ -180,7 +227,9 @@ export const useGameRoom = ({
       });
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       channelRef.current = null;
+      setPresenceOk(false);
       supabase.removeChannel(channel);
     };
   }, [roomCode, studentName, roomId, participantToken, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
@@ -210,5 +259,5 @@ export const useGameRoom = ({
     return true;
   }, [studentName]);
 
-  return { connectionWarning, roster, sendProgress, sendFinished, sendAttack };
+  return { connectionWarning, presenceOk, roster, sendProgress, sendFinished, sendAttack };
 };
