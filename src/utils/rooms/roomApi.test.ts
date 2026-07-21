@@ -6,7 +6,7 @@ vi.mock('../supabaseClient', () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
 }));
 
-const { openRoom, joinRoom, getRoomState, updateSession, endRoom, upsertProgress, getMyProgress, getRoomStudents } =
+const { openRoom, joinRoom, getRoomState, updateSession, endRoom, upsertProgress, getMyProgress, getRoomStudents, getRoomParticipants, removeRoomParticipant } =
   await import('./roomApi');
 
 describe('roomApi', () => {
@@ -258,6 +258,54 @@ describe('roomApi', () => {
     it('wirft bei einem Fehler', async () => {
       rpcMock.mockResolvedValue({ data: null, error: { message: 'boom' } });
       await expect(getRoomStudents('r1', 'tok')).rejects.toThrow('boom');
+    });
+  });
+
+  describe('getRoomParticipants', () => {
+    it('mappt registrierte Teilnehmer von snake_case auf camelCase', async () => {
+      rpcMock.mockResolvedValue({
+        data: [
+          { student_key: 'Schlauer Igel', last_seen_at: '2026-07-21T09:00:00Z' },
+          { student_key: 'Flinker Fuchs', last_seen_at: null },
+        ],
+        error: null,
+      });
+      const result = await getRoomParticipants('r1', 'tok');
+      expect(rpcMock).toHaveBeenCalledWith('get_room_participants_secure', {
+        p_room_id: 'r1',
+        p_access_token: 'tok',
+      });
+      expect(result).toEqual([
+        { studentKey: 'Schlauer Igel', lastSeenAt: '2026-07-21T09:00:00Z' },
+        { studentKey: 'Flinker Fuchs', lastSeenAt: null },
+      ]);
+    });
+
+    it('gibt eine leere Liste zurück, wenn der Token nicht passt', async () => {
+      rpcMock.mockResolvedValue({ data: [], error: null });
+      expect(await getRoomParticipants('r1', 'falsch')).toEqual([]);
+    });
+
+    it('wirft bei einem Fehler', async () => {
+      rpcMock.mockResolvedValue({ data: null, error: { message: 'boom' } });
+      await expect(getRoomParticipants('r1', 'tok')).rejects.toThrow('boom');
+    });
+  });
+
+  describe('removeRoomParticipant', () => {
+    it('sendet room_id, Token und den Teilnehmernamen', async () => {
+      rpcMock.mockResolvedValue({ error: null });
+      await removeRoomParticipant('r1', 'tok', 'Schlauer Igel');
+      expect(rpcMock).toHaveBeenCalledWith('remove_room_participant_secure', {
+        p_room_id: 'r1',
+        p_access_token: 'tok',
+        p_student_key: 'Schlauer Igel',
+      });
+    });
+
+    it('wirft bei einem Fehler', async () => {
+      rpcMock.mockResolvedValue({ error: { message: 'Ungueltiger Raum oder Token' } });
+      await expect(removeRoomParticipant('r1', 'falsch', 'x')).rejects.toThrow('Ungueltiger Raum oder Token');
     });
   });
 });

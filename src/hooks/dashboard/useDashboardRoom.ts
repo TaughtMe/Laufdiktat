@@ -9,6 +9,8 @@ import {
   endRoom,
   getRoomState,
   getRoomStudents,
+  getRoomParticipants,
+  removeRoomParticipant,
   type RoomStudentRow,
 } from '../../utils/rooms/roomApi';
 import {
@@ -156,6 +158,11 @@ export const useDashboardRoom = ({
   // Heartbeat) – wird für die Lobby-Ansicht und die "Verbindung
   // abgebrochen"-Erkennung gebraucht.
   const [connectedStudents, setConnectedStudents] = useState<Set<string>>(new Set());
+  // DB-Sicht der Lobby: alle im Raum REGISTRIERTEN Teilnehmer (siehe
+  // room_participants). Ergänzt die Presence-Sicht oben -- ein Schüler, dessen
+  // Tablet gerade im Standby ist, bleibt hier drin und wird in der Lobby
+  // ausgegraut angezeigt statt kommentarlos zu fehlen.
+  const [registeredStudents, setRegisteredStudents] = useState<string[]>([]);
   // App-Version je Schüler (aus der Presence-Payload), fürs Lobby-Kompatibilitäts-Badge.
   const [studentVersions, setStudentVersions] = useState<Record<string, string>>({});
   const [hadTwoConnections, setHadTwoConnections] = useState(false);
@@ -210,6 +217,53 @@ export const useDashboardRoom = ({
     return students;
   };
 
+  const refreshParticipants = async (): Promise<void> => {
+    if (!roomIdRef.current || !accessTokenRef.current) return;
+    const participants = await getRoomParticipants(roomIdRef.current, accessTokenRef.current);
+    setRegisteredStudents(participants.map((p) => p.studentKey));
+  };
+
+  // Wie scheduleAuthoritativeRefresh unten, aber für die Teilnehmerliste:
+  // während der Beitrittswelle (18 Geräte nacheinander) feuert Presence-sync
+  // pro Beitritt einmal -- ohne Debounce wären das 18 einzelne DB-Abfragen.
+  const refreshParticipantsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleParticipantsRefresh = () => {
+    if (refreshParticipantsTimerRef.current) clearTimeout(refreshParticipantsTimerRef.current);
+    refreshParticipantsTimerRef.current = setTimeout(() => {
+      refreshParticipants().catch((err) => {
+        logDevError('[Room] Abgleich der Teilnehmerliste fehlgeschlagen', err);
+      });
+    }, 300);
+  };
+
+  /**
+   * Entfernt einen (länger inaktiven) Teilnehmer samt Fortschritt aus dem
+   * Raum -- Lobby-Aktion auf den ausgegrauten Karten. Erst nach erfolgreichem
+   * DB-Delete verschwindet er auch aus allen lokalen Listen.
+   */
+  const handleRemoveStudent = async (studentKey: string) => {
+    if (!roomIdRef.current || !accessTokenRef.current) return;
+    try {
+      await removeRoomParticipant(roomIdRef.current, accessTokenRef.current, studentKey);
+    } catch (err) {
+      logDevError('[Room] Entfernen des Teilnehmers fehlgeschlagen', err);
+      alert('Der Schüler konnte nicht entfernt werden. Bitte Internetverbindung prüfen und erneut versuchen.');
+      return;
+    }
+    setRegisteredStudents((prev) => prev.filter((name) => name !== studentKey));
+    setStudentsInLobby((prev) => prev.filter((name) => name !== studentKey));
+    setStudentVersions((prev) => {
+      const next = { ...prev };
+      delete next[studentKey];
+      return next;
+    });
+    setLiveProgress((prev) => {
+      const next = { ...prev };
+      delete next[studentKey];
+      return next;
+    });
+  };
+
   // Broadcasts dienen nur als schneller Aenderungshinweis. Der Inhalt selbst
   // wird nicht vertraut; nach kurzem Debounce lesen wir den tokengebundenen
   // Datenbankstand. So erzeugt ein gefaelschtes Broadcast keine Fake-Ergebnisse.
@@ -224,6 +278,30 @@ export const useDashboardRoom = ({
 
   useEffect(() => () => {
     if (refreshStudentsTimerRef.current) clearTimeout(refreshStudentsTimerRef.current);
+    if (refreshParticipantsTimerRef.current) clearTimeout(refreshParticipantsTimerRef.current);
+  }, []);
+
+  // Lehrergerät wacht aus dem Standby auf / Tab kommt zurück in den
+  // Vordergrund (z. B. iPad am Beamer): Verbindung sofort anstoßen statt auf
+  // den Auto-Reconnect-Backoff zu warten, und den autoritativen Stand
+  // (Ergebnisse + Teilnehmerliste) nachziehen -- Broadcasts, die während des
+  // Standbys verpasst wurden, kommen nicht nach. Gegenstück zur gleichen
+  // Logik auf der Schülerseite (useGameRoom.ts).
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!channelRef.current) return;
+      if (channelRef.current.state !== 'joined') {
+        supabase.realtime.connect();
+      }
+      scheduleAuthoritativeRefresh();
+      scheduleParticipantsRefresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // Die schedule*-Funktionen arbeiten ausschließlich über Refs -- die beim
+    // Mount eingefangenen Instanzen bleiben dauerhaft gültig.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Baut den Realtime-Channel für einen Code auf (Listener, keine
@@ -250,6 +328,9 @@ export const useDashboardRoom = ({
       const keys = Object.keys(state);
       setConnectedStudents(new Set(keys));
       if (keys.length >= 1) setHadTwoConnections(true);
+      // Jede Presence-Änderung kann einen neuen DB-Teilnehmer bedeuten --
+      // die registrierte Liste (angemeldet vs. verbunden) nachziehen.
+      scheduleParticipantsRefresh();
 
       setStudentsInLobby((prev) => {
         const next = [...prev];
@@ -367,6 +448,11 @@ export const useDashboardRoom = ({
         // Detail-Ergebnisse fehlen dann bis zum nächsten Broadcast.
         logDevError('[Room] Wiederherstellung der Ergebnisdaten fehlgeschlagen', err);
       }
+      // Registrierte Teilnehmer direkt mitladen -- der nächste Presence-sync
+      // käme sonst erst, wenn sich ein Verbindungszustand ändert.
+      refreshParticipants().catch((err) => {
+        logDevError('[Room] Wiederherstellung der Teilnehmerliste fehlgeschlagen', err);
+      });
 
       const channel = await attachChannel(saved.roomCode);
       channel.subscribe((status) => {
@@ -391,6 +477,7 @@ export const useDashboardRoom = ({
     setHadTwoConnections(false);
     setOpenLobbyError(null);
     setConnectedStudents(new Set());
+    setRegisteredStudents([]);
 
     // Raum in der DB anlegen (Kahoot-artige, kollisionssichere Code-Vergabe,
     // siehe open_room() in der Migration). Schlägt das fehl (Migration noch
@@ -481,6 +568,7 @@ export const useDashboardRoom = ({
     setResults([]);
     setStudentsInLobby([]);
     setConnectedStudents(new Set());
+    setRegisteredStudents([]);
     setStudentVersions({});
     setLiveProgress({});
     setHadTwoConnections(false);
@@ -500,6 +588,7 @@ export const useDashboardRoom = ({
     results,
     studentsInLobby,
     connectedStudents,
+    registeredStudents,
     studentVersions,
     hadTwoConnections,
     connectionWarning,
@@ -508,5 +597,6 @@ export const useDashboardRoom = ({
     handleOpenLobby,
     handleStartSession,
     handleEndSession,
+    handleRemoveStudent,
   };
 };

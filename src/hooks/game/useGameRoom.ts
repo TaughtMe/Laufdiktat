@@ -159,6 +159,19 @@ export const useGameRoom = ({
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     channel
+      // Getrennte Mitspieler aus dem Battle-Roster nehmen: das Roster wuchs
+      // bisher nur (Broadcast-basiert), wodurch ein Schüler, der die
+      // Verbindung verlor, dauerhaft als Angriffsziel wählbar blieb -- der
+      // Angriff verpuffte dann wirkungslos. Presence liefert den echten
+      // Verbindungsstand; kommt der Mitspieler zurück, trägt ihn sein
+      // nächstes student-progress-Broadcast automatisch wieder ein.
+      .on('presence', { event: 'sync' }, () => {
+        const present = new Set(Object.keys(channel.presenceState()));
+        setRoster((prev) => {
+          const entries = Object.entries(prev).filter(([name]) => present.has(name));
+          return entries.length === Object.keys(prev).length ? prev : Object.fromEntries(entries);
+        });
+      })
       .on('broadcast', { event: 'session-start' }, () => {
         void syncAuthoritativeRoomState();
       })

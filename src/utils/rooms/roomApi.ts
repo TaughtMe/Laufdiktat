@@ -229,6 +229,55 @@ export interface RoomStudentRow extends StudentProgress {
   appVersion: string | null;
 }
 
+export interface RoomParticipantRow {
+  studentKey: string;
+  lastSeenAt: string | null;
+}
+
+/**
+ * Liest alle im Raum REGISTRIERTEN Teilnehmer (Lehrer-Dashboard, tokengebunden).
+ * Ergänzt die Presence-Sicht ("wer ist JETZT verbunden") um die DB-Sicht
+ * ("wer ist angemeldet") -- siehe LobbyStep.tsx: ausgegraute Karten für
+ * registrierte, aber gerade getrennte Geräte.
+ */
+export const getRoomParticipants = async (
+  roomId: string,
+  accessToken: string
+): Promise<RoomParticipantRow[]> => {
+  const { data, error } = await supabase.rpc('get_room_participants_secure', {
+    p_room_id: roomId,
+    p_access_token: accessToken,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    studentKey: row.student_key as string,
+    lastSeenAt: (row.last_seen_at as string | null) ?? null,
+  }));
+};
+
+/**
+ * Entfernt einen registrierten Teilnehmer samt gespeichertem Fortschritt aus
+ * dem Raum (Lehrer-Dashboard, tokengebunden) -- für länger inaktive Geräte in
+ * der Lobby. Ein erneuter Beitritt desselben Schülers legt eine frische
+ * Identität an (siehe join_room_secure).
+ */
+export const removeRoomParticipant = async (
+  roomId: string,
+  accessToken: string,
+  studentKey: string
+): Promise<void> => {
+  const { error } = await supabase.rpc('remove_room_participant_secure', {
+    p_room_id: roomId,
+    p_access_token: accessToken,
+    p_student_key: studentKey,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
 /** Liest den Fortschritt ALLER Schüler eines Raums (Lehrer-Dashboard, tokengebunden – Rehydrierung nach einem Reload). */
 export const getRoomStudents = async (roomId: string, accessToken: string): Promise<RoomStudentRow[]> => {
   const { data, error } = await supabase.rpc('get_room_students_secure', {

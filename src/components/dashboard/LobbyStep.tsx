@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Activity, Maximize2, XCircle } from 'lucide-react';
+import { Activity, Maximize2, X, XCircle } from 'lucide-react';
 import { AnimalAvatar } from '../shared/AnimalAvatar';
 import { RoomQrOverlay } from '../shared/RoomQrOverlay';
 
@@ -9,12 +9,16 @@ interface LobbyStepProps {
   stationMode: boolean;
   /** Presence-basiert: wer ist JETZT GERADE verbunden (siehe useDashboardRoom.ts). */
   connectedStudents: string[];
+  /** DB-basiert: wer ist im Raum REGISTRIERT (auch wenn gerade getrennt). */
+  registeredStudents: string[];
   studentVersions: Record<string, string>;
   appVersion: string;
   connectionWarning: boolean;
   hadTwoConnections: boolean;
   /** Verbindung erneut aufbauen (öffnet den Realtime-Channel neu). */
   onRetry: () => void;
+  /** Entfernt einen registrierten, aber getrennten Teilnehmer aus dem Raum. */
+  onRemoveStudent: (name: string) => void;
 }
 
 /** Hinweis-Panel für Verbindungs-Zustände (Warten/Abbruch/Serverfehler). */
@@ -58,15 +62,25 @@ export const LobbyStep = ({
   roomCode,
   stationMode,
   connectedStudents,
+  registeredStudents,
   studentVersions,
   appVersion,
   connectionWarning,
   hadTwoConnections,
   onRetry,
+  onRemoveStudent,
 }: LobbyStepProps) => {
   const [showLargeQrCode, setShowLargeQrCode] = useState(false);
-  const studentCountLabel = `${connectedStudents.length} Schüler`;
   const joinUrl = `${window.location.origin}/?room=${roomCode}`;
+
+  // Registriert-aber-getrennt (Standby, kurzer WLAN-Ausfall, Tab zu):
+  // ausgegraut anzeigen statt kommentarlos verschwinden zu lassen -- so ist
+  // sofort sichtbar, WELCHES Gerät fehlt, und die Zählung stimmt wieder mit
+  // "alle Schüler haben sich angemeldet" überein. Die Presence-Liste kann der
+  // DB-Liste kurz voraus sein (Debounce), daher die Vereinigung als Gesamtzahl.
+  const connectedSet = new Set(connectedStudents);
+  const disconnectedStudents = registeredStudents.filter((name) => !connectedSet.has(name));
+  const totalCount = connectedStudents.length + disconnectedStudents.length;
 
   const retryButton = (
     <button
@@ -122,7 +136,11 @@ export const LobbyStep = ({
       <div className="bg-surface border border-line rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col gap-3.5 min-h-0">
         <div className="flex items-center gap-2 shrink-0">
           <span className={`w-[7px] h-[7px] rounded-full ${connectionWarning ? 'bg-danger' : 'bg-ok'}`} />
-          <span className="text-[13px] font-extrabold text-ink">{connectedStudents.length} verbunden</span>
+          <span className="text-[13px] font-extrabold text-ink">
+            {disconnectedStudents.length > 0
+              ? `${connectedStudents.length} von ${totalCount} verbunden`
+              : `${connectedStudents.length} verbunden`}
+          </span>
         </div>
 
         {connectionWarning ? (
@@ -133,7 +151,7 @@ export const LobbyStep = ({
             text="Die Echtzeit-Verbindung zum Server wurde unterbrochen. Bitte versuche es erneut."
             action={retryButton}
           />
-        ) : hadTwoConnections && connectedStudents.length < 1 ? (
+        ) : hadTwoConnections && totalCount < 1 ? (
           <StatusPanel
             icon={<XCircle className="w-6 h-6 animate-bounce" />}
             tone="error"
@@ -141,7 +159,7 @@ export const LobbyStep = ({
             text="Ein zuvor verbundenes Gerät hat die Verbindung verloren."
             action={retryButton}
           />
-        ) : connectedStudents.length < 1 ? (
+        ) : totalCount < 1 ? (
           <StatusPanel
             icon={<Activity className="w-6 h-6" />}
             tone="wait"
@@ -180,6 +198,32 @@ export const LobbyStep = ({
                 </div>
               );
             })}
+            {/* Registriert, aber gerade getrennt (Standby/WLAN/Tab zu):
+                ausgegraut mit Entfernen-Kreuz. Wacht das Gerät wieder auf,
+                wandert die Karte automatisch zurück in den "Bereit"-Zustand. */}
+            {disconnectedStudents.map((name) => (
+              <div
+                key={name}
+                className="relative bg-surface-2 rounded-[14px] px-2 py-2.5 flex flex-col items-center gap-1 text-center opacity-55"
+              >
+                <button
+                  type="button"
+                  onClick={() => onRemoveStudent(name)}
+                  aria-label={`${name} aus dem Raum entfernen`}
+                  title="Aus dem Raum entfernen"
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-surface text-ink-faint hover:text-danger hover:bg-danger/10 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X className="w-3 h-3" strokeWidth={3} />
+                </button>
+                <div className="w-10 h-10 rounded-[10px] bg-surface shadow-[inset_0_0_0_2px_var(--border)] flex items-center justify-center shrink-0 grayscale">
+                  <AnimalAvatar studentName={name} className="w-7 h-7" />
+                </div>
+                <span className="text-[11px] font-bold text-ink-muted whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
+                  {name}
+                </span>
+                <span className="text-[9px] font-bold text-ink-faint">Getrennt</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -188,7 +232,7 @@ export const LobbyStep = ({
         <RoomQrOverlay
           roomCode={roomCode}
           onClose={() => setShowLargeQrCode(false)}
-          status={`${studentCountLabel} angemeldet`}
+          status={`${connectedStudents.length} Schüler verbunden`}
         />
       )}
     </div>

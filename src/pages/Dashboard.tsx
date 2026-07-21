@@ -26,6 +26,7 @@ import { type DashboardStep } from '../components/dashboard/stepMeta';
 import { LegalLink } from '../components/shared/LegalLink';
 import { APP_VERSION } from '../pwa';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
+import { useWakeLock } from '../hooks/shared/useWakeLock';
 import { useIsSmallScreen } from '../hooks/shared/useIsSmallScreen';
 import { exportResultsToCSV } from '../utils/dashboard/exportUtils';
 import { computeStars } from '../utils/game/scoring';
@@ -47,6 +48,12 @@ export const Dashboard = () => {
 
   const [currentStep, setCurrentStep] = useState<DashboardStep>('IMPORT');
   const stepRef = useRef<DashboardStep>('IMPORT');
+
+  // Auch das Lehrergerät wachhalten, solange ein Raum offen ist (Lobby/Live) --
+  // z. B. iPad am Beamer: schläft der Bildschirm ein, reißt die Realtime-
+  // Verbindung ab und die Lobby-/Live-Anzeige friert ein. Gegenstück zum
+  // Wake Lock auf der Schülerseite (Game.tsx).
+  useWakeLock(currentStep === 'LOBBY' || currentStep === 'LIVE');
   // Funktionsübersicht nur beim ersten Öffnen des Dashboards zeigen.
   const [showOnboarding, setShowOnboarding] = useState(() => {
     try { return localStorage.getItem(ONBOARDING_KEY) !== '1'; } catch { return false; }
@@ -109,6 +116,7 @@ export const Dashboard = () => {
     results,
     studentsInLobby,
     connectedStudents,
+    registeredStudents,
     studentVersions,
     hadTwoConnections,
     connectionWarning,
@@ -117,6 +125,7 @@ export const Dashboard = () => {
     handleOpenLobby,
     handleStartSession,
     handleEndSession,
+    handleRemoveStudent,
   } = useDashboardRoom({
     stepRef,
     setCurrentStep,
@@ -477,11 +486,13 @@ export const Dashboard = () => {
               roomCode={roomCode}
               stationMode={stationMode}
               connectedStudents={Array.from(connectedStudents)}
+              registeredStudents={registeredStudents}
               studentVersions={studentVersions}
               appVersion={APP_VERSION}
               connectionWarning={connectionWarning}
               hadTwoConnections={hadTwoConnections}
               onRetry={handleOpenLobby}
+              onRemoveStudent={handleRemoveStudent}
             />
           )}
 
