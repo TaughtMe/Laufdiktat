@@ -77,6 +77,42 @@ const { data: students } = await supabase.rpc('get_room_students_secure', {
 });
 check('Lehrertoken liest die Ergebnisliste', students?.length === 1);
 
+// Lobby-Uebersicht "angemeldet vs. verbunden": die Teilnehmerliste ist eine
+// personenbezogene Zusammenstellung und darf ausschliesslich mit dem
+// Lehrertoken lesbar sein -- niemals mit einem Schueler-Teilnehmertoken oder
+// einem geratenen Wert.
+const { data: participants } = await supabase.rpc('get_room_participants_secure', {
+  p_room_id: room.room_id, p_access_token: room.access_token,
+});
+check('Lehrertoken liest die Teilnehmerliste', participants?.length === 1);
+
+const { data: foreignParticipants } = await supabase.rpc('get_room_participants_secure', {
+  p_room_id: room.room_id, p_access_token: participant.participant_token,
+});
+check('Schuelertoken liest die Teilnehmerliste NICHT', (foreignParticipants?.length ?? 0) === 0);
+
+const { error: forgedRemoveError } = await supabase.rpc('remove_room_participant_secure', {
+  p_room_id: room.room_id, p_access_token: participant.participant_token,
+  p_student_key: participant.assigned_student_key,
+});
+check('Schuelertoken darf niemanden entfernen', !!forgedRemoveError);
+
+const { error: removeError } = await supabase.rpc('remove_room_participant_secure', {
+  p_room_id: room.room_id, p_access_token: room.access_token,
+  p_student_key: participant.assigned_student_key,
+});
+check('Lehrertoken entfernt einen Teilnehmer', !removeError);
+
+const { data: afterRemoval } = await supabase.rpc('get_room_participants_secure', {
+  p_room_id: room.room_id, p_access_token: room.access_token,
+});
+check('Entfernter Teilnehmer ist verschwunden', (afterRemoval?.length ?? 0) === 0);
+
+const { data: studentsAfterRemoval } = await supabase.rpc('get_room_students_secure', {
+  p_room_id: room.room_id, p_access_token: room.access_token,
+});
+check('Fortschritt des Entfernten ist mitgeloescht', (studentsAfterRemoval?.length ?? 0) === 0);
+
 const { data: directRows, error: directError } = await supabase.from('rooms').select('*').limit(1);
 check('Direkter Tabellenzugriff bleibt gesperrt', !!directError || (directRows?.length ?? 0) === 0);
 
