@@ -5,7 +5,6 @@ import {
   normalMathWord,
   buildGapTask,
   buildLatexMathWord,
-  MULTIPLICATION_TABLES,
   type MathExpr,
   type MathOp,
   type GapSlot,
@@ -45,8 +44,11 @@ export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
   const [mathAllowNegative, setMathAllowNegative] = useState(false);
   const [mathExcludeZeroOperand, setMathExcludeZeroOperand] = useState(false);
   const [mathExcludeZeroResult, setMathExcludeZeroResult] = useState(false);
-  // Einmaleins-Reihen für Mal/Geteilt (Default: alle 1–10 aktiv).
-  const [mathTables, setMathTables] = useState<number[]>([...MULTIPLICATION_TABLES]);
+  // Einmaleins-Reihen für Mal/Geteilt. Default: leer = gesamtes 1×1 (1–10).
+  // Bewusst leer statt alle aktiv, damit man gezielt eine Reihe anwählt, statt
+  // erst alle anderen abwählen zu müssen. Leer ODER alle ausgewählt = 1–10
+  // (der Generator behandelt ein leeres Array als "alle Reihen").
+  const [mathTables, setMathTables] = useState<number[]>([]);
   // Lückenaufgaben: an/aus + Lücken-Position je Aufgabe (Index -> 'a'|'b'|'result').
   const [mathGap, setMathGap] = useState(false);
   const [mathGaps, setMathGaps] = useState<GapSlot[]>([]);

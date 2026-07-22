@@ -206,8 +206,8 @@ export const MathSettingsPanel = ({
               <div className="space-y-2">
                 <h4 className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted">Einmaleins-Reihen</h4>
                 <p className="text-[11px] leading-snug text-ink-muted">
-                  Wählt, welche Reihen für · und : verwendet werden. Der Höchstwert <strong>Bis</strong> begrenzt
-                  zusätzlich das Ergebnis.
+                  Wählt, welche Reihen für · und : geübt werden. Nichts (oder alles) ausgewählt = gesamtes 1×1 (1–10).
+                  Der Höchstwert <strong>Bis</strong> begrenzt zusätzlich das Ergebnis.
                 </p>
                 {mathMaxValue < neededMax && (
                   <p className="text-[11px] leading-snug text-warn font-semibold">
