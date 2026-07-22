@@ -88,6 +88,12 @@ export const MathSettingsPanel = ({
     setMathTables(mathTables.includes(n) ? mathTables.filter((t) => t !== n) : [...mathTables, n].sort((a, b) => a - b));
   };
 
+  // Größtes mögliches Ergebnis der aktuell gewählten Reihen (leer = alle 1–10):
+  // größte Reihe × 10. Ist "Bis" kleiner, würde ein Teil der Aufgaben
+  // weggefiltert – dann blenden wir unten einen Hinweis ein.
+  const selectedTables = mathTables.length ? mathTables : [...MULTIPLICATION_TABLES];
+  const neededMax = Math.max(...selectedTables) * 10;
+
   return (
     <div className="border border-line rounded-[22px] p-4 flex flex-col gap-2.5 min-h-[11rem] lg:min-h-0 overflow-hidden">
       <div className="flex items-center justify-between shrink-0">
@@ -176,6 +182,10 @@ export const MathSettingsPanel = ({
                   <MiniStepper value={mathMaxValue} onChange={setMathMaxValue} min={-999} max={1000} />
                 </div>
               </div>
+              <p className="text-[11px] leading-snug text-ink-muted">
+                <strong>Bis</strong> ist der höchste Wert in jeder Aufgabe – auch das Ergebnis – und gilt für alle
+                Rechenarten (+ − · :). <strong>Von</strong> ist die untere Grenze und wirkt nur bei + und −.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -195,6 +205,16 @@ export const MathSettingsPanel = ({
             {showMultiplicationTables && (
               <div className="space-y-2">
                 <h4 className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-muted">Einmaleins-Reihen</h4>
+                <p className="text-[11px] leading-snug text-ink-muted">
+                  Wählt, welche Reihen für · und : verwendet werden. Der Höchstwert <strong>Bis</strong> begrenzt
+                  zusätzlich das Ergebnis.
+                </p>
+                {mathMaxValue < neededMax && (
+                  <p className="text-[11px] leading-snug text-warn font-semibold">
+                    „Bis" ist mit {displayNum(mathMaxValue)} kleiner als das größte Ergebnis dieser Reihen ({neededMax}).
+                    Für alle Aufgaben „Bis" auf mindestens {neededMax} setzen.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {MULTIPLICATION_TABLES.map((n) => {
                     const active = mathTables.includes(n);

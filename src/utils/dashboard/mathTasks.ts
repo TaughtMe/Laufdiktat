@@ -194,6 +194,12 @@ const genMul = (opts: GenOptions): { a: number; b: number } | null => {
     const factor = randInt(0, 10);
     if (opts.excludeZeroOperand && (table === 0 || factor === 0)) continue;
     const result = table * factor;
+    // Die Obergrenze (maxValue) begrenzt den höchsten in der Aufgabe
+    // vorkommenden Wert – Produkt UND Faktoren. So bleibt "Bis" auch fürs
+    // kleine 1×1 die verlässliche Grenze (z. B. keine "7 · 7 = 49" bei Bis 20).
+    // Faktoren extra prüfen, weil bei einem 0-Faktor das Produkt 0 ist, der
+    // andere Faktor aber größer als "Bis" sein könnte ("8 · 0" bei Bis 5).
+    if (Math.max(table, factor, result) > opts.maxValue) continue;
     if (opts.excludeZeroResult && result === 0) continue;
     // Reihenfolge zufällig, damit nicht immer die Einmaleins-Reihe zuerst steht.
     return Math.random() < 0.5 ? { a: table, b: factor } : { a: factor, b: table };
@@ -210,16 +216,30 @@ const genDiv = (opts: GenOptions): { a: number; b: number } | null => {
     // quotient 0 -> Dividend (a) wäre 0 (Rechenzahl) UND Ergebnis wäre 0.
     if (opts.excludeZeroOperand && quotient === 0) continue;
     if (opts.excludeZeroResult && quotient === 0) continue;
-    return { a: divisor * quotient, b: divisor };
+    const dividend = divisor * quotient;
+    // "Bis" begrenzt jeden vorkommenden Wert: Dividend, Divisor und Ergebnis.
+    // Meist ist der Dividend (a) am größten, aber bei quotient 0 ist a=0, der
+    // Divisor kann trotzdem größer als "Bis" sein ("0 : 10" bei Bis 5) – daher
+    // alle drei prüfen. So kein "30 : 10 = 3", wenn der Höchstwert 20 ist.
+    if (Math.max(dividend, divisor, quotient) > opts.maxValue) continue;
+    return { a: dividend, b: divisor };
   }
   return null;
 };
 
 /**
  * Erzeugt zufällige Aufgaben-Zeilen (als Text), die dann normal geparst
- * werden. Plus/Minus schöpfen aus dem Zahlenraum (minValue..maxValue,
- * Ergebnis eingeschlossen); Mal/Geteilt aus den gewählten Einmaleins-Reihen
- * (unabhängig vom Zahlenraum, wie im Unterricht üblich).
+ * werden.
+ *
+ * Zuständigkeit der Einstellungen (wichtig für die Grundschule):
+ * - "Bis" (maxValue) ist der HÖCHSTE Wert, der in einer Aufgabe vorkommen darf,
+ *   inklusive Ergebnis – und zwar für ALLE Rechenarten (+, −, ·, :). So bleibt
+ *   der Zahlenraum verlässlich (kein Ergebnis/keine Zahl größer als "Bis").
+ * - "Von" (minValue) ist die untere Grenze und wirkt nur auf +/− (dort dürfen
+ *   Operanden und Ergebnis nicht kleiner sein). Mal/Geteilt sind naturgemäß
+ *   nicht-negativ und starten bei 0.
+ * - Die Einmaleins-Reihen wählen NUR, welche Reihen ·/: benutzen; die
+ *   Obergrenze "Bis" begrenzt dann zusätzlich das Ergebnis.
  */
 export const generateMathLines = (opts: GenOptions): string[] => {
   const ops = opts.ops.length ? opts.ops : (['+'] as MathOp[]);
@@ -238,7 +258,9 @@ export const generateMathLines = (opts: GenOptions): string[] => {
       // Fallback, falls die Einstellungen-Kombination binnen der Versuche
       // nicht erfüllbar war (z. B. sehr enger Zahlenraum + viele Ausschlüsse).
       const safe = Math.max(opts.minValue, 1);
-      lines.push(op === '/' ? '1 : 1' : op === '*' ? `${safe} · 1` : format(safe, op, op === '-' ? 0 : safe));
+      // "1 · 1" / "1 : 1" liegen in jedem sinnvollen Zahlenraum (Bis ≥ 1) und
+      // verletzen die Obergrenze auch im engsten Fall nicht.
+      lines.push(op === '/' ? '1 : 1' : op === '*' ? '1 · 1' : format(safe, op, op === '-' ? 0 : safe));
     }
   }
   return lines;

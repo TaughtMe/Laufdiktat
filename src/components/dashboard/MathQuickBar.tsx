@@ -72,7 +72,10 @@ export const MathQuickBar = ({
         {opPill('*', mathMul, () => setMathMul((v) => !v))}
         {opPill('/', mathDiv, () => setMathDiv((v) => !v))}
       </div>
-      <div className="flex items-center gap-2">
+      <div
+        className="flex items-center gap-2"
+        title="Höchster Wert in jeder Aufgabe (auch das Ergebnis) – gilt für alle Rechenarten"
+      >
         <span className="text-[13px] font-bold text-ink">Bis:</span>
         <MiniStepper value={mathMaxValue} onChange={setMathMaxValue} min={-999} max={1000} />
       </div>

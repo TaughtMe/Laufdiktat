@@ -211,4 +211,30 @@ describe('generateMathLines', () => {
       expect(expr!.b, `Divisor 5: ${line}`).toBe(5);
     }
   });
+
+  it('deckelt Mal-Aufgaben (Produkt und Faktoren) mit der Obergrenze "Bis"', () => {
+    for (const maxValue of [5, 20, 50]) {
+      const lines = generateMathLines({ ...base, ops: ['*'], maxValue, count: 300 });
+      for (const line of lines) {
+        const expr = parseMathExpr(line);
+        expect(expr, `parsebar: ${line}`).not.toBeNull();
+        expect(expr!.result, `Ergebnis <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+        expect(Math.max(expr!.a, expr!.b), `Faktor <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+      }
+    }
+  });
+
+  it('deckelt Geteilt-Aufgaben (Dividend, Divisor und Ergebnis) mit der Obergrenze "Bis"', () => {
+    for (const maxValue of [10, 20, 50]) {
+      const lines = generateMathLines({ ...base, ops: ['/'], maxValue, count: 300 });
+      for (const line of lines) {
+        const expr = parseMathExpr(line);
+        expect(expr, `parsebar: ${line}`).not.toBeNull();
+        // Dividend (a) ist die größte Zahl und deckelt Divisor und Ergebnis.
+        expect(expr!.a, `Dividend <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+        expect(expr!.b, `Divisor <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+        expect(expr!.result, `Ergebnis <= ${maxValue}: ${line}`).toBeLessThanOrEqual(maxValue);
+      }
+    }
+  });
 });
