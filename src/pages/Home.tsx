@@ -55,7 +55,7 @@ const ANIMALS = [
   { name: 'Esel', g: 'm' }, { name: 'Robbe', g: 'f' }, { name: 'Strauß', g: 'm' },
   { name: 'Taube', g: 'f' }, { name: 'Gepard', g: 'm' }, { name: 'Schmetterling', g: 'm' },
   { name: 'Libelle', g: 'f' }, { name: 'Pudel', g: 'm' }, { name: 'Bobtail', g: 'm' },
-  { name: 'Mops', g: 'm' }, { name: 'Deutscher Schäferhund', g: 'm' }, { name: 'Collie', g: 'm' },
+  { name: 'Mops', g: 'm' }, { name: 'Schäferhund', g: 'm' }, { name: 'Collie', g: 'm' },
   { name: 'Dackel', g: 'm' }, { name: 'Perserkatze', g: 'f' }
 ];
 const getRandomName = () => {
