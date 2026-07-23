@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { RefreshCw, X, Plus } from 'lucide-react';
-import { parseMathExpr, opSymbol, displayNum, displayOperand } from '../../utils/dashboard/mathTasks';
+import { parseMathExpr, normalizeMathLine, opSymbol, displayNum, displayOperand } from '../../utils/dashboard/mathTasks';
 import { evaluateLatexExpr } from '../../utils/dashboard/latexMath';
 import { moveArrayItem } from '../../utils/dashboard/reorder';
 import { EmptyChips } from './EmptyChips';
@@ -128,7 +128,7 @@ export const MathTaskList = ({ mathInput, validCount, onChangeLines, generateSin
   // Live-Vorschau während des Tippens: einfaches Format zuerst, sonst
   // LaTeX-Fallback (siehe auch die Zeilen-Anzeige weiter unten).
   const draftExpr = parseMathExpr(draft);
-  const draftLatexValue = draftExpr ? null : evaluateLatexExpr(draft);
+  const draftLatexValue = draftExpr ? null : evaluateLatexExpr(normalizeMathLine(draft));
   const draftResult = draftExpr
     ? displayNum(draftExpr.result)
     : draftLatexValue !== null
@@ -199,7 +199,7 @@ export const MathTaskList = ({ mathInput, validCount, onChangeLines, generateSin
             const expr = parseMathExpr(line);
             // Fällt bei ungültigem einfachen Format auf die LaTeX-Auswertung
             // zurück (Brüche/Potenzen/Wurzeln, siehe latexMath.ts).
-            const latexValue = expr ? null : evaluateLatexExpr(line);
+            const latexValue = expr ? null : evaluateLatexExpr(normalizeMathLine(line));
             if (editIdx === i) {
               return renderEditField(`edit-${i}`);
             }

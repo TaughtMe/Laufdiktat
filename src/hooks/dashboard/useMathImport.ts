@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   parseMathExpr,
+  normalizeMathLine,
   generateMathLines,
   normalMathWord,
   buildGapTask,
@@ -72,10 +73,13 @@ export const useMathImport = ({ importMode, setWords }: UseMathImportArgs) => {
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
     .map((line): MathPreviewLine | null => {
-      const expr = parseMathExpr(line);
+      // Toleranz: führende Nummerierung / angehängtes "= Ergebnis" abstreifen,
+      // damit auch unsauber notierte Zeilen erkannt werden (normalizeMathLine).
+      const norm = normalizeMathLine(line);
+      const expr = parseMathExpr(norm);
       if (expr) return { type: 'simple', expr };
-      const value = evaluateLatexExpr(line);
-      return value !== null ? { type: 'latex', line, value } : null;
+      const value = evaluateLatexExpr(norm);
+      return value !== null ? { type: 'latex', line: norm, value } : null;
     })
     .filter((e): e is MathPreviewLine => e !== null);
 

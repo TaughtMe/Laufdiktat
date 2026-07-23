@@ -57,13 +57,32 @@ export type GapSlot = 'a' | 'b' | 'result';
 const parseNum = (s: string): number => parseFloat(s.replace(',', '.'));
 
 /**
+ * Räumt eine eingegebene/hochgeladene Aufgabenzeile auf, damit der Import auch
+ * etwas unsauber notierte Listen (z. B. aus einem Arbeitsblatt) akzeptiert:
+ *  - führende Aufzählungsmarke:  "1." / "1)" / "12)" / "•" / "–" / "—" (je + Leerraum)
+ *  - angehängtes Ergebnis:       "4 + 4 = 8"  →  "4 + 4"  (das Ergebnis wird berechnet)
+ *
+ * Bewusst NICHT entfernt werden führende "-", "+", "*", "·": die können ein
+ * Vorzeichen oder Operator sein ("-5 + 3" bleibt unverändert). Die
+ * Aufzählungs-Regel verlangt nach der Marke Leerraum, damit eine Dezimalzahl
+ * wie "1.5 + 2" nicht fälschlich als „Aufgabe 1" zerschnitten wird. Idempotent.
+ */
+export const normalizeMathLine = (raw: string): string => {
+  let s = raw.trim();
+  s = s.replace(/^(?:\d+[.)]\s+|[•–—]\s+)/, '').trimStart();
+  const eq = s.indexOf('=');
+  if (eq !== -1) s = s.slice(0, eq);
+  return s.trim();
+};
+
+/**
  * Parst eine Zeile wie "4+4", "12 − 5", "6·7", "20:4", "-3,5 + 2" oder
  * "7 : 2" (nicht-ganzzahliges Ergebnis 3,5) sicher (kein eval) in ihre
  * Bestandteile. Akzeptiert +, -, −, *, ×, ·, /, :, ÷. Operanden dürfen negativ
  * und/oder Dezimalzahlen sein (Komma oder Punkt).
  */
 export const parseMathExpr = (line: string): MathExpr | null => {
-  const m = line.trim().match(/^(-?\d+(?:[.,]\d+)?)\s*([+\-−*×·/:÷])\s*(-?\d+(?:[.,]\d+)?)$/);
+  const m = normalizeMathLine(line).match(/^(-?\d+(?:[.,]\d+)?)\s*([+\-−*×·/:÷])\s*(-?\d+(?:[.,]\d+)?)$/);
   if (!m) return null;
   const a = parseNum(m[1]);
   const raw = m[2];
@@ -101,9 +120,10 @@ export const parseMathLine = (line: string): WordItem | null => {
  * das berechnete Ergebnis ist die Antwort.
  */
 export const buildLatexMathWord = (line: string): WordItem | null => {
-  const value = evaluateLatexExpr(line);
+  const norm = normalizeMathLine(line);
+  const value = evaluateLatexExpr(norm);
   if (value === null) return null;
-  return { id: uid(), prompt: line.trim(), targetWord: String(round(value)), isCompleted: false, isLatex: true };
+  return { id: uid(), prompt: norm, targetWord: String(round(value)), isCompleted: false, isLatex: true };
 };
 
 /**

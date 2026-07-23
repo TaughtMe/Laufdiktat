@@ -79,6 +79,9 @@ export const UploadHelpPopover = ({ importMode }: UploadHelpPopoverProps) => {
                 <code className="font-mono text-ink">20 : 4</code> oder{' '}
                 <code className="font-mono text-ink">\frac&#123;1&#125;&#123;2&#125; + 3</code>. Erlaubt sind
                 +, −, ·, : sowie Brüche, Potenzen und Wurzeln. Die Ergebnisse werden automatisch berechnet.
+                Eine Nummerierung (<code className="font-mono text-ink">1.</code>) und ein bereits
+                angehängtes Ergebnis (<code className="font-mono text-ink">= 8</code>) werden dabei erkannt
+                und übernommen.
               </p>
             </div>
           ) : (

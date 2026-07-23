@@ -13,6 +13,7 @@ import {
   type TextSection,
 } from '../utils/dashboard/textSections';
 import { moveArrayItem } from '../utils/dashboard/reorder';
+import { normalizeMathLine } from '../utils/dashboard/mathTasks';
 import { DashboardOnboarding, ONBOARDING_KEY } from '../components/dashboard/DashboardOnboarding';
 import { DashboardMobileWarning } from '../components/dashboard/DashboardMobileWarning';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
@@ -311,9 +312,15 @@ export const Dashboard = () => {
     reader.onload = (event) => {
       const text = (event.target?.result as string) ?? '';
       if (importMode === 'math') {
-        // Gleicher Eingabekanal wie Tippen/Einfügen in die Aufgabenliste; mathInput
-        // splittet an '\n', daher hier normalisieren (applyNewRawText tut das für Text selbst).
-        math.handleMathInputChange(text.replace(/\r\n?/g, '\n'));
+        // Gleicher Eingabekanal wie Tippen/Einfügen in die Aufgabenliste. Zeilen
+        // gleich säubern (Nummerierung, angehängtes "= Ergebnis" – normalizeMathLine),
+        // damit die Liste nach dem Upload aufgeräumt ist statt roher Arbeitsblatt-Zeilen.
+        const cleaned = text
+          .replace(/\r\n?/g, '\n')
+          .split('\n')
+          .map(normalizeMathLine)
+          .join('\n');
+        math.handleMathInputChange(cleaned);
       } else {
         applyNewRawText(text);
       }

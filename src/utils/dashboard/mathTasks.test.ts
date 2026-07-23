@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMathLine, parseMathExpr, buildGapTask, generateMathLines, displayNum, type MathOp, type GenOptions } from './mathTasks';
+import { parseMathLine, parseMathExpr, normalizeMathLine, buildGapTask, generateMathLines, displayNum, type MathOp, type GenOptions } from './mathTasks';
 
 describe('parseMathLine', () => {
   it('rechnet Plus und Minus', () => {
@@ -39,6 +39,43 @@ describe('parseMathLine', () => {
     expect(parseMathLine('2.5 + 1.5')).toMatchObject({ targetWord: '4' });
     expect(parseMathLine('0,1 + 0,2')).toMatchObject({ targetWord: '0.3' }); // kein Fließkomma-Rauschen
     expect(parseMathLine('-1,5 + 4')).toMatchObject({ targetWord: '2.5' });
+  });
+
+  it('akzeptiert angehängtes Ergebnis und rechnet es selbst nach', () => {
+    expect(parseMathLine('4 + 4 = 8')).toMatchObject({ prompt: '4 + 4', targetWord: '8' });
+    expect(parseMathLine('12 − 5 = 7')).toMatchObject({ targetWord: '7' });
+    // Ein falsch angegebenes Ergebnis wird ignoriert – berechnet wird immer neu.
+    expect(parseMathLine('4 + 4 = 9')).toMatchObject({ targetWord: '8' });
+  });
+
+  it('akzeptiert führende Aufzählungsmarken (1., 1), Bullet)', () => {
+    expect(parseMathLine('1. 4 + 4')).toMatchObject({ prompt: '4 + 4', targetWord: '8' });
+    expect(parseMathLine('2) 12 − 5')).toMatchObject({ targetWord: '7' });
+    expect(parseMathLine('• 6 · 7')).toMatchObject({ targetWord: '42' });
+    expect(parseMathLine('10) 20 : 4 = 5')).toMatchObject({ prompt: '20 : 4', targetWord: '5' });
+  });
+
+  it('verwechselt eine Dezimalzahl nicht mit einer Aufzählung', () => {
+    // "1.5" darf NICHT als „Aufgabe 1" zerschnitten werden (kein Leerraum nach dem Punkt).
+    expect(parseMathLine('1.5 + 2')).toMatchObject({ targetWord: '3.5' });
+    expect(parseMathLine('-5 + 3')).toMatchObject({ targetWord: '-2' }); // führendes Minus bleibt Vorzeichen
+  });
+});
+
+describe('normalizeMathLine', () => {
+  it('lässt saubere Zeilen unverändert (idempotent)', () => {
+    expect(normalizeMathLine('4 + 4')).toBe('4 + 4');
+    expect(normalizeMathLine(normalizeMathLine('1) 4 + 4 = 8'))).toBe('4 + 4');
+  });
+
+  it('streift Nummerierung und angehängtes Ergebnis ab', () => {
+    expect(normalizeMathLine('1) 4 + 4 = 8')).toBe('4 + 4');
+    expect(normalizeMathLine('  3.  \\frac{1}{2} + 3 = 3,5  ')).toBe('\\frac{1}{2} + 3');
+  });
+
+  it('tastet Vorzeichen und Dezimalzahlen nicht an', () => {
+    expect(normalizeMathLine('-5 + 3')).toBe('-5 + 3');
+    expect(normalizeMathLine('1.5 + 2')).toBe('1.5 + 2');
   });
 });
 
