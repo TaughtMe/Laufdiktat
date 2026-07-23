@@ -309,9 +309,18 @@ export const Dashboard = () => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      applyNewRawText((event.target?.result as string) ?? '');
+      const text = (event.target?.result as string) ?? '';
+      if (importMode === 'math') {
+        // Gleicher Eingabekanal wie Tippen/Einfügen in die Aufgabenliste; mathInput
+        // splittet an '\n', daher hier normalisieren (applyNewRawText tut das für Text selbst).
+        math.handleMathInputChange(text.replace(/\r\n?/g, '\n'));
+      } else {
+        applyNewRawText(text);
+      }
     };
     reader.readAsText(file);
+    // Wählt die Lehrkraft dieselbe Datei erneut, feuert onChange sonst nicht.
+    e.target.value = '';
   };
 
   const getStationStatus = (num: number): 'idle' | 'active' | 'done' => {

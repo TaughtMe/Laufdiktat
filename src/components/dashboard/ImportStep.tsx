@@ -7,6 +7,7 @@ import { MathQuickBar } from './MathQuickBar';
 import { MathTaskList } from './MathTaskList';
 import { MathSettingsPanel } from './MathSettingsPanel';
 import { TextImportPanel } from './TextImportPanel';
+import { UploadHelpPopover } from './UploadHelpPopover';
 
 export type ImportMode = 'text' | 'math';
 
@@ -90,9 +91,12 @@ export const ImportStep = ({
           );
         })}
       </div>
-      {importMode === 'text' && (
+      {/* Upload jetzt in BEIDEN Reitern: Text füllt den Editor, Mathe die
+          Aufgabenliste (Routing nach importMode in Dashboard.handleFileUpload). */}
+      <div className="mb-2 flex shrink-0 items-center gap-2">
+        <UploadHelpPopover importMode={importMode} />
         <label
-          className="mb-2 flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full
+          className="flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full
             border border-line bg-surface px-4 py-2.5 text-[12.5px] font-bold text-ink-muted
             transition-colors hover:bg-surface-2"
         >
@@ -100,7 +104,7 @@ export const ImportStep = ({
           <span>Dokument hochladen</span>
           <input type="file" accept=".csv, .txt" onChange={onFileUpload} className="sr-only" />
         </label>
-      )}
+      </div>
     </div>
 
     {/* Panel: oben links eckig (schließt an den ersten Reiter an) */}
