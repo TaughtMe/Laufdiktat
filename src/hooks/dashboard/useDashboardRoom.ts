@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { useGameStore } from '../../store/gameStore';
 import { APP_VERSION } from '../../pwa';
@@ -12,7 +12,9 @@ import {
   getRoomParticipants,
   removeRoomParticipant,
   type RoomStudentRow,
+  type RoomParticipantRow,
 } from '../../utils/rooms/roomApi';
+import { ONLINE_THRESHOLD_MS, PARTICIPANTS_POLL_MS } from '../../utils/rooms/presenceConfig';
 import {
   saveDashboardRoomSession,
   readDashboardRoomSession,
@@ -152,23 +154,56 @@ export const useDashboardRoom = ({
   // Verbindung verliert. Für "wer ist GERADE verbunden" siehe
   // connectedStudents (Presence-basiert) unten.
   const [studentsInLobby, setStudentsInLobby] = useState<string[]>([]);
-  // Presence-basiert (siehe handleOpenLobby): wer ist JETZT GERADE
-  // verbunden. Schrumpft anders als studentsInLobby auch wieder, sobald ein
-  // Gerät die Verbindung wirklich verliert (Supabase erkennt das über einen
-  // Heartbeat) – wird für die Lobby-Ansicht und die "Verbindung
-  // abgebrochen"-Erkennung gebraucht.
-  const [connectedStudents, setConnectedStudents] = useState<Set<string>>(new Set());
-  // DB-Sicht der Lobby: alle im Raum REGISTRIERTEN Teilnehmer (siehe
-  // room_participants). Ergänzt die Presence-Sicht oben -- ein Schüler, dessen
-  // Tablet gerade im Standby ist, bleibt hier drin und wird in der Lobby
-  // ausgegraut angezeigt statt kommentarlos zu fehlen.
-  const [registeredStudents, setRegisteredStudents] = useState<string[]>([]);
+  // Presence-Signal (siehe handleOpenLobby): welche Schlüssel meldet Supabase
+  // Presence gerade als verbunden. Nur noch EIN Eingang in die Online-Erkennung
+  // -- der zweite, robustere ist der last_seen_at-Heartbeat aus der DB (siehe
+  // connectedStudents/participants unten). Presence liefert das sofortige
+  // Beitritts-/Verlassen-Signal, bemerkt einen echten Abbruch aber erst nach
+  // 30-90s; der DB-Heartbeat gleicht genau diese Trägheit aus.
+  const [presentKeys, setPresentKeys] = useState<Set<string>>(new Set());
+  // DB-Sicht der Lobby: alle im Raum REGISTRIERTEN Teilnehmer samt
+  // last_seen_at (siehe room_participants / get_room_participants_secure).
+  // Quelle sowohl für die ausgegrauten "getrennt"-Karten als auch für die
+  // schnelle, verbindungsunabhängige Online-Erkennung (connectedStudents).
+  const [participants, setParticipants] = useState<RoomParticipantRow[]>([]);
   // App-Version je Schüler (aus der Presence-Payload), fürs Lobby-Kompatibilitäts-Badge.
   const [studentVersions, setStudentVersions] = useState<Record<string, string>>({});
   const [hadTwoConnections, setHadTwoConnections] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState(false);
   // Live-Fortschritt pro Schüler: Name -> Index des aktuellen Wortes.
   const [liveProgress, setLiveProgress] = useState<Record<string, number>>({});
+
+  // Reaktive "Jetzt"-Zeit für die last_seen_at-Frischeprüfung unten. Ein
+  // direktes Date.now() im useMemo wäre nicht idempotent (React-Purity-Regel);
+  // stattdessen tickt dieser Wert bei jedem Poll (siehe Poll-Effekt) und beim
+  // Zurückkommen des Tabs, sodass ein Schüler, der aufhört zu heartbeaten, im
+  // Takt des Polls ausgraut.
+  const [nowTs, setNowTs] = useState(() => Date.now());
+
+  // Alle im Raum registrierten Teilnehmer (auch gerade getrennte). Aus der DB,
+  // damit ein Schüler im Standby nicht kommentarlos verschwindet, sondern
+  // ausgegraut sichtbar bleibt.
+  const registeredStudents = useMemo(() => participants.map((p) => p.studentKey), [participants]);
+
+  // "Wer ist JETZT verbunden" aus ZWEI Signalen verschmolzen: Presence (sofort,
+  // aber träge beim Abbruch) ODER ein frischer last_seen_at-Heartbeat (robust,
+  // verbindungsunabhängig). Ein Gerät gilt als online, solange mindestens EINES
+  // der beiden Signale aktuell ist -- das behebt sowohl das "17 von 19"-Problem
+  // (Presence hatte den Schüler fälschlich fallen gelassen, der Heartbeat hält
+  // ihn) als auch die zeitverzögerte Anzeige (der Heartbeat/Poll ist Sekunden
+  // statt Minuten aktuell). Neu beigetretene Geräte, die Presence schon meldet,
+  // die DB-Teilnehmerliste (Debounce/Poll) aber noch nicht kennt, sind über den
+  // presentKeys-Zweig sofort dabei.
+  const connectedStudents = useMemo(() => {
+    const freshSince = nowTs - ONLINE_THRESHOLD_MS;
+    const online = new Set(presentKeys);
+    for (const p of participants) {
+      if (p.lastSeenAt && new Date(p.lastSeenAt).getTime() >= freshSince) {
+        online.add(p.studentKey);
+      }
+    }
+    return [...online];
+  }, [presentKeys, participants, nowTs]);
 
   // Der abonnierte Realtime-Channel. Broadcasts (send) funktionieren nur auf
   // einem bereits abonnierten Channel, daher halten wir genau diese Instanz fest
@@ -219,8 +254,10 @@ export const useDashboardRoom = ({
 
   const refreshParticipants = async (): Promise<void> => {
     if (!roomIdRef.current || !accessTokenRef.current) return;
-    const participants = await getRoomParticipants(roomIdRef.current, accessTokenRef.current);
-    setRegisteredStudents(participants.map((p) => p.studentKey));
+    const rows = await getRoomParticipants(roomIdRef.current, accessTokenRef.current);
+    // Immer eine neue Array-Referenz -- so wertet der connectedStudents-useMemo
+    // die last_seen_at-Frische bei jedem Poll gegen die aktuelle Uhrzeit neu aus.
+    setParticipants(rows);
   };
 
   // Wie scheduleAuthoritativeRefresh unten, aber für die Teilnehmerliste:
@@ -250,7 +287,13 @@ export const useDashboardRoom = ({
       alert('Der Schüler konnte nicht entfernt werden. Bitte Internetverbindung prüfen und erneut versuchen.');
       return;
     }
-    setRegisteredStudents((prev) => prev.filter((name) => name !== studentKey));
+    setParticipants((prev) => prev.filter((p) => p.studentKey !== studentKey));
+    setPresentKeys((prev) => {
+      if (!prev.has(studentKey)) return prev;
+      const next = new Set(prev);
+      next.delete(studentKey);
+      return next;
+    });
     setStudentsInLobby((prev) => prev.filter((name) => name !== studentKey));
     setStudentVersions((prev) => {
       const next = { ...prev };
@@ -304,6 +347,39 @@ export const useDashboardRoom = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Periodischer, presence-unabhängiger Abgleich, solange ein Raum offen ist
+  // (roomCode gesetzt). Presence liefert zwar sofortige Beitritts-/Verlassen-
+  // Events, bemerkt einen echten Abbruch aber erst nach 30-90s -- und ein
+  // einzelnes ausbleibendes Presence-Event würde die "N verbunden"-Anzeige
+  // sonst dauerhaft falsch stehen lassen. Dieser Poll macht die
+  // Teilnehmerliste (samt last_seen_at) zur DB-Wahrheit und hält sie auf
+  // wenige Sekunden aktuell; zusammen mit dem Heartbeat (connectedStudents)
+  // ist das die eigentliche Kur gegen die zeitverzögerte Synchronisation. Die
+  // Ergebnisse werden gleich mitgezogen, damit auch der Live-Fortschritt nicht
+  // an einem verpassten Broadcast hängen bleibt.
+  useEffect(() => {
+    if (!roomCode) return;
+    const poll = () => {
+      if (document.visibilityState !== 'visible') return;
+      // "Jetzt" vorrücken, damit die last_seen_at-Frische im Takt des Polls neu
+      // gegen die Uhr bewertet wird (auch wenn die Teilnehmerliste sich inhaltlich
+      // nicht ändert -- ein Schüler, der aufhört zu heartbeaten, graut so aus).
+      setNowTs(Date.now());
+      refreshParticipants().catch((err) => logDevError('[Room] Teilnehmer-Poll fehlgeschlagen', err));
+      refreshAuthoritativeStudents().catch((err) => logDevError('[Room] Ergebnis-Poll fehlgeschlagen', err));
+    };
+    const intervalId = setInterval(poll, PARTICIPANTS_POLL_MS);
+    const onVisible = () => poll();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // refreshParticipants/refreshAuthoritativeStudents arbeiten über Refs; nur
+    // der roomCode (Raum offen/geschlossen) steuert Start und Stopp des Polls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode]);
+
   // Baut den Realtime-Channel für einen Code auf (Listener, keine
   // Subscribe-Reaktion – die unterscheidet sich zwischen echtem Lobby-Öffnen
   // und der Wiederherstellung nach einem Reload, siehe unten). Extrahiert
@@ -326,7 +402,7 @@ export const useDashboardRoom = ({
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState<{ name: string; appVersion?: string }>();
       const keys = Object.keys(state);
-      setConnectedStudents(new Set(keys));
+      setPresentKeys(new Set(keys));
       if (keys.length >= 1) setHadTwoConnections(true);
       // Jede Presence-Änderung kann einen neuen DB-Teilnehmer bedeuten --
       // die registrierte Liste (angemeldet vs. verbunden) nachziehen.
@@ -476,8 +552,8 @@ export const useDashboardRoom = ({
     }
     setHadTwoConnections(false);
     setOpenLobbyError(null);
-    setConnectedStudents(new Set());
-    setRegisteredStudents([]);
+    setPresentKeys(new Set());
+    setParticipants([]);
 
     // Raum in der DB anlegen (Kahoot-artige, kollisionssichere Code-Vergabe,
     // siehe open_room() in der Migration). Schlägt das fehl (Migration noch
@@ -567,8 +643,8 @@ export const useDashboardRoom = ({
     clearWords();
     setResults([]);
     setStudentsInLobby([]);
-    setConnectedStudents(new Set());
-    setRegisteredStudents([]);
+    setPresentKeys(new Set());
+    setParticipants([]);
     setStudentVersions({});
     setLiveProgress({});
     setHadTwoConnections(false);

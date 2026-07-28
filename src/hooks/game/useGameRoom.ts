@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import { APP_VERSION } from '../../pwa';
-import { getRoomState } from '../../utils/rooms/roomApi';
+import { getRoomState, touchParticipant } from '../../utils/rooms/roomApi';
+import { HEARTBEAT_INTERVAL_MS } from '../../utils/rooms/presenceConfig';
 import type { WordItem, GameMode, BattleOptions, AttackType } from '../../types/game';
 import { logDevError } from '../../utils/shared/logging';
 
@@ -246,6 +247,41 @@ export const useGameRoom = ({
       supabase.removeChannel(channel);
     };
   }, [roomCode, studentName, roomId, participantToken, currentWordIndexRef, onSessionStart, onSessionEnded, onAttack, enabled]);
+
+  // Verbindungsunabhängiger DB-Heartbeat: markiert das Gerät regelmäßig als
+  // "online" (room_participants.last_seen_at). Das Lehrer-Dashboard liest
+  // diesen Zeitstempel und zeigt so schnell und zuverlässig, wer gerade
+  // verbunden ist -- unabhängig davon, wie träge Supabase Presence einen
+  // Abbruch bemerkt (genau die zeitverzögerte "N verbunden"-Anzeige). Läuft
+  // die ganze Zeit im Raum (Lobby wie Live), nicht nur während einer Runde --
+  // gerade die Lobby-Wartephase war bisher ohne jeden DB-Kontakt.
+  //
+  // Bewusst nur bei sichtbarem Tab: Ist das Gerät im Hintergrund/Standby, kann
+  // der Schüler ohnehin nicht teilnehmen -- dann soll last_seen_at veralten und
+  // das Gerät im Dashboard ehrlich ausgrauen, statt fälschlich "online" zu
+  // zeigen. Kommt der Tab zurück, feuert sofort ein Heartbeat (visibilitychange).
+  useEffect(() => {
+    if (!roomId || !participantToken || !enabled) return;
+    let cancelled = false;
+
+    const beat = () => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+      touchParticipant(roomId, participantToken).catch((err) =>
+        logDevError('[Room] Heartbeat fehlgeschlagen', err)
+      );
+    };
+
+    beat();
+    const intervalId = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    const onVisible = () => beat();
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [roomId, participantToken, enabled]);
 
   const sendProgress = useCallback((index: number) => {
     if (studentName) {

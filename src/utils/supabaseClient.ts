@@ -20,7 +20,35 @@ if (!isSupabaseConfigured) {
   );
 }
 
+// Web Worker nur nutzen, wo es ihn gibt. Im Browser ist das immer der Fall;
+// unter Node (Vitest, environment: 'node') und in einem SSR-Kontext fehlt
+// window.Worker -- supabase-js würde bei worker:true dort beim Anlegen des
+// Clients hart werfen ("Web Worker is not supported"). Der Guard hält den
+// Modul-Load in Tests grün.
+const supportsWebWorker = typeof window !== 'undefined' && typeof window.Worker !== 'undefined';
+
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabasePublishableKey || 'placeholder-publishable-key'
+  supabasePublishableKey || 'placeholder-publishable-key',
+  {
+    realtime: {
+      // Kern der Presence-Robustheit: Der Realtime-Heartbeat hält die
+      // WebSocket-Verbindung am Leben. Läuft er wie standardmäßig über einen
+      // setInterval-Timer im Haupt-Thread, drosseln Browser ihn, sobald der Tab
+      // in den Hintergrund geht oder der Bildschirm abdunkelt (Chrome ~1x/min,
+      // iOS pausiert ihn ganz). Der Server bekommt dann keinen Heartbeat mehr
+      // und trennt die Verbindung nach ~60s -- der Schüler fliegt aus der
+      // Presence, obwohl sein Gerät noch "angemeldet" anzeigt (genau der
+      // "17 von 19 online"-Fall). Im Web Worker laufen die Timer NICHT
+      // gedrosselt weiter, wodurch die Verbindung kurze Hintergrund-Phasen
+      // übersteht. supabase-js erzeugt den Worker aus einem gleich-Origin
+      // Blob (kein Remote-Script); die CSP erlaubt das über
+      // `worker-src 'self' blob:` (siehe public/_headers).
+      worker: supportsWebWorker,
+      // Kürzeres Intervall als der Standard (25s): Der Server erkennt einen
+      // echten Abbruch schneller, und es bleibt mehr Puffer, bevor eine
+      // (trotz Worker) gedrosselte Umgebung das Timeout-Fenster reißt.
+      heartbeatIntervalMs: 15000,
+    },
+  }
 );

@@ -380,7 +380,7 @@ export const Dashboard = () => {
       onBack: () => setCurrentStep('SETTINGS'),
       nextLabel: stationMode ? 'Stationen starten' : 'Diktat jetzt starten',
       nextVariant: 'ok',
-      nextDisabled: !stationMode && connectedStudents.size < 1,
+      nextDisabled: !stationMode && connectedStudents.length < 1,
       onNext: handleStartSession,
     },
     LIVE: {
@@ -485,7 +485,7 @@ export const Dashboard = () => {
             <LobbyStep
               roomCode={roomCode}
               stationMode={stationMode}
-              connectedStudents={Array.from(connectedStudents)}
+              connectedStudents={connectedStudents}
               registeredStudents={registeredStudents}
               studentVersions={studentVersions}
               appVersion={APP_VERSION}

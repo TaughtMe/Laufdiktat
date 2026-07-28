@@ -6,7 +6,7 @@ vi.mock('../supabaseClient', () => ({
   supabase: { rpc: (...args: unknown[]) => rpcMock(...args) },
 }));
 
-const { openRoom, joinRoom, getRoomState, updateSession, endRoom, upsertProgress, getMyProgress, getRoomStudents, getRoomParticipants, removeRoomParticipant } =
+const { openRoom, joinRoom, getRoomState, updateSession, endRoom, upsertProgress, getMyProgress, getRoomStudents, getRoomParticipants, removeRoomParticipant, touchParticipant } =
   await import('./roomApi');
 
 describe('roomApi', () => {
@@ -67,6 +67,22 @@ describe('roomApi', () => {
       const result = await joinRoom('4821', 'Igel');
       expect(rpcMock).toHaveBeenCalledTimes(2);
       expect(result?.participantToken).toBe('ptok');
+    });
+  });
+
+  describe('touchParticipant', () => {
+    it('sendet room_id und Teilnehmertoken an touch_participant_secure', async () => {
+      rpcMock.mockResolvedValue({ error: null });
+      await touchParticipant('r1', 'ptok');
+      expect(rpcMock).toHaveBeenCalledWith('touch_participant_secure', {
+        p_room_id: 'r1',
+        p_participant_token: 'ptok',
+      });
+    });
+
+    it('wirft bei einem Fehler', async () => {
+      rpcMock.mockResolvedValue({ error: { message: 'Ungueltiger Teilnehmertoken' } });
+      await expect(touchParticipant('r1', 'falsch')).rejects.toThrow('Ungueltiger Teilnehmertoken');
     });
   });
 

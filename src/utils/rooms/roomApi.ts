@@ -91,6 +91,25 @@ export const joinRoom = async (
     };
   });
 
+/**
+ * Leichtgewichtiger DB-Heartbeat: markiert das eigene Gerät als "gerade noch
+ * da" (room_participants.last_seen_at). Anders als Supabase Presence -- die
+ * nur über die WebSocket-Verbindung lebt und einen Abbruch strukturell erst
+ * nach 30-90s bemerkt -- gibt dieser Zeitstempel dem Lehrer-Dashboard eine
+ * schnelle, verbindungsunabhängige Wahrheitsquelle für "wer ist online".
+ * Idempotent; ein einzelner Fehlschlag ist unkritisch, der nächste Heartbeat
+ * zieht nach (siehe useGameRoom.ts).
+ */
+export const touchParticipant = async (roomId: string, participantToken: string): Promise<void> => {
+  const { error } = await supabase.rpc('touch_participant_secure', {
+    p_room_id: roomId,
+    p_participant_token: participantToken,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+};
+
 /** Liest den Raumzustand mit Teilnehmer- ODER Lehrerberechtigung. */
 export const getRoomState = async (
   roomId: string,

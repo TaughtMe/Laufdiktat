@@ -149,8 +149,20 @@ export const Game = () => {
       return;
     }
     setVersionMismatch(null);
-    // Version passt: der Beitritt ist jetzt wirklich abgeschlossen.
-    clearPendingJoin();
+    // pendingJoin (inkl. unsichtbarem Teilnehmertoken) wird hier BEWUSST NICHT
+    // mehr geräumt. Es ist der einzige Ort, an dem das Gerät sein Token über
+    // einen Verbindungsabbruch hinweg behält: Fällt der Schüler zurück auf die
+    // Startseite (kurzer WLAN-Aussetzer, Standby, geschlossener Tab), setzt
+    // Home.tsx den Beitritt automatisch mit genau diesem Token fort -- der
+    // Server erkennt das Gerät dann wieder (join_room_secure) und gibt DIESELBE
+    // Identität zurück, statt einen zweiten Teilnehmer anzulegen. Genau das
+    // löste bisher die "21 Teilnehmer bei 19 Schülern"-Geister aus: Token beim
+    // Rundenstart gelöscht -> Reconnect würfelte einen neuen Namen + neues
+    // Token. Geräumt wird der Beitritt jetzt nur noch beim bewussten Verlassen
+    // (leaveToHome) oder wenn der Raum nicht mehr existiert (Home.tsx: joinRoom
+    // liefert null -> clearPendingJoin). Ein beendeter Raum verfällt zusätzlich
+    // serverseitig nach dem Cleanup, ein erneuter Auto-Beitritt schlägt dann
+    // sauber fehl.
 
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars, strictTypingMode: newStrictTypingMode } = data;
     // Erkennt einen doppelten Trigger für dieselbe Sitzung -- z. B. wenn nach
