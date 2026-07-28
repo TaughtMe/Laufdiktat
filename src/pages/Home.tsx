@@ -5,7 +5,7 @@ import { AnimalAvatar } from '../components/shared/AnimalAvatar';
 import { QrScannerOverlay } from '../components/shared/QrScannerOverlay';
 import { useGameStore } from '../store/gameStore';
 import { VersionBadge } from '../components/shared/VersionBadge';
-import { clearPendingJoin, savePendingJoin, readPendingJoin } from '../utils/game/pendingJoin';
+import { clearPendingJoin, savePendingJoin, readPendingJoin, readRoomIdentity } from '../utils/game/pendingJoin';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useTheme } from '../hooks/shared/useTheme';
 import { joinRoom } from '../utils/rooms/roomApi';
@@ -92,14 +92,20 @@ export const Home = () => {
   // Der sichere Beitritt registriert das Gerät im Raum und gibt ein zufälliges
   // Teilnehmertoken zurück. Dieses Token ist unsichtbar für den Nutzer und
   // berechtigt ausschließlich zum eigenen Fortschritt in diesem Raum.
-  const enterGame = useCallback(async (code: string, name: string, existingToken?: string) => {
+  //
+  // `auto` unterscheidet den automatisch fortgesetzten Beitritt (Mount-Effekt
+  // unten) vom manuell ausgelösten: Ein über Nacht liegen gebliebener Intent
+  // trifft auf einen längst beendeten Raum -- dann still aufräumen statt dem
+  // Schüler unaufgefordert "Falscher Raum-Code" anzuzeigen.
+  const enterGame = useCallback(async (code: string, name: string, existingToken?: string, auto = false) => {
     resetGameData();
     try {
       const room = await joinRoom(code, name, existingToken);
       if (room === null) {
+        // Raum existiert nicht (mehr): Identität ist wertlos, alles räumen.
         clearPendingJoin();
         setJoining(false);
-        setJoinError('wrong-code');
+        if (!auto) setJoinError('wrong-code');
         return;
       }
       savePendingJoin(code, room.studentName, room.participantToken);
@@ -112,8 +118,12 @@ export const Home = () => {
         },
       });
     } catch (err) {
+      // Transienter Fehler (WLAN-Aussetzer trotz Retry in joinRoom): Intent
+      // UND Token bewusst BEHALTEN. Ein clearPendingJoin() hier würde die
+      // Geräteidentität genau in dem Moment wegwerfen, für den sie existiert
+      // -- der nächste (manuelle) Versuch legte dann einen Doppel-Teilnehmer
+      // an, obwohl der Raum das Gerät längst kennt.
       logDevError('[Room] Sicherer Raumbeitritt fehlgeschlagen', err);
-      clearPendingJoin();
       setJoining(false);
       setJoinError('generic');
     }
@@ -125,7 +135,7 @@ export const Home = () => {
     const pending = readPendingJoin();
     if (pending) {
       queueMicrotask(() => {
-        void enterGame(pending.code, pending.name, pending.participantToken);
+        void enterGame(pending.code, pending.name, pending.participantToken, true);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,8 +157,12 @@ export const Home = () => {
   // Der Beitrittswunsch bleibt in sessionStorage gemerkt und wird nach einem
   // eventuellen Update-Reload oben automatisch fortgesetzt.
   const joinGame = useCallback((code: string, name: string) => {
-    const previous = readPendingJoin();
-    const existingToken = previous?.code === code ? previous.participantToken : undefined;
+    // Identität statt Intent lesen: Auch wenn die Auto-Join-Absicht längst
+    // geräumt wurde (Runde fertig, bewusst verlassen), verwendet ein erneuter
+    // manueller Beitritt zum selben Raum das gemerkte Token wieder -- der
+    // Server erkennt das Gerät und gibt DIESELBE Identität zurück, statt
+    // einen Doppel-Teilnehmer anzulegen.
+    const existingToken = readRoomIdentity(code)?.participantToken;
     savePendingJoin(code, name, existingToken);
 
     setJoining(true);

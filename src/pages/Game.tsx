@@ -13,7 +13,7 @@ import { computeStars, computeSpeedPoints } from '../utils/game/scoring';
 import { checkAnswer } from '../utils/game/checkAnswer';
 import { buildHint } from '../utils/game/buildHint';
 import { APP_VERSION, checkForUpdateReady, applyUpdate, compareVersions } from '../pwa';
-import { clearPendingJoin } from '../utils/game/pendingJoin';
+import { clearPendingJoinIntent } from '../utils/game/pendingJoin';
 import { getMyProgress, upsertProgress } from '../utils/rooms/roomApi';
 import { useUpdatePoller } from '../hooks/shared/useUpdatePoller';
 import { useWakeLock } from '../hooks/shared/useWakeLock';
@@ -149,20 +149,14 @@ export const Game = () => {
       return;
     }
     setVersionMismatch(null);
-    // pendingJoin (inkl. unsichtbarem Teilnehmertoken) wird hier BEWUSST NICHT
-    // mehr geräumt. Es ist der einzige Ort, an dem das Gerät sein Token über
-    // einen Verbindungsabbruch hinweg behält: Fällt der Schüler zurück auf die
-    // Startseite (kurzer WLAN-Aussetzer, Standby, geschlossener Tab), setzt
-    // Home.tsx den Beitritt automatisch mit genau diesem Token fort -- der
-    // Server erkennt das Gerät dann wieder (join_room_secure) und gibt DIESELBE
-    // Identität zurück, statt einen zweiten Teilnehmer anzulegen. Genau das
-    // löste bisher die "21 Teilnehmer bei 19 Schülern"-Geister aus: Token beim
-    // Rundenstart gelöscht -> Reconnect würfelte einen neuen Namen + neues
-    // Token. Geräumt wird der Beitritt jetzt nur noch beim bewussten Verlassen
-    // (leaveToHome) oder wenn der Raum nicht mehr existiert (Home.tsx: joinRoom
-    // liefert null -> clearPendingJoin). Ein beendeter Raum verfällt zusätzlich
-    // serverseitig nach dem Cleanup, ein erneuter Auto-Beitritt schlägt dann
-    // sauber fehl.
+    // Version passt, Sitzung übernommen: Nur die Auto-Join-ABSICHT räumen --
+    // die Token-Zuordnung (Raumcode -> Teilnehmertoken) bleibt die ganze
+    // Tab-Session erhalten, damit ein Wiederbeitritt (Verbindungsabbruch,
+    // erneutes Eintippen des Codes) DIESELBE Identität wiederverwendet statt
+    // einen Doppel-Teilnehmer anzulegen ("21 Teilnehmer bei 19 Schülern").
+    // Vollständig geräumt wird erst, wenn der Raum nicht mehr existiert
+    // (Home.tsx) -- Details in pendingJoin.ts.
+    clearPendingJoinIntent();
 
     const { words: newWords, gameMode: newMode, battleOptions: newOptions, stationMode: newStationMode, stationCount: newStationCount, isTtsEnabled: newTtsEnabled, uebungMaxAttempts: newMaxAttempts, showStars: newShowStars, strictTypingMode: newStrictTypingMode } = data;
     // Erkennt einen doppelten Trigger für dieselbe Sitzung -- z. B. wenn nach
@@ -229,6 +223,10 @@ export const Game = () => {
   }, [roomCode, studentName, roomId, participantToken, setWords, setGameMode, setBattleOptions, setStationMode, setStationCount, setTtsEnabled, setUebungMaxAttempts, setShowStars, setStrictTypingMode]);
 
   const onSessionEnded = useCallback(() => {
+    // Kein Grund mehr für einen automatischen Wiederbeitritt -- ohne das würde
+    // die Geräte-Zurück-Taste auf dem "Sitzung beendet"-Schirm den Schüler von
+    // der Startseite direkt wieder hierher zurückwerfen.
+    clearPendingJoinIntent();
     setSessionEnded(true);
   }, []);
 
@@ -297,6 +295,14 @@ export const Game = () => {
     if (gameState !== 'FINISHED') return;
     if (hasSentFinishedRef.current) return; // garantiert nur einmal pro Runde
     hasSentFinishedRef.current = true;
+    // Runde geschafft: Auto-Join-Absicht räumen. Der Exit-Guard ist bei
+    // FINISHED bewusst aus -- drückt der Schüler jetzt die Geräte-Zurück-
+    // Taste, darf Home.tsx ihn nicht automatisch zurück ins Spiel werfen
+    // (sonst landete er wieder beim letzten Wort und ein erneutes Lösen
+    // überschriebe u. a. seine echte Bearbeitungsdauer). Die Token-Zuordnung
+    // bleibt: Startet die Lehrkraft eine weitere Runde und tritt der Schüler
+    // manuell erneut bei, behält er dieselbe Identität.
+    clearPendingJoinIntent();
     // Dauer einmalig beim Abschluss festhalten (für Tempo-Punkte im Endscreen).
     const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
     setFinalDurationMs(durationMs);
@@ -327,11 +333,13 @@ export const Game = () => {
   const requestExit = useCallback(() => setShowExitConfirm(true), []);
   useExitGuard(!sessionEnded && gameState !== 'FINISHED' && !!roomCode, requestExit);
 
-  // Bewusstes Verlassen zurück zur Startseite: räumt einen noch offenen
-  // pendingJoin (z. B. bei einem Versions-Mismatch), damit Home.tsx beim
-  // nächsten Öffnen nicht versucht, denselben Beitritt erneut fortzusetzen.
+  // Bewusstes Verlassen zurück zur Startseite: nimmt die Auto-Join-Absicht
+  // zurück, damit Home.tsx den Beitritt nicht sofort erneut fortsetzt. Die
+  // Token-Zuordnung bleibt bewusst erhalten -- kehrt der Schüler doch in
+  // denselben Raum zurück (Code erneut eintippen), erkennt der Server sein
+  // Gerät wieder, statt einen Doppel-Teilnehmer anzulegen.
   const leaveToHome = useCallback(() => {
-    clearPendingJoin();
+    clearPendingJoinIntent();
     navigate('/');
   }, [navigate]);
 

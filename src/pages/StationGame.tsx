@@ -9,6 +9,7 @@ import { buildStationOrder } from '../utils/game/stationShuffle';
 import { MathDisplay } from '../components/shared/MathDisplay';
 import { useAutoFitFontSize } from '../hooks/game/useAutoFitFontSize';
 import { upsertProgress, getRoomState, getMyProgress } from '../utils/rooms/roomApi';
+import { useParticipantHeartbeat } from '../hooks/shared/useParticipantHeartbeat';
 import { logDevError } from '../utils/shared/logging';
 
 type StationView = 'GRID' | 'ACTIVE';
@@ -36,6 +37,12 @@ export const StationGame = () => {
   // Kennung der laufenden Sitzung – Teil des Stations-Shuffle-Seeds (siehe
   // utils/game/stationShuffle.ts). Ephemer wie roomCode/studentName in Game.tsx.
   const [sessionId, setSessionId] = useState('');
+
+  // Stations-Tablets haben einen eigenen Channel OHNE Presence -- ohne diesen
+  // Heartbeat stünde ihr last_seen_at ab dem Rundenstart still und die DB-
+  // Sicht meldete verbundene Tablets fälschlich als "offline" (useGameRoom
+  // ist im Stationsmodus abgeschaltet, siehe Game.tsx).
+  useParticipantHeartbeat(roomId, participantToken);
 
   const [view, setView] = useState<StationView>('GRID');
   const [studentNumber, setStudentNumber] = useState<number | null>(null);

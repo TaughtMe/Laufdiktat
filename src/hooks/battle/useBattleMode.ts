@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AttackType, BattleOptions } from '../../types/game';
+import { pickAttackCandidates } from '../../utils/game/attackCandidates';
 
 // Wie lange ein Angriff wirkt (ms) und wie schnell sich die Ladung füllt.
 const ATTACK_DURATION_MS = 15000;
@@ -89,26 +90,6 @@ export const useBattleMode = ({
   /** Nach einem richtig gelösten Wort die Ladung füllen (nur Battle-Modus). */
   const fillCharge = () => setCharge((c) => Math.min(100, c + chargeGain()));
 
-  // Bis zu 3 Angriffsziele: Mitspieler, die weiter oder gleich weit sind
-  // (nächste zuerst). Wer selbst führt, sieht die 3 direkt dahinter.
-  const getAttackCandidates = (): Array<{ name: string; index: number }> => {
-    const others = Object.entries(roster)
-      .filter(([n]) => n !== studentName)
-      .map(([name, index]) => ({ name, index }));
-    if (others.length === 0) return [];
-    const maxIndex = Math.max(currentWordIndex, ...others.map((o) => o.index));
-    if (currentWordIndex >= maxIndex) {
-      return others
-        .filter((o) => o.index < currentWordIndex)
-        .sort((a, b) => b.index - a.index)
-        .slice(0, 3);
-    }
-    return others
-      .filter((o) => o.index >= currentWordIndex)
-      .sort((a, b) => a.index - b.index)
-      .slice(0, 3);
-  };
-
   const launchAttack = (targetName: string) => {
     if (!picker) return;
     if (!sendAttack(targetName, picker)) return;
@@ -152,7 +133,7 @@ export const useBattleMode = ({
   if (availableAttacks.length === 0) availableAttacks.push('ink', 'flicker');
 
   const chargeReady = charge >= 100;
-  const attackCandidates = picker ? getAttackCandidates() : [];
+  const attackCandidates = picker ? pickAttackCandidates(roster, studentName, currentWordIndex) : [];
   // Flimmern nur, wenn gerade ein Flimmer-Angriff aktiv ist und das Wort gezeigt wird.
   const isFlickerActive = activeAttack?.type === 'flicker' && bimanualLocked;
 

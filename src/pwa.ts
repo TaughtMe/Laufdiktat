@@ -1,7 +1,7 @@
 import { registerSW } from 'virtual:pwa-register';
 
 /** Aktuelle App-Version, synchron mit package.json. */
-export const APP_VERSION = '4.1.3';
+export const APP_VERSION = '4.1.4';
 
 type Listener = (needRefresh: boolean) => void;
 const listeners = new Set<Listener>();

@@ -15,6 +15,7 @@ import {
   type RoomParticipantRow,
 } from '../../utils/rooms/roomApi';
 import { ONLINE_THRESHOLD_MS, PARTICIPANTS_POLL_MS } from '../../utils/rooms/presenceConfig';
+import { createDebounced, type Debounced } from '../../utils/shared/debounce';
 import {
   saveDashboardRoomSession,
   readDashboardRoomSession,
@@ -216,7 +217,6 @@ export const useDashboardRoom = ({
   // hier im Dashboard (siehe roomApi.ts: Schüler bekommen es nie).
   const roomIdRef = useRef<string>('');
   const accessTokenRef = useRef<string>('');
-  const refreshStudentsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Station mode RAM state
   const [stationStates, setStationStates] = useState<Map<number, StationStudentState>>(new Map());
@@ -260,18 +260,37 @@ export const useDashboardRoom = ({
     setParticipants(rows);
   };
 
-  // Wie scheduleAuthoritativeRefresh unten, aber für die Teilnehmerliste:
-  // während der Beitrittswelle (18 Geräte nacheinander) feuert Presence-sync
-  // pro Beitritt einmal -- ohne Debounce wären das 18 einzelne DB-Abfragen.
-  const refreshParticipantsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleParticipantsRefresh = () => {
-    if (refreshParticipantsTimerRef.current) clearTimeout(refreshParticipantsTimerRef.current);
-    refreshParticipantsTimerRef.current = setTimeout(() => {
+  // Gebündelte DB-Abgleiche (Teilnehmerliste + Ergebnisse) mit Debounce UND
+  // Obergrenze: Während der Beitrittswelle (18 Geräte nacheinander) feuert
+  // Presence-sync pro Beitritt einmal -- ohne Debounce wären das 18 einzelne
+  // DB-Abfragen. createDebounced (statt nacktem clearTimeout+setTimeout)
+  // garantiert über maxWaitMs zusätzlich, dass dichtes Dauerfeuer den
+  // Abgleich nicht endlos hinauszögern kann -- siehe utils/shared/debounce.ts.
+  // Im Mount-Effekt angelegt (nicht während des Renderns), weil die Closures
+  // über die Refresh-Funktionen Refs lesen; die Schedule-Aufrufe kommen
+  // ausschließlich aus Handlern/Effekten, nie aus dem Rendern.
+  const participantsRefreshRef = useRef<Debounced | null>(null);
+  const studentsRefreshRef = useRef<Debounced | null>(null);
+  useEffect(() => {
+    participantsRefreshRef.current = createDebounced(() => {
       refreshParticipants().catch((err) => {
         logDevError('[Room] Abgleich der Teilnehmerliste fehlgeschlagen', err);
       });
-    }, 300);
-  };
+    }, { delayMs: 300, maxWaitMs: 2000 });
+    studentsRefreshRef.current = createDebounced(() => {
+      refreshAuthoritativeStudents().catch((err) => {
+        logDevError('[Room] Autoritativer Ergebnisabgleich fehlgeschlagen', err);
+      });
+    }, { delayMs: 300, maxWaitMs: 2000 });
+    return () => {
+      participantsRefreshRef.current?.cancel();
+      studentsRefreshRef.current?.cancel();
+    };
+    // Die Refresh-Funktionen arbeiten ausschließlich über Refs -- die beim
+    // Mount eingefangenen Instanzen bleiben dauerhaft gültig.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const scheduleParticipantsRefresh = () => participantsRefreshRef.current?.schedule();
 
   /**
    * Entfernt einen (länger inaktiven) Teilnehmer samt Fortschritt aus dem
@@ -309,20 +328,13 @@ export const useDashboardRoom = ({
 
   // Broadcasts dienen nur als schneller Aenderungshinweis. Der Inhalt selbst
   // wird nicht vertraut; nach kurzem Debounce lesen wir den tokengebundenen
-  // Datenbankstand. So erzeugt ein gefaelschtes Broadcast keine Fake-Ergebnisse.
-  const scheduleAuthoritativeRefresh = () => {
-    if (refreshStudentsTimerRef.current) clearTimeout(refreshStudentsTimerRef.current);
-    refreshStudentsTimerRef.current = setTimeout(() => {
-      refreshAuthoritativeStudents().catch((err) => {
-        logDevError('[Room] Autoritativer Ergebnisabgleich fehlgeschlagen', err);
-      });
-    }, 300);
-  };
-
-  useEffect(() => () => {
-    if (refreshStudentsTimerRef.current) clearTimeout(refreshStudentsTimerRef.current);
-    if (refreshParticipantsTimerRef.current) clearTimeout(refreshParticipantsTimerRef.current);
-  }, []);
+  // Datenbankstand (Instanz siehe Mount-Effekt oben). So erzeugt ein
+  // gefaelschtes Broadcast keine Fake-Ergebnisse. maxWaitMs verhindert das
+  // Aushungern: 19 tippende Schüler senden student-progress-Broadcasts oft
+  // dichter als alle 300ms -- ein reines Trailing-Debounce würde den Refresh
+  // dann dauerhaft aufschieben und die Live-Ansicht bliebe stehen, bis der
+  // 8s-Poll sie rettet.
+  const scheduleAuthoritativeRefresh = () => studentsRefreshRef.current?.schedule();
 
   // Lehrergerät wacht aus dem Standby auf / Tab kommt zurück in den
   // Vordergrund (z. B. iPad am Beamer): Verbindung sofort anstoßen statt auf
@@ -342,9 +354,7 @@ export const useDashboardRoom = ({
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-    // Die schedule*-Funktionen arbeiten ausschließlich über Refs -- die beim
-    // Mount eingefangenen Instanzen bleiben dauerhaft gültig.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Die schedule*-Funktionen arbeiten ausschließlich über Refs.
   }, []);
 
   // Periodischer, presence-unabhängiger Abgleich, solange ein Raum offen ist
