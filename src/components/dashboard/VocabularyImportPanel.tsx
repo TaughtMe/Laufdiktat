@@ -49,7 +49,8 @@ export const VocabularyImportPanel = ({ vocabulary }: Props) => {
                     value={pair[side].primary}
                     onChange={(event) => vocabulary.updatePair(pair.id, side, { primary: event.target.value })}
                     placeholder={side === 'left' ? `Vokabel ${index + 1}` : 'Übersetzung'}
-                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink outline-none focus:border-accent"
+                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink outline-none
+                      placeholder:text-ink-faint focus:border-accent dark:bg-surface-2 dark:text-white"
                   />
                   <input
                     defaultValue={alternativesToText(pair[side].alternatives)}
