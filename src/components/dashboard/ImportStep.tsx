@@ -1,14 +1,16 @@
 import React from 'react';
 import { Upload } from 'lucide-react';
 import type { useMathImport } from '../../hooks/dashboard/useMathImport';
+import type { useVocabularyImport } from '../../hooks/dashboard/useVocabularyImport';
 import type { ManualRange, TextSection, TextSplitConfig } from '../../utils/dashboard/textSections';
 import { generateMathLines } from '../../utils/dashboard/mathTasks';
 import { MathQuickBar } from './MathQuickBar';
 import { MathTaskList } from './MathTaskList';
 import { MathSettingsPanel } from './MathSettingsPanel';
 import { TextImportPanel } from './TextImportPanel';
+import { VocabularyImportPanel } from './VocabularyImportPanel';
 
-export type ImportMode = 'text' | 'math';
+export type ImportMode = 'text' | 'math' | 'vocabulary';
 
 interface ImportStepProps {
   importMode: ImportMode;
@@ -33,15 +35,17 @@ interface ImportStepProps {
   onOpenSectionManager: () => void;
   /** Komplette Rückgabe von useMathImport – reine Durchreichung. */
   math: ReturnType<typeof useMathImport>;
+  vocabulary: ReturnType<typeof useVocabularyImport>;
 }
 
 const TABS: Array<{ id: ImportMode; label: string }> = [
   { id: 'text', label: 'Text' },
   { id: 'math', label: 'Mathe' },
+  { id: 'vocabulary', label: 'Vokabeln' },
 ];
 
 /**
- * Schritt 1: zwei Reiter (Text / Mathe).
+ * Schritt 1: drei Inhaltstypen (Text / Mathe / Vokabeln).
  *
  * Der Text-Reiter ist einspaltig – Eingabe und Abschnittsvorschau sind in einem
  * gemeinsamen Editor zusammengeführt (siehe TextImportPanel). Der Mathe-Zweig
@@ -67,6 +71,7 @@ export const ImportStep = ({
   onClearManual,
   onOpenSectionManager,
   math,
+  vocabulary,
 }: ImportStepProps) => (
   <div className="flex h-full min-h-[600px] flex-col">
     {/* Reiter-Zeile + Upload-Pill */}
@@ -158,6 +163,8 @@ export const ImportStep = ({
             />
           </div>
         </>
+      ) : importMode === 'vocabulary' ? (
+        <VocabularyImportPanel vocabulary={vocabulary} />
       ) : (
         <TextImportPanel
           rawText={rawText}

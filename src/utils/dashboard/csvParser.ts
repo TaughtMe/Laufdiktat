@@ -22,6 +22,7 @@ export const parseCSV = (text: string, mode: 'lines' | 'sentences'): WordItem[] 
 
     parsedWords.push({
       id: crypto.randomUUID(),
+      kind: 'text',
       targetWord,
       isCompleted: false,
     });

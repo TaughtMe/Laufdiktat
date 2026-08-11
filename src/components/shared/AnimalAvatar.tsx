@@ -12,6 +12,7 @@ const FILENAME_OVERRIDES: Record<string, string> = {
   'chamäleon':    'chameleon',
   'tiefseefisch': 'anglerfisch',
   'phönix':       'phoenix',
+  'schäferhund':  'deutscher_schaeferhund',
   'sphynx-katze': 'sphynxkatze',
   'hund':         'dackel', // generischer "Hund" → vorhandenes Hunde-SVG
 };

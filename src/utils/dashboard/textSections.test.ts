@@ -358,9 +358,9 @@ describe('sectionsToWords – Ergebnis bis zur Spiel-Wortliste', () => {
 
   it('bildet Abschnitte auf WordItems ab', () => {
     expect(sectionsToWords(sections)).toEqual([
-      { id: 's-0-5', targetWord: 'Eins.', isCompleted: false },
-      { id: 's-6-11', targetWord: 'Zwei.', isCompleted: false },
-      { id: 's-12-17', targetWord: 'Drei.', isCompleted: false },
+      { id: 's-0-5', kind: 'text', targetWord: 'Eins.', isCompleted: false },
+      { id: 's-6-11', kind: 'text', targetWord: 'Zwei.', isCompleted: false },
+      { id: 's-12-17', kind: 'text', targetWord: 'Drei.', isCompleted: false },
     ]);
   });
 

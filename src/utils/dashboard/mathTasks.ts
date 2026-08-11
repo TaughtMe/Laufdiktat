@@ -82,6 +82,7 @@ export const parseMathExpr = (line: string): MathExpr | null => {
 /** Normale Aufgabe aus einem geparsten Ausdruck (Aufgabe zeigen, Ergebnis = Antwort). */
 export const normalMathWord = (e: MathExpr): WordItem => ({
   id: uid(),
+  kind: 'math',
   prompt: formatPrompt(e.a, e.op, e.b),
   targetWord: String(e.result),
   isCompleted: false,
@@ -103,7 +104,7 @@ export const parseMathLine = (line: string): WordItem | null => {
 export const buildLatexMathWord = (line: string): WordItem | null => {
   const value = evaluateLatexExpr(line);
   if (value === null) return null;
-  return { id: uid(), prompt: line.trim(), targetWord: String(round(value)), isCompleted: false, isLatex: true };
+  return { id: uid(), kind: 'math', prompt: line.trim(), targetWord: String(round(value)), isCompleted: false, isLatex: true };
 };
 
 /**
@@ -133,7 +134,7 @@ export const buildGapTask = (e: MathExpr, gap: GapSlot): WordItem => {
   const rS = gap === 'result' ? '_' : displayNum(e.result);
   const prompt = `${aS} ${sym(e.op)} ${bS} = ${rS}`;
   const answer = gap === 'a' ? e.a : gap === 'b' ? e.b : e.result;
-  return { id: uid(), prompt, targetWord: String(answer), isCompleted: false };
+  return { id: uid(), kind: 'math', prompt, targetWord: String(answer), isCompleted: false };
 };
 
 /** Auswählbare Einmaleins-Reihen für Mal-/Geteilt-Aufgaben (kleines 1×1 bis 10×10). */

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { useDashboardRoom } from '../hooks/dashboard/useDashboardRoom';
 import { useMathImport } from '../hooks/dashboard/useMathImport';
+import { useVocabularyImport } from '../hooks/dashboard/useVocabularyImport';
 import {
   buildTextSections,
   applyResultEdits,
@@ -68,7 +69,7 @@ export const Dashboard = () => {
   }, [currentStep]);
 
   const [rawText, setRawText] = useState('');
-  const [importMode, setImportMode] = useState<'text' | 'math'>('text');
+  const [importMode, setImportMode] = useState<'text' | 'math' | 'vocabulary'>('text');
   const [splitConfig, setSplitConfig] = useState<TextSplitConfig>(DEFAULT_SPLIT_CONFIG);
   // Manuelle Bereiche (P3): überschreiben einzelne automatische Grenzen. Werden
   // bei Textänderung zurückgesetzt, bei reiner Regeländerung aber beibehalten
@@ -110,6 +111,16 @@ export const Dashboard = () => {
   const stationShuffle = useGameStore((state) => state.stationShuffle);
   const setStationShuffle = useGameStore((state) => state.setStationShuffle);
 
+  const handleImportModeChange = (mode: 'text' | 'math' | 'vocabulary') => {
+    setImportMode(mode);
+    if (mode === 'vocabulary') {
+      // Vokabeln standardmäßig pro Schüler unterschiedlich anordnen. Beide
+      // Optionen bleiben im Einstellungs-Schritt bewusst abschaltbar.
+      setShuffleWords(true);
+      setStationShuffle(true);
+    }
+  };
+
   const {
     roomCode,
     openLobbyError,
@@ -141,6 +152,7 @@ export const Dashboard = () => {
   }, [openLobbyError]);
 
   const math = useMathImport({ importMode, setWords });
+  const vocabulary = useVocabularyImport({ importMode, setWords });
 
   // Abschnitte reproduzierbar aus Rohtext + Regeln + manuellen Bereichen bauen
   // (siehe buildTextSections). Einzige Quelle für die Vorschau und den Marker.
@@ -429,7 +441,7 @@ export const Dashboard = () => {
           {currentStep === 'IMPORT' && (
             <ImportStep
               importMode={importMode}
-              onImportModeChange={setImportMode}
+              onImportModeChange={handleImportModeChange}
               rawText={rawText}
               onRawTextChange={handleRawTextChange}
               onFileUpload={handleFileUpload}
@@ -447,6 +459,7 @@ export const Dashboard = () => {
               onClearManual={handleClearManual}
               onOpenSectionManager={() => setSectionManagerOpen(true)}
               math={math}
+              vocabulary={vocabulary}
             />
           )}
 

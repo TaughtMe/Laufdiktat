@@ -274,7 +274,7 @@ export const buildTextSections = (
  * Reihenfolge bis zur WordItem-Ebene testbar sind.
  */
 export const sectionsToWords = (sections: TextSection[]): WordItem[] =>
-  sections.map((s) => ({ id: s.id, targetWord: s.text, isCompleted: false }));
+  sections.map((s) => ({ id: s.id, kind: 'text', targetWord: s.text, isCompleted: false }));
 
 export const applyResultEdits = (
   sections: TextSection[],

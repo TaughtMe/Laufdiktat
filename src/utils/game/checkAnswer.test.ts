@@ -4,6 +4,9 @@ import type { WordItem } from '../../types/game';
 
 const wordItem = (targetWord: string): WordItem => ({ id: '1', targetWord, isCompleted: false });
 const mathItem = (targetWord: string): WordItem => ({ id: '1', targetWord, prompt: '4 + 4', isCompleted: false });
+const vocabularyItem = (overrides: Partial<WordItem> = {}): WordItem => ({
+  id: 'v1', kind: 'vocabulary', prompt: 'Haus', targetWord: 'home', acceptedAnswers: ['house'], isCompleted: false, ...overrides,
+});
 
 describe('checkAnswer (Text)', () => {
   it('akzeptiert exakte Übereinstimmung', () => {
@@ -49,5 +52,23 @@ describe('checkAnswer (Mathe)', () => {
 
   it('lehnt Ergebnisse außerhalb der Toleranz ab', () => {
     expect(checkAnswer(mathItem('0.333333333'), '0,3')).toBe(false);
+  });
+});
+
+describe('checkAnswer (Vokabeln)', () => {
+  it('akzeptiert Hauptantwort und Alternativen ohne Beachtung der Großschreibung', () => {
+    expect(checkAnswer(vocabularyItem(), 'Home')).toBe(true);
+    expect(checkAnswer(vocabularyItem(), 'HOUSE')).toBe(true);
+  });
+
+  it('beachtet Großschreibung nur bei aktivierter Option', () => {
+    expect(checkAnswer(vocabularyItem({ caseSensitive: true }), 'Home')).toBe(false);
+    expect(checkAnswer(vocabularyItem({ caseSensitive: true }), 'home')).toBe(true);
+  });
+
+  it('normalisiert Leerraum, aber keine Akzente oder falschen Wörter', () => {
+    expect(checkAnswer(vocabularyItem({ targetWord: 'la maison', acceptedAnswers: [] }), '  la   maison ')).toBe(true);
+    expect(checkAnswer(vocabularyItem({ targetWord: 'français', acceptedAnswers: [] }), 'francais')).toBe(false);
+    expect(checkAnswer(vocabularyItem(), 'Haus')).toBe(false);
   });
 });

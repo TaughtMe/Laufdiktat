@@ -13,7 +13,7 @@ import {
 import { evaluateLatexExpr } from '../../utils/dashboard/latexMath';
 import type { WordItem } from '../../types/game';
 
-type ImportMode = 'text' | 'math';
+type ImportMode = 'text' | 'math' | 'vocabulary';
 
 /** Eine gültige Vorschau-Zeile in Dokument-Reihenfolge: entweder einfaches
  * "a op b"-Format oder eine komplexere LaTeX-Zeile (Bruch/Potenz/Wurzel). */

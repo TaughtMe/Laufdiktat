@@ -116,7 +116,8 @@ export const Game = () => {
   // Derived state that needs to be calculated before effects
   const totalLength = words.reduce((acc, word) => acc + word.targetWord.length, 0);
   const currentWord = words[currentWordIndex] || { targetWord: '' };
-  const isMath = !!currentWord.prompt;
+  const isMath = currentWord.kind === 'math' || (!currentWord.kind && !!currentWord.prompt);
+  const isVocabulary = currentWord.kind === 'vocabulary';
   const displayPrompt = currentWord.prompt ?? currentWord.targetWord;
 
   // Automatische Schriftgröße für den aufgedeckten Ziel-Text: kurze Wörter/
@@ -416,7 +417,7 @@ export const Game = () => {
           .replace(/[:/÷]/g, ' geteilt durch ')
       : displayPrompt;
     const utterance = new SpeechSynthesisUtterance(spoken);
-    utterance.lang = 'de-DE';
+    utterance.lang = isVocabulary ? (currentWord.promptLang ?? 'de-DE') : 'de-DE';
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
     setMetrics((prev) => ({ ...prev, peeks: prev.peeks + 1 }));
@@ -465,7 +466,9 @@ export const Game = () => {
     } else {
       // Fehler erfassen (gesamt + je Aufgabe für die Lehrer-Statistik).
       errorsRef.current += 1;
-      const key = currentWord.prompt ?? currentWord.targetWord;
+      const key = isVocabulary
+        ? `${currentWord.prompt} → ${currentWord.targetWord}`
+        : currentWord.prompt ?? currentWord.targetWord;
       wordErrorsRef.current[key] = (wordErrorsRef.current[key] || 0) + 1;
 
       setErrorShake(true);
@@ -700,7 +703,7 @@ export const Game = () => {
           {gameState === 'IDLE' && (
             <div className="text-center pointer-events-none max-w-xs px-6">
               <p className="text-slate-300 font-bold text-base sm:text-lg leading-relaxed">
-                Mit zwei Fingern an den Bildschirmrändern halten, um den Text zu sehen.
+                Mit zwei Fingern an den Bildschirmrändern halten, um die Aufgabe zu sehen.
               </p>
             </div>
           )}

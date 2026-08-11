@@ -2,13 +2,23 @@ export type GameState = 'IDLE' | 'REVEALED' | 'WRITING' | 'FINISHED';
 
 export interface WordItem {
   id: string;
+  /** Expliziter Inhaltstyp. Fehlt er bei alten Sitzungen, gilt prompt=Mathe, sonst Text. */
+  kind?: 'text' | 'math' | 'vocabulary';
   /** Die akzeptierte Antwort. Bei Mathe das Ergebnis als String, z. B. "8". */
   targetWord: string;
   /**
    * Optional: was angezeigt wird, wenn es von der Antwort abweicht
-   * (Mathe-Aufgabe, z. B. "4 + 4"). Ist es gesetzt, wird numerisch geprüft.
+   * (Mathe-Aufgabe oder Vokabel-Ausgangsseite). `kind` bestimmt die Prüfung.
    */
   prompt?: string;
+  /** Weitere akzeptierte Antworten, vor allem für Vokabeln (z. B. home/house). */
+  acceptedAnswers?: string[];
+  /** Nur für Vokabeln: Groß-/Kleinschreibung bei der Prüfung beachten. */
+  caseSensitive?: boolean;
+  /** BCP-47-Sprachcode der angezeigten Seite für die Sprachausgabe. */
+  promptLang?: string;
+  /** BCP-47-Sprachcode der Lösungsseite für sprachgerechte Kleinschreibung. */
+  answerLang?: string;
   isCompleted: boolean;
   /**
    * Manuell eingegebene komplexere Mathe-Aufgabe (Bruch/Potenz/Wurzel via
