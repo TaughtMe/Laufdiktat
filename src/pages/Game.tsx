@@ -70,6 +70,8 @@ export const Game = () => {
   const [metrics, setMetrics] = useState<GameMetrics>({ peeks: 0, attempts: 0 });
   const [finalDurationMs, setFinalDurationMs] = useState(0);
   const [errorShake, setErrorShake] = useState(false);
+  const [answerFeedback, setAnswerFeedback] = useState<'correct' | 'wrong' | null>(null);
+  const answerFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Freies Üben: Fehlversuche beim aktuellen Wort + Abtipp-Phase.
   const [wrongCount, setWrongCount] = useState(0);
   const [copyMode, setCopyMode] = useState(false);
@@ -85,6 +87,19 @@ export const Game = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const karaokeRef = useRef<HTMLDivElement>(null);
   const currentWordIndexRef = useRef(0);
+
+  const flashAnswerFeedback = useCallback((feedback: 'correct' | 'wrong') => {
+    if (answerFeedbackTimerRef.current) clearTimeout(answerFeedbackTimerRef.current);
+    setAnswerFeedback(feedback);
+    answerFeedbackTimerRef.current = setTimeout(() => {
+      setAnswerFeedback(null);
+      answerFeedbackTimerRef.current = null;
+    }, 420);
+  }, []);
+
+  useEffect(() => () => {
+    if (answerFeedbackTimerRef.current) clearTimeout(answerFeedbackTimerRef.current);
+  }, []);
   // Sitzungs-ID der aktuell laufenden Runde (siehe onSessionStart) – nötig, um
   // den serverseitig gespeicherten Fortschritt (roomApi.ts: upsertProgress)
   // eindeutig genau dieser Sitzung zuzuordnen und bei einem Resync
@@ -179,6 +194,7 @@ export const Game = () => {
       // Screen hin und wieder die letzte Aufgabe erneut.
       setSessionEnded(false);
       setGameState('IDLE');
+      setAnswerFeedback(null);
       // Auswertung für die neue Runde zurücksetzen.
       startedAtRef.current = 0;
       errorsRef.current = 0;
@@ -444,6 +460,7 @@ export const Game = () => {
     setMetrics((prev) => ({ ...prev, attempts: prev.attempts + 1 }));
 
     if (checkAnswer(currentWord, inputValue)) {
+      flashAnswerFeedback('correct');
       // Mitspielern den neuen Fortschritt mitteilen (für Battle-Zielauswahl).
       const newIndex = currentWordIndex + 1;
       sendProgress(newIndex);
@@ -464,6 +481,7 @@ export const Game = () => {
         setGameState('FINISHED');
       }
     } else {
+      flashAnswerFeedback('wrong');
       // Fehler erfassen (gesamt + je Aufgabe für die Lehrer-Statistik).
       errorsRef.current += 1;
       const key = isVocabulary
@@ -571,6 +589,21 @@ export const Game = () => {
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
+      {answerFeedback && (
+        <>
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-0 z-[70] animate-answer-flash ${
+              answerFeedback === 'correct'
+                ? 'bg-emerald-400/30 shadow-[inset_0_0_90px_rgba(52,211,153,0.55)]'
+                : 'bg-red-500/30 shadow-[inset_0_0_90px_rgba(239,68,68,0.55)]'
+            }`}
+          />
+          <span className="sr-only" role="status" aria-live="polite">
+            {answerFeedback === 'correct' ? 'Richtig' : 'Falsch'}
+          </span>
+        </>
+      )}
       {connectionWarning && (
         <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-center py-2 text-sm font-medium z-50">
           Verbindung zum Server verloren. Ergebnisse können nicht synchronisiert werden.

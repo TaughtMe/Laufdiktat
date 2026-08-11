@@ -105,6 +105,13 @@
   --color-mint-800: #004730;
   
   --animate-shake: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+  --animate-answer-flash: answer-flash 0.42s ease-out both;
+
+  @keyframes answer-flash {
+    0% { opacity: 0; }
+    18% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   
   @keyframes shake {
     10%, 90% { transform: translate3d(-2px, 0, 0); }
